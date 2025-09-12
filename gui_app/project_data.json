@@ -1,0 +1,168 @@
+{
+    "projects": {
+        "量化交易学习": {
+            "description": "EasyXT量化交易平台学习项目",
+            "created_date": "2025-01-11",
+            "tasks": [
+                {
+                    "id": "task_001",
+                    "name": "完成基础入门案例",
+                    "description": "学习EasyXT基础API使用，包括数据获取、基本交易接口等功能",
+                    "status": "待办",
+                    "priority": "高",
+                    "progress": 0,
+                    "deadline": "2025-01-15",
+                    "tags": ["学习", "基础", "API"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["01_基础入门"]
+                },
+                {
+                    "id": "task_002",
+                    "name": "掌握数据获取功能",
+                    "description": "学习各种数据获取方法，包括实时数据、历史数据、财务数据等",
+                    "status": "进行中",
+                    "priority": "高",
+                    "progress": 30,
+                    "deadline": "2025-01-20",
+                    "tags": ["数据", "API", "akshare"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["05_数据周期详解", "07_akshare数据获取学习案例", "09_数据获取"]
+                },
+                {
+                    "id": "task_003",
+                    "name": "学习交易功能",
+                    "description": "掌握基础和高级交易功能，包括下单、撤单、算法交易等",
+                    "status": "待办",
+                    "priority": "高",
+                    "progress": 0,
+                    "deadline": "2025-01-22",
+                    "tags": ["交易", "下单", "算法"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["02_交易基础", "03_高级交易"]
+                },
+                {
+                    "id": "task_004",
+                    "name": "开发交易策略",
+                    "description": "实现双均线交易策略，学习策略开发框架",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-01-25",
+                    "tags": ["策略", "算法", "回测"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["04_策略开发"]
+                },
+                {
+                    "id": "task_005",
+                    "name": "综合应用实践",
+                    "description": "完成数据获取与交易结合的综合案例，实现完整的交易系统",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-01-30",
+                    "tags": ["综合", "实践", "系统"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["08_数据获取与交易结合案例", "10_qstock交易案例"]
+                }
+            ]
+        },
+        "策略开发项目": {
+            "description": "量化策略开发和回测项目",
+            "created_date": "2025-01-11",
+            "tasks": [
+                {
+                    "id": "task_101",
+                    "name": "策略框架设计",
+                    "description": "设计通用的策略开发框架，支持多种策略类型",
+                    "status": "待办",
+                    "priority": "高",
+                    "progress": 0,
+                    "deadline": "2025-02-01",
+                    "tags": ["框架", "设计", "架构"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["04_策略开发"]
+                },
+                {
+                    "id": "task_102",
+                    "name": "双均线策略实现",
+                    "description": "实现经典的双均线交易策略",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-02-05",
+                    "tags": ["双均线", "策略", "实现"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["04_策略开发"]
+                },
+                {
+                    "id": "task_103",
+                    "name": "MACD策略开发",
+                    "description": "基于MACD指标的交易策略开发",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-02-10",
+                    "tags": ["MACD", "技术指标", "策略"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["04_策略开发"]
+                },
+                {
+                    "id": "task_104",
+                    "name": "策略回测系统",
+                    "description": "开发策略回测和评估系统",
+                    "status": "待办",
+                    "priority": "高",
+                    "progress": 0,
+                    "deadline": "2025-02-15",
+                    "tags": ["回测", "评估", "系统"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["04_策略开发"]
+                }
+            ]
+        },
+        "API扩展学习": {
+            "description": "EasyXT API扩展功能学习项目",
+            "created_date": "2025-01-11",
+            "tasks": [
+                {
+                    "id": "task_201",
+                    "name": "扩展API功能学习",
+                    "description": "学习EasyXT的扩展API功能，包括自定义指标等",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-01-28",
+                    "tags": ["API", "扩展", "自定义"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["06_扩展API学习实例"]
+                },
+                {
+                    "id": "task_202",
+                    "name": "第三方数据源集成",
+                    "description": "集成akshare等第三方数据源",
+                    "status": "待办",
+                    "priority": "中",
+                    "progress": 0,
+                    "deadline": "2025-02-03",
+                    "tags": ["数据源", "集成", "akshare"],
+                    "created_date": "2025-01-11",
+                    "related_cases": ["07_akshare数据获取学习案例"]
+                }
+            ]
+        }
+    },
+    "settings": {
+        "auto_save": true,
+        "save_interval": 300,
+        "backup_enabled": true,
+        "backup_count": 5,
+        "last_updated": "2025-01-11T21:00:00"
+    },
+    "statistics": {
+        "total_projects": 3,
+        "total_tasks": 11,
+        "completed_tasks": 0,
+        "in_progress_tasks": 1,
+        "overdue_tasks": 0
+    }
+}

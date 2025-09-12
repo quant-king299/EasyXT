@@ -1,0 +1,18 @@
+# 核心依赖
+pandas>=1.3.0
+numpy>=1.21.0
+matplotlib>=3.5.0
+requests>=2.25.0
+
+# 数据源（可选）
+qstock>=1.0.0
+akshare>=1.9.0
+
+# 开发依赖（可选）
+pytest>=6.0.0
+black>=21.0.0
+flake8>=3.9.0
+
+# GUI依赖（可选）
+tkinter-tooltip>=2.0.0
+pillow>=8.0.0
