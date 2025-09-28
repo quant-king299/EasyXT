@@ -16,6 +16,7 @@ from .trade_api import TradeAPI
 from .config import config
 from .types import ConnectionError, DataError
 from .utils import StockCodeUtils, TimeUtils, ErrorHandler
+from .enhanced_indicators import EnhancedIndicators
 
 class ExtendedAPI:
     """扩展API类，提供完整的交易和数据分析功能"""
@@ -23,6 +24,7 @@ class ExtendedAPI:
     def __init__(self):
         self.data_api = DataAPI()
         self.trade_api = TradeAPI()
+        self.indicators = EnhancedIndicators(self.data_api)
         self._connected_data = False
         self._connected_trade = False
     
@@ -318,6 +320,83 @@ class ExtendedAPI:
             'current_price': closes.iloc[-1]
         }
     
+    def calculate_macd(self, code: str, fast_period: int = 12, slow_period: int = 26, 
+                      signal_period: int = 9, data_period: str = '1d') -> Dict[str, float]:
+        """
+        计算MACD指标
+        
+        Args:
+            code: 股票代码
+            fast_period: 快线周期，默认12
+            slow_period: 慢线周期，默认26
+            signal_period: 信号线周期，默认9
+            data_period: 数据周期
+            
+        Returns:
+            Dict: 包含MACD、信号线、柱状图的字典
+        """
+        return self.indicators.calculate_macd(code, fast_period, slow_period, signal_period, data_period)
+    
+    def calculate_kdj(self, code: str, k_period: int = 9, d_period: int = 3, 
+                     j_period: int = 3, data_period: str = '1d') -> Dict[str, float]:
+        """
+        计算KDJ指标
+        
+        Args:
+            code: 股票代码
+            k_period: K值计算周期，默认9
+            d_period: D值平滑周期，默认3
+            j_period: J值计算周期，默认3
+            data_period: 数据周期
+            
+        Returns:
+            Dict: 包含K、D、J值的字典
+        """
+        return self.indicators.calculate_kdj(code, k_period, d_period, j_period, data_period)
+    
+    def calculate_enhanced_rsi(self, code: str, period: int = 14, 
+                              data_period: str = '1d') -> Dict[str, float]:
+        """
+        计算增强版RSI指标
+        
+        Args:
+            code: 股票代码
+            period: 计算周期
+            data_period: 数据周期
+            
+        Returns:
+            Dict: 增强的RSI信息
+        """
+        return self.indicators.calculate_rsi_enhanced(code, period, data_period)
+    
+    def calculate_enhanced_bollinger_bands(self, code: str, period: int = 20, std_dev: float = 2.0, 
+                                          data_period: str = '1d') -> Dict[str, float]:
+        """
+        计算增强版布林带
+        
+        Args:
+            code: 股票代码
+            period: 计算周期
+            std_dev: 标准差倍数
+            data_period: 数据周期
+            
+        Returns:
+            Dict: 增强的布林带信息
+        """
+        return self.indicators.calculate_boll_enhanced(code, period, std_dev, data_period)
+    
+    def get_comprehensive_technical_signal(self, code: str) -> Dict[str, str]:
+        """
+        获取综合技术信号
+        
+        Args:
+            code: 股票代码
+            
+        Returns:
+            Dict: 综合信号分析
+        """
+        return self.indicators.get_comprehensive_signal(code)
+    
     # ==================== 9. 风险控制 ====================
     
     def check_position_limit(self, account_id: str, code: str, volume: int, max_position_ratio: float = 0.3) -> bool:
@@ -407,6 +486,39 @@ class ExtendedAPI:
                 results[code] = signal
             except Exception as e:
                 results[code] = 'hold'
+        
+        return results
+    
+    def batch_calculate_technical_indicators(self, codes: List[str], 
+                                           indicators: List[str] = None) -> Dict[str, Dict]:
+        """
+        批量计算技术指标
+        
+        Args:
+            codes: 股票代码列表
+            indicators: 指标列表，默认计算所有指标
+            
+        Returns:
+            Dict: 各股票的指标结果
+        """
+        return self.indicators.batch_calculate_indicators(codes, indicators)
+    
+    def batch_get_comprehensive_signals(self, codes: List[str]) -> Dict[str, Dict]:
+        """
+        批量获取综合技术信号
+        
+        Args:
+            codes: 股票代码列表
+            
+        Returns:
+            Dict: 各股票的综合信号
+        """
+        results = {}
+        for code in codes:
+            try:
+                results[code] = self.get_comprehensive_technical_signal(code)
+            except Exception as e:
+                results[code] = {'error': str(e), 'final_signal': 'hold'}
         
         return results
     
