@@ -1,0 +1,6 @@
+{
+  "version": "3.1",
+  "description": "雪球跟单系统 - 统一配置入口文件",
+  "config_source": "unified_config.json",
+  "note": "此文件为配置入口，实际配置请查看 unified_config.json"
+}

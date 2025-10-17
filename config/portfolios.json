@@ -1,0 +1,34 @@
+{
+  "portfolios": [
+    {
+      "name": "雪球组合ZH3147753",
+      "code": "ZH3147753",
+      "follow_ratio": 0.02,
+      "enabled": true,
+      "url": "https://xueqiu.com/P/ZH3147753",
+      "description": "雪球跟单组合，2%跟随比例",
+      "follow_mode": "smart_follow",
+      "follow_mode_comment": "该组合使用的跟单模式，可覆盖全局设置"
+    },
+    {
+      "name": "示例组合",
+      "code": "ZH000000",
+      "follow_ratio": 0.4,
+      "enabled": false,
+      "description": "这是一个示例配置，请修改为实际的雪球组合代码",
+      "follow_mode": "smart_follow"
+    }
+  ],
+  "global_settings": {
+    "total_follow_ratio": 0.02,
+    "auto_start": true,
+    "emergency_stop": false,
+    "default_follow_mode": "smart_follow",
+    "default_follow_mode_comment": "默认跟单模式：smart_follow(智能跟投模式) 或 simple_follow(跟投模式)",
+    "follow_mode_display_names": {
+      "smart_follow": "智能跟投模式",
+      "simple_follow": "跟投模式"
+    },
+    "follow_mode_display_names_comment": "跟单模式的中文显示名称"
+  }
+}

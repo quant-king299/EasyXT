@@ -1,0 +1,16 @@
+{
+  "portfolios": [
+    {
+      "name": "示例组合",
+      "code": "ZH000000",
+      "follow_ratio": 0.4,
+      "enabled": false,
+      "description": "这是一个示例配置，请修改为实际的雪球组合代码"
+    }
+  ],
+  "global_settings": {
+    "total_follow_ratio": 0.4,
+    "auto_start": false,
+    "emergency_stop": false
+  }
+}
