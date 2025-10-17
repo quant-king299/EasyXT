@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TTQuoterConfigFile>
+<TTQuoterConfigFile>
+    <ConfigVersion version_id="1"/>
+    <QuoterServers autoupdate="0" current_trade_option="" current_trade_future="" current_shkstock="" autochangeserver="0" current_trade_hkstock="" current_trade_stock="" current_future="" reconnectonlost="1" current_future_option="" current_trade_future_option="" current_trade_shkstock="" current_trade_gold="" autohide="1" current_trade_neeq="" current_gold="" current_hkstock="" current_option="" nWholeQuoteGear="5" current_neeq="" showdlgonlost="0" current_stock="">
+        <QuoterServer username="" address="115.231.218.73" password="" servername="VIP迅投绍兴电信" platform="1" port="55310" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="115.231.218.79" password="" servername="VIP迅投绍兴电信" platform="1" port="55310" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.11" password="" servername="VIP迅投东莞电信" platform="1" port="55310" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.27" password="" servername="VIP迅投东莞电信" platform="1" port="55310" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.121" password="" servername="迅投东莞主站" platform="1" port="55300" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.122" password="" servername="迅投东莞主站" platform="1" port="55300" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="43.242.96.162" password="" servername="迅投上海主站" platform="1" port="55300" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="43.242.96.164" password="" servername="迅投上海主站" platform="1" port="55300" type="2" quotertype="0" markets="" tradeusersynchro="0"/>
+        <QuoterServer username="" address="115.231.218.73" password="" servername="VIP迅投绍兴电信" platform="1" port="55310" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="115.231.218.79" password="" servername="VIP迅投绍兴电信" platform="1" port="55310" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.11" password="" servername="VIP迅投东莞电信" platform="1" port="55310" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.27" password="" servername="VIP迅投东莞电信" platform="1" port="55310" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.121" password="" servername="迅投东莞主站" platform="1" port="55300" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="218.16.123.122" password="" servername="迅投东莞主站" platform="1" port="55300" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="43.242.96.162" password="" servername="迅投浦东主站" platform="1" port="55300" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+        <QuoterServer username="" address="43.242.96.164" password="" servername="迅投浦东主站" platform="1" port="55300" type="2" quotertype="1" markets="SZO|ZF|DF|INE|IF|SZ|SH|HK|SF|GF|SHO" tradeusersynchro="0"/>
+    </QuoterServers>
+</TTQuoterConfigFile>
