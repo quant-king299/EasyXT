@@ -1,0 +1,11 @@
+# Logs
+logs/
+*.log
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Local config backups and secrets
+config/backup/
+config/settings.json
