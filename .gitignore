@@ -216,3 +216,8 @@ qstock*.md
 
 # CodeBuddy相关
 .codebuddy/
+# config structure cleanup (mixed: core + easy_xt + strategy)
+/config/
+/strategies/config/
+local/*.json
+*.secrets.json
