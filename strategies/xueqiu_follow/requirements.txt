@@ -1,0 +1,41 @@
+# 雪球跟单策略依赖包
+
+# 核心依赖
+requests>=2.31.0
+aiohttp>=3.8.0
+asyncio-mqtt>=0.11.0
+
+# 数据处理
+pandas>=2.0.0
+numpy>=1.24.0
+
+# GUI界面
+tkinter  # Python内置，无需安装
+pillow>=10.0.0
+
+# 网络请求和解析
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+selenium>=4.15.0
+
+# 加密和安全
+cryptography>=41.0.0
+
+# 配置和日志
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# 时间处理
+python-dateutil>=2.8.0
+
+# 数据库（可选）
+sqlite3  # Python内置
+
+# 测试框架
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+
+# 开发工具
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
