@@ -1,4 +1,4 @@
-# Python
+﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -217,8 +217,6 @@ qstock*.md
 # CodeBuddy相关
 .codebuddy/
 # config structure cleanup (mixed: core + easy_xt + strategy)
-/config/
-/strategies/config/
 local/*.json
 *.secrets.json
 
@@ -228,3 +226,5 @@ strategies/xueqiu_follow/config/settings.json
 strategies/xueqiu_follow/config/realtime_config.json
 strategies/xueqiu_follow/config/default.json
 strategies/xueqiu_follow/config/jq2qmt_config.json
+
+!gui_app/widgets/backtest_widget.py
