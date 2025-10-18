@@ -221,3 +221,10 @@ qstock*.md
 /strategies/config/
 local/*.json
 *.secrets.json
+
+# config cleanup (strategy overrides only)
+strategies/xueqiu_follow/config/backup/
+strategies/xueqiu_follow/config/settings.json
+strategies/xueqiu_follow/config/realtime_config.json
+strategies/xueqiu_follow/config/default.json
+strategies/xueqiu_follow/config/jq2qmt_config.json
