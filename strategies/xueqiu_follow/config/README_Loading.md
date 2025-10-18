@@ -22,3 +22,45 @@
 运行建议
 - 修改策略运行参数时，统一在 unified_config.json 的 settings、portfolios、xueqiu 等节点进行。
 - 若需要对实时数据子系统进行变更，请在 easy_xt/realtime_data/config\* 中调整，策略层不重复维护。
+
+---
+
+覆盖示例：从根 config 回退到策略 config
+
+背景
+- 根目录 config/unified_config.json 提供通用默认值。
+- 策略目录 strategies/xueqiu_follow/config/unified_config.json 提供策略专属覆盖项。
+- 实际加载顺序：策略 > 子系统 > 框架（根）。
+
+示例
+- 根 config（默认）：config/unified_config.json
+  {
+    "settings": {
+      "account": { "qmt_path": "C:/QMT/", "account_id": "" },
+      "risk": { "max_position_ratio": 0.15 }
+    }
+  }
+
+- 策略 config（覆盖）：strategies/xueqiu_follow/config/unified_config.json
+  {
+    "settings": {
+      "account": { "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini", "account_id": "39020958" },
+      "risk": { "max_position_ratio": 0.10 }
+    }
+  }
+
+加载结果
+- account.qmt_path → 使用策略值 D:\\国金QMT交易端模拟\\userdata_mini
+- account.account_id → 使用策略值 39020958
+- risk.max_position_ratio → 使用策略值 0.10
+- 若策略缺失某键，则回退到根 config 或子系统默认。
+
+操作步骤（如何验证覆盖）
+1) 在根 config 设置一个默认值（例如 settings.logging.level = "INFO"）。
+2) 在策略 config 将同键设置为 "DEBUG"。
+3) 运行程序，检查日志级别；应为策略值 "DEBUG"。
+4) 删除策略该键后，重新运行，应自动回退到根默认 "INFO"。
+
+注意
+- 敏感字段（cookie/password/token）请置空或存放到 local/*.json（被忽略）。
+- 若需启用 jq2qmt，请在 integrations.jq2qmt.enabled 设置为 true 并在对应模块配置。
