@@ -1,0 +1,92 @@
+{
+  "logging": {
+    "log_dir": "logs",
+    "log_level": "INFO",
+    "log_format": "detailed",
+    "max_file_size": 10485760,
+    "backup_count": 5,
+    "compress_backups": true,
+    "console_output": true,
+    "file_output": true,
+    "json_output": true,
+    "date_format": "%Y-%m-%d %H:%M:%S",
+    "encoding": "utf-8",
+    "buffer_size": 1000,
+    "flush_interval": 5.0,
+    "enable_colors": true
+  },
+  "loggers": {
+    "realtime_data": {
+      "level": "INFO",
+      "handlers": ["console", "file", "json"]
+    },
+    "data_provider": {
+      "level": "DEBUG",
+      "handlers": ["file", "json"]
+    },
+    "api_server": {
+      "level": "INFO",
+      "handlers": ["console", "file"]
+    },
+    "cache": {
+      "level": "WARNING",
+      "handlers": ["file"]
+    },
+    "monitor": {
+      "level": "INFO",
+      "handlers": ["console", "file", "json"]
+    },
+    "scheduler": {
+      "level": "INFO",
+      "handlers": ["file", "json"]
+    },
+    "error_handler": {
+      "level": "ERROR",
+      "handlers": ["console", "file", "json"]
+    },
+    "performance": {
+      "level": "INFO",
+      "handlers": ["file", "json"]
+    }
+  },
+  "formatters": {
+    "simple": "%(levelname)s - %(message)s",
+    "detailed": "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s",
+    "json": "json",
+    "custom": "%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s"
+  },
+  "filters": {
+    "performance_filter": {
+      "type": "keyword",
+      "keywords": ["response_time", "latency", "performance"]
+    },
+    "error_filter": {
+      "type": "level",
+      "min_level": "ERROR"
+    }
+  },
+  "analysis": {
+    "enable_real_time_analysis": true,
+    "error_pattern_detection": true,
+    "performance_metrics_extraction": true,
+    "alert_thresholds": {
+      "error_rate": 0.05,
+      "critical_errors_per_hour": 10,
+      "avg_response_time_ms": 1000
+    }
+  },
+  "rotation": {
+    "when": "midnight",
+    "interval": 1,
+    "backup_count": 30,
+    "compress": true,
+    "cleanup_old_logs": true,
+    "max_age_days": 90
+  },
+  "export": {
+    "formats": ["json", "csv", "txt"],
+    "default_format": "json",
+    "include_metadata": true,
+    "compress_exports": true
+  }
+}

@@ -1,0 +1,92 @@
+{
+  "monitoring": {
+    "enabled": true,
+    "system_interval": 1.0,
+    "metrics_retention": 3600,
+    "auto_optimization": true
+  },
+  "thresholds": [
+    {
+      "metric_name": "cpu_usage",
+      "warning_threshold": 70.0,
+      "critical_threshold": 90.0,
+      "comparison": "greater",
+      "enabled": true
+    },
+    {
+      "metric_name": "memory_usage",
+      "warning_threshold": 80.0,
+      "critical_threshold": 95.0,
+      "comparison": "greater",
+      "enabled": true
+    },
+    {
+      "metric_name": "disk_usage",
+      "warning_threshold": 85.0,
+      "critical_threshold": 95.0,
+      "comparison": "greater",
+      "enabled": true
+    },
+    {
+      "metric_name": "request_duration",
+      "warning_threshold": 1000.0,
+      "critical_threshold": 3000.0,
+      "comparison": "greater",
+      "enabled": true
+    },
+    {
+      "metric_name": "request_error_rate",
+      "warning_threshold": 5.0,
+      "critical_threshold": 10.0,
+      "comparison": "greater",
+      "enabled": true
+    },
+    {
+      "metric_name": "network_latency",
+      "warning_threshold": 100.0,
+      "critical_threshold": 500.0,
+      "comparison": "greater",
+      "enabled": true
+    }
+  ],
+  "optimization": {
+    "auto_optimize": true,
+    "optimization_interval": 300,
+    "strategies": {
+      "cpu_optimization": {
+        "enabled": true,
+        "max_concurrent_requests": 50,
+        "thread_pool_size": 10
+      },
+      "memory_optimization": {
+        "enabled": true,
+        "cache_cleanup_threshold": 90.0,
+        "gc_frequency": 60
+      },
+      "network_optimization": {
+        "enabled": true,
+        "connection_pool_size": 20,
+        "timeout_adjustment": true
+      }
+    }
+  },
+  "reporting": {
+    "enabled": true,
+    "report_interval": 3600,
+    "export_format": "json",
+    "export_path": "reports/performance",
+    "include_metrics": true,
+    "include_recommendations": true
+  },
+  "alerts": {
+    "enabled": true,
+    "channels": ["console", "file"],
+    "console": {
+      "level": "warning"
+    },
+    "file": {
+      "level": "error",
+      "file_path": "logs/performance_alerts.log"
+    }
+  }
+}

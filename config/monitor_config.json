@@ -1,0 +1,108 @@
+{
+  "system_monitor": {
+    "enabled": true,
+    "interval": 30,
+    "history_size": 1000,
+    "alert_thresholds": {
+      "cpu_warning": 80.0,
+      "cpu_critical": 95.0,
+      "memory_warning": 85.0,
+      "memory_critical": 95.0,
+      "disk_warning": 85.0,
+      "disk_critical": 90.0
+    }
+  },
+  "data_source_monitor": {
+    "enabled": true,
+    "interval": 60,
+    "timeout": 10,
+    "data_sources": [
+      {
+        "name": "tdx_server_1",
+        "type": "tcp",
+        "host": "119.147.212.81",
+        "port": 7709,
+        "description": "通达信服务器1"
+      },
+      {
+        "name": "tdx_server_2", 
+        "type": "tcp",
+        "host": "114.80.63.12",
+        "port": 7709,
+        "description": "通达信服务器2"
+      },
+      {
+        "name": "eastmoney_api",
+        "type": "http",
+        "url": "http://push2his.eastmoney.com/api/qt/stock/get?secid=1.000001",
+        "timeout": 5,
+        "description": "东方财富API"
+      },
+      {
+        "name": "ths_api",
+        "type": "http", 
+        "url": "https://data.10jqka.com.cn/dataapi/limit_up",
+        "timeout": 5,
+        "description": "同花顺API"
+      }
+    ]
+  },
+  "api_monitor": {
+    "enabled": true,
+    "interval": 30,
+    "history_size": 1000,
+    "alert_thresholds": {
+      "response_time_warning": 3.0,
+      "response_time_critical": 10.0,
+      "error_rate_warning": 10.0,
+      "error_rate_critical": 25.0
+    }
+  },
+  "alert_manager": {
+    "enabled": true,
+    "email": {
+      "enabled": false,
+      "smtp_server": "smtp.qq.com",
+      "smtp_port": 587,
+      "use_tls": true,
+      "username": "your_email@qq.com",
+      "password": "your_app_password",
+      "from_addr": "your_email@qq.com",
+      "to_addrs": ["admin@example.com"]
+    },
+    "webhook": {
+      "enabled": false,
+      "url": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+      "timeout": 10
+    },
+    "console": {
+      "enabled": true,
+      "log_level": "INFO"
+    }
+  },
+  "metrics_collector": {
+    "enabled": true,
+    "collection_interval": 30,
+    "retention_days": 7,
+    "max_points_per_metric": 10000,
+    "storage": {
+      "type": "memory",
+      "file_path": "data/metrics.db"
+    }
+  },
+  "dashboard": {
+    "enabled": true,
+    "host": "0.0.0.0",
+    "port": 8080,
+    "title": "EasyXT监控面板",
+    "refresh_interval": 30,
+    "theme": "dark"
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/monitor.log",
+    "max_size": "10MB",
+    "backup_count": 5,
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}

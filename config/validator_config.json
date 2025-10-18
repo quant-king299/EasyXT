@@ -1,0 +1,101 @@
+{
+  "validation": {
+    "default_level": "normal",
+    "enable_cleaning": true,
+    "enable_statistics": true,
+    "log_level": "INFO"
+  },
+  "rules": {
+    "quote_data": {
+      "code_format": {
+        "enabled": true,
+        "pattern": "^[0-9]{6}$",
+        "level": "strict"
+      },
+      "price_range": {
+        "enabled": true,
+        "min": 0.01,
+        "max": 10000.0,
+        "level": "normal"
+      },
+      "volume_range": {
+        "enabled": true,
+        "min": 0,
+        "max": 1000000000000,
+        "level": "normal"
+      },
+      "price_precision": {
+        "enabled": true,
+        "max_decimals": 3,
+        "level": "normal"
+      }
+    },
+    "kline_data": {
+      "ohlc_relationship": {
+        "enabled": true,
+        "level": "strict"
+      },
+      "volume_positive": {
+        "enabled": true,
+        "level": "normal"
+      },
+      "time_sequence": {
+        "enabled": true,
+        "max_future_hours": 1,
+        "min_year": 2000,
+        "level": "normal"
+      }
+    },
+    "indicator_data": {
+      "value_finite": {
+        "enabled": true,
+        "level": "strict"
+      },
+      "rsi_range": {
+        "enabled": true,
+        "min": 0,
+        "max": 100,
+        "level": "strict"
+      },
+      "kdj_range": {
+        "enabled": true,
+        "min": -100,
+        "max": 200,
+        "level": "normal"
+      }
+    }
+  },
+  "cleaning": {
+    "strategies": {
+      "remove_duplicates": {
+        "enabled": true,
+        "key_fields": ["code", "timestamp"]
+      },
+      "fill_missing_values": {
+        "enabled": true,
+        "method": "forward_fill",
+        "fields": ["price", "open", "high", "low", "close"]
+      },
+      "smooth_outliers": {
+        "enabled": true,
+        "threshold": 0.2,
+        "method": "median",
+        "window_size": 5
+      },
+      "normalize_timestamps": {
+        "enabled": true,
+        "output_format": "unix_timestamp"
+      },
+      "fix_price_gaps": {
+        "enabled": true,
+        "max_gap_ratio": 0.1,
+        "method": "linear_interpolation"
+      }
+    }
+  },
+  "alerts": {
+    "error_threshold": 0.1,
+    "warning_threshold": 0.05,
+    "notification_channels": ["log", "console"]
+  }
+}

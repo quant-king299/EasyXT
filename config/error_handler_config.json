@@ -1,0 +1,79 @@
+{
+  "error_handling": {
+    "max_error_history": 1000,
+    "auto_cleanup_hours": 24,
+    "default_retry_attempts": 3,
+    "default_retry_delay": 1.0,
+    "circuit_breaker_enabled": true,
+    "error_reporting_enabled": true,
+    "recovery_logging_enabled": true
+  },
+  "circuit_breakers": {
+    "default": {
+      "failure_threshold": 5,
+      "recovery_timeout": 60.0,
+      "success_threshold": 3
+    },
+    "api_service": {
+      "failure_threshold": 3,
+      "recovery_timeout": 30.0,
+      "success_threshold": 2
+    },
+    "database": {
+      "failure_threshold": 10,
+      "recovery_timeout": 120.0,
+      "success_threshold": 5
+    }
+  },
+  "recovery_strategies": {
+    "network_errors": {
+      "strategy": "retry",
+      "max_attempts": 3,
+      "delay": 1.0,
+      "backoff_multiplier": 2.0
+    },
+    "api_errors": {
+      "strategy": "fallback",
+      "max_attempts": 1,
+      "fallback_service": "cache"
+    },
+    "timeout_errors": {
+      "strategy": "circuit_breaker",
+      "max_attempts": 1
+    },
+    "data_errors": {
+      "strategy": "graceful_degradation",
+      "max_attempts": 2
+    }
+  },
+  "severity_mapping": {
+    "ConnectionError": "high",
+    "TimeoutError": "medium",
+    "ValueError": "low",
+    "KeyError": "medium",
+    "AttributeError": "low",
+    "RuntimeError": "high"
+  },
+  "category_mapping": {
+    "requests.exceptions.ConnectionError": "network",
+    "requests.exceptions.Timeout": "timeout",
+    "sqlite3.Error": "database",
+    "json.JSONDecodeError": "data",
+    "KeyError": "data",
+    "ValueError": "validation"
+  },
+  "notifications": {
+    "enabled": true,
+    "channels": ["log", "email"],
+    "severity_threshold": "medium",
+    "rate_limit": {
+      "max_notifications_per_hour": 10,
+      "cooldown_minutes": 5
+    }
+  },
+  "monitoring": {
+    "metrics_enabled": true,
+    "health_check_interval": 30,
+    "performance_tracking": true
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "scheduler": {
+    "max_workers": 10,
+    "max_concurrent_tasks": 50,
+    "enable_statistics": true,
+    "cleanup_interval": 3600,
+    "log_level": "INFO"
+  },
+  "task_defaults": {
+    "max_retries": 3,
+    "retry_delay": 1.0,
+    "timeout": 300,
+    "priority": "normal"
+  },
+  "retry_strategy": {
+    "exponential_backoff": true,
+    "max_retry_delay": 60.0,
+    "jitter": true
+  },
+  "monitoring": {
+    "enable_task_metrics": true,
+    "metrics_retention_hours": 24,
+    "performance_alerts": {
+      "high_failure_rate_threshold": 0.1,
+      "slow_task_threshold": 30.0,
+      "queue_size_threshold": 100
+    }
+  },
+  "recurring_tasks": {
+    "system_cleanup": {
+      "enabled": true,
+      "interval": 3600,
+      "max_executions": null,
+      "description": "定期清理过期任务记录"
+    },
+    "health_check": {
+      "enabled": true,
+      "interval": 300,
+      "max_executions": null,
+      "description": "调度器健康检查"
+    },
+    "statistics_report": {
+      "enabled": false,
+      "interval": 1800,
+      "max_executions": null,
+      "description": "生成统计报告"
+    }
+  },
+  "task_types": {
+    "data_processing": {
+      "default_priority": "normal",
+      "default_timeout": 600,
+      "max_retries": 5
+    },
+    "api_request": {
+      "default_priority": "high",
+      "default_timeout": 30,
+      "max_retries": 3
+    },
+    "file_operation": {
+      "default_priority": "low",
+      "default_timeout": 120,
+      "max_retries": 2
+    },
+    "notification": {
+      "default_priority": "urgent",
+      "default_timeout": 10,
+      "max_retries": 1
+    }
+  },
+  "concurrency_limits": {
+    "data_processing": 5,
+    "api_request": 10,
+    "file_operation": 3,
+    "notification": 20
+  },
+  "alerts": {
+    "task_failure_threshold": 5,
+    "queue_overflow_threshold": 200,
+    "execution_time_threshold": 300,
+    "notification_channels": ["log", "console"]
+  }
+}

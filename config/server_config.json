@@ -1,0 +1,92 @@
+{
+  "server": {
+    "name": "EasyXT Realtime Data Service",
+    "version": "1.0.0",
+    "environment": "production"
+  },
+  "http": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "debug": false,
+    "cors_enabled": true,
+    "cors_origins": ["*"],
+    "max_connections": 1000,
+    "timeout": 30
+  },
+  "websocket": {
+    "host": "0.0.0.0",
+    "port": 8765,
+    "max_connections": 500,
+    "ping_interval": 20,
+    "ping_timeout": 10,
+    "close_timeout": 10
+  },
+  "data_sources": {
+    "tdx": {
+      "enabled": true,
+      "priority": 1,
+      "timeout": 5,
+      "retry_count": 3,
+      "servers": [
+        {"host": "119.147.212.81", "port": 7709},
+        {"host": "114.80.63.12", "port": 7709},
+        {"host": "180.153.39.51", "port": 7709}
+      ]
+    },
+    "ths": {
+      "enabled": true,
+      "priority": 2,
+      "timeout": 5,
+      "retry_count": 3
+    },
+    "eastmoney": {
+      "enabled": true,
+      "priority": 3,
+      "timeout": 5,
+      "retry_count": 3
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "type": "memory",
+    "memory": {
+      "max_size": 1000,
+      "ttl": 300
+    },
+    "redis": {
+      "host": "localhost",
+      "port": 6379,
+      "db": 0,
+      "password": null,
+      "ttl": 300
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "logs/easyxt_service.log",
+    "max_size": "10MB",
+    "backup_count": 5
+  },
+  "monitoring": {
+    "enabled": true,
+    "metrics_interval": 60,
+    "health_check_interval": 30,
+    "alert_thresholds": {
+      "memory_usage": 80,
+      "cpu_usage": 80,
+      "response_time": 2.0,
+      "error_rate": 0.05
+    }
+  },
+  "security": {
+    "api_key_required": false,
+    "rate_limiting": {
+      "enabled": true,
+      "requests_per_minute": 1000,
+      "burst_size": 100
+    },
+    "ip_whitelist": [],
+    "ip_blacklist": []
+  }
+}
