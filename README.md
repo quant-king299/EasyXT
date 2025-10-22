@@ -19,56 +19,71 @@
 
 ### 环境要求
 
-- Python 3.7+
-- 迅投QMT客户端
-- Windows系统（QMT限制）
+- 64 位 Python（建议 3.9+）
+- 已安装并登录的 QMT 客户端（标准版或迷你版）
+- Windows 系统（QMT 限制）
 
-### 依赖安装
+### 通过 pip 从 GitHub 安装（推荐用标签）
 
-```bash
-pip install pandas numpy matplotlib requests
-pip install qstock  # 可选，用于股票数据获取
-pip install akshare  # 可选，用于金融数据获取
+推荐固定到稳定标签 v1.0.0：
+```powershell
+# 可选：创建虚拟环境
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+
+python -m pip install -U pip setuptools wheel
+pip install "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
 ```
 
-### 项目安装
+国内镜像（依赖走镜像，源码仍从 GitHub 拉取）：
+```powershell
+pip install -i https://pypi.tuna.tsinghua.edu.cn/simple "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
+```
+
+验证安装：
+```powershell
+python - << 'PY'
+import easy_xt
+print("easy_xt import OK:", easy_xt.__name__)
+from easy_xt import get_api
+api = get_api()
+print("get_api OK:", type(api))
+PY
+```
+
+> 说明：pip 仅安装 Python 包，不会安装 QMT/xtquant，本地需自备。
+
+### 项目源码方式安装（可选）
 
 ```bash
 git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
+pip install -r requirements.txt
 ```
-
 ## 🔧 配置
 
-### 1. QMT客户端配置
+### 配置 QMT 路径（雪球跟单）
 
-1. 安装并启动迅投QMT客户端
-2. 登录您的交易账户
-3. 记录userdata路径（通常在QMT安装目录下）
+编辑：`strategies/xueqiu_follow/config/unified_config.json`
 
-### 2. 项目配置
+关键键名：`settings.account.qmt_path`（若同时存在 `account.qmt_path`，两处保持一致）。
 
-复制配置模板并修改：
-
-```bash
-cp config/config_template.py config/config.py
+示例（Windows JSON 需双反斜杠或用正斜杠）：
+```json
+{
+  "settings": {
+    "account": {
+      "qmt_path": "D:\\国金证券QMT交易端\\userdata_mini",
+      "account_id": "你的交易账号ID"
+    }
+  }
+}
 ```
 
-编辑 `config/config.py`：
-
-```python
-# QMT配置
-USERDATA_PATH = r'D:\QMT\userdata_mini'  # 修改为您的实际路径
-ACCOUNT_ID = "您的资金账号"
-
-# 数据源配置
-USE_QSTOCK = True
-USE_AKSHARE = True
-
-# 交易配置
-ENABLE_REAL_TRADING = False  # 生产环境设为True
-MAX_POSITION_RATIO = 0.3     # 最大持仓比例
-```
+如何判断“正确目录”：
+- 必须是 QMT 的 `userdata` 或 `userdata_mini` 目录本身
+- 目录内通常包含 `xtquant`, `log`, `cfg` 等子目录
+- 常见错写：`0MT`（应为 `QMT`）、`userdata mini`（应为 `userdata_mini`）
 
 ## 📚 快速开始
 
@@ -104,20 +119,16 @@ order_id = api.buy(
 )
 ```
 
-### 运行学习实例
+### 运行雪球跟单
 
-```bash
-# 基础入门
-python 学习实例/01_基础入门.py
+方式一：批处理脚本（Windows）
+```powershell
+.\strategies\xueqiu_follow\启动雪球跟单.bat
+```
 
-# 交易基础
-python 学习实例/02_交易基础.py
-
-# 高级交易
-python 学习实例/03_高级交易.py
-
-# 策略开发
-python 学习实例/04_策略开发.py
+方式二：Python 入口脚本
+```powershell
+python strategies\xueqiu_follow\start_xueqiu_follow_easyxt.py
 ```
 
 ## 📖 学习路径
@@ -210,6 +221,84 @@ miniqmt扩展/
 - 完整的EasyXT API封装
 - 丰富的学习实例
 - 修复交易服务初始化问题
+
+
+## 🧰 开发者工具与演示脚本
+
+- 诊断工具（tools/）
+  - `tools/debug_qmt_api.py`：检查 easy_xt API 结构，枚举 trade/data/account 能力并做基础调用验证
+  - `tools/debug_data_api.py`：直连 DataAPI 验证 connect/xtquant 可用性及行情、列表获取
+- 演示脚本（tools/demos/）
+  - `tools/demos/P1-006_config_demo.py`：配置系统演示
+  - `tools/demos/P1-009_monitor_demo.py`：监控告警演示
+  - `tools/demos/P1-010_validator_demo.py`：配置校验器演示
+  - `tools/demos/P1-011_scheduler_demo.py`：任务调度器演示（定时、周期、优先级、并发、重试、统计）
+  - `tools/demos/P2-011_performance_demo.py`：性能/压测演示
+  - `tools/demos/P2-012_error_handler_demo.py`：错误处理与恢复机制（重试/降级/优雅退化、断路器）
+  - `tools/demos/P2-013_log_manager_demo.py`：日志管理（配置、检索/过滤、统计分析、导出）
+  - `tools/demos/quick_start_monitor.py`：监控告警系统快速启动（演示用）
+  - `tools/demos/find_current_holdings_api.py`：雪球接口探测（确定“当前持仓”来源）
+
+运行示例（PowerShell）：
+```powershell
+# 诊断脚本
+cd "c:\Users\Administrator\Desktop\miniqmt扩展\tools"
+python .\debug_qmt_api.py
+python .\debug_data_api.py
+
+# 演示脚本
+cd "c:\Users\Administrator\Desktop\miniqmt扩展\tools\demos"
+python .\P1-006_config_demo.py
+python .\P1-009_monitor_demo.py
+python .\P1-010_validator_demo.py
+python .\P1-011_scheduler_demo.py
+python .\P2-011_performance_demo.py
+python .\P2-012_error_handler_demo.py
+python .\P2-013_log_manager_demo.py
+python .\quick_start_monitor.py
+python .\find_current_holdings_api.py
+```
+
+依赖说明：需预先安装“xtquant 特殊版本”，并按 README 配置（或设置环境变量 `XTQUANT_PATH`）；推荐通过 `pip install -e .\easy_xt` 可编辑安装后再运行脚本。
+
+## 👀 监控系统
+
+- 标准启动入口（独立服务）：
+```powershell
+python start_monitor.py --config config/monitor_config.json
+# 查看状态
+python start_monitor.py --status
+```
+- 演示快速启动：`tools/demos/quick_start_monitor.py`
+- 相关组件：`easy_xt/realtime_data/monitor_service.py`
+
+## ❄️ 雪球跟单策略
+
+- 快速启动：
+```powershell
+# 批处理脚本（Windows）
+.\strategies\xueqiu_follow\启动雪球跟单.bat
+
+# 或 Python 入口
+python strategies\xueqiu_follow\start_xueqiu_follow_easyxt.py
+```
+- 配置目录：`strategies/xueqiu_follow/config/`
+- 示例/样本数据：`strategies/xueqiu_follow/fixtures/`
+
+### 常见问题（FAQ）
+- Q: 连接返回 -1 / “交易服务连接失败”？
+  - A: 99% 为 `qmt_path` 路径错误：请指向本机 `userdata` 或 `userdata_mini` 目录；避免 `0MT` 与 `userdata mini` 等拼写错误；确保 QMT 已登录、Python 与 QMT 权限一致（管理员/普通一致）。
+
+## 🔌 JQ2QMT / QKA 服务（如需）
+
+- 快速启动 QKA 服务端：
+```powershell
+python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-path "C:\\Path\\To\\miniQMT" --host 127.0.0.1 --port 8000
+```
+- 若使用本地 xtquant 解压目录，设置环境变量：
+```powershell
+setx XTQUANT_PATH "C:\\xtquant_special"
+```
 
 ---
 
