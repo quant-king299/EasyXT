@@ -34,6 +34,7 @@ try:
     # 直接使用easy_xt的AdvancedTradeAPI
     from xueqiu_follow.core.risk_manager import RiskManager
     from xueqiu_follow.core.strategy_engine import StrategyEngine
+    from xueqiu_follow.core.config_manager import ConfigManager
     XUEQIU_AVAILABLE = True
 except ImportError:
     XUEQIU_AVAILABLE = False
@@ -464,8 +465,9 @@ class XueqiuFollowWidget(QWidget):
                 QMessageBox.warning(self, "警告", "雪球跟单模块不可用，请检查依赖")
                 return
             
-            # 初始化策略引擎
-            self.strategy_engine = StrategyEngine(self.config)
+            # 初始化配置管理器与策略引擎（必须传入 ConfigManager 实例）
+            config_manager = ConfigManager()
+            self.strategy_engine = StrategyEngine(config_manager)
             
             # 启动策略
             self.strategy_engine.start()
