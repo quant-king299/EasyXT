@@ -303,3 +303,11 @@ setx XTQUANT_PATH "C:\\xtquant_special"
 ---
 
 **免责声明**: 本项目仅供学习和研究使用，不构成投资建议。使用本项目进行实际交易的风险由用户自行承担。
+
+---
+
+## 关注公众号
+
+关注公众号：
+
+<img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="260" />
