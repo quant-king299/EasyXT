@@ -306,8 +306,12 @@ setx XTQUANT_PATH "C:\\xtquant_special"
 
 ---
 
-## 关注公众号
+## 关注公众号 / 加群交流
 
-关注公众号：
+- 关注公众号：
 
 <img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="260" />
+
+- 欢迎加入QQ交流群：492287081（或扫码加入）
+
+<img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="260" />
