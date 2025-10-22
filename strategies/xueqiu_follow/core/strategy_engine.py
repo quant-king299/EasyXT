@@ -345,17 +345,62 @@ class StrategyEngine:
                     self.logger.error(f"获取 {symbol} 价格失败: {price_error}")
                     continue
                 
+                # 价值带宽与比例阈值 + 冷却时间防抖
+                current_value = current_volume * current_price
+                try:
+                    value_band_ratio = float(self.config_manager.get_setting('settings.order.value_band_trigger_ratio', 0.005))
+                except Exception:
+                    value_band_ratio = 0.005
+                # 仅当相对目标价值偏差超过带宽才触发再平衡
+                if target_value > 0:
+                    deviation_ratio = abs(target_value - current_value) / target_value
+                    if deviation_ratio < value_band_ratio:
+                        self.logger.info(f"{symbol} 价值偏差 {deviation_ratio:.4%} 小于带宽 {value_band_ratio:.4%}，忽略")
+                        continue
+
+                # 冷却时间（每标的）
+                try:
+                    cooldown_seconds = int(self.config_manager.get_setting('settings.order.cooldown_seconds', 300))
+                except Exception:
+                    cooldown_seconds = 300
+                if not hasattr(self, '_rebalance_cooldown'):
+                    self._rebalance_cooldown = {}
+                last_ts = self._rebalance_cooldown.get(symbol_norm)
+                if last_ts:
+                    from datetime import datetime, timedelta
+                    if datetime.now() - last_ts < timedelta(seconds=cooldown_seconds):
+                        self.logger.info(f"{symbol} 处于冷却期，跳过再平衡")
+                        continue
+
+                # 每标的每日再平衡次数上限
+                try:
+                    daily_max = int(self.config_manager.get_setting('settings.order.daily_max_rebalances_per_symbol', 1))
+                except Exception:
+                    daily_max = 1
+                from datetime import datetime as _dt
+                today_key = _dt.now().strftime('%Y%m%d')
+                if not hasattr(self, '_rebalance_daily_counter'):
+                    self._rebalance_daily_counter = {'date': today_key, 'counts': {}}
+                # 切日重置
+                if self._rebalance_daily_counter.get('date') != today_key:
+                    self._rebalance_daily_counter = {'date': today_key, 'counts': {}}
+                symbol_counts = self._rebalance_daily_counter['counts']
+                if symbol_counts.get(symbol_norm, 0) >= daily_max:
+                    self.logger.info(f"{symbol} 达到每日再平衡上限 {daily_max} 次，跳过")
+                    continue
+
                 # 计算目标股数（按手数取整）
                 target_volume = int(target_value / current_price / 100) * 100
                 volume_diff = target_volume - current_volume
-                
-                # 根据配置的最小差异阈值忽略小额调仓（默认100股=1手）
+
+                # 比例阈值（以目标股数为基准）
                 try:
-                    min_diff_shares = int(self.config_manager.get_setting('settings.order.min_diff_shares', 100))
+                    min_diff_ratio_shares = float(self.config_manager.get_setting('settings.order.min_diff_ratio_shares', 0.003))
                 except Exception:
-                    min_diff_shares = 100
-                if abs(volume_diff) < min_diff_shares:
-                    self.logger.info(f"{symbol} 股数差异 {volume_diff} 小于{min_diff_shares}股，忽略")
+                    min_diff_ratio_shares = 0.003
+                denom_shares = max(target_volume, 100)
+                if denom_shares > 0 and abs(volume_diff) / denom_shares < min_diff_ratio_shares:
+                    self.logger.info(f"{symbol} 股数差异比例 {abs(volume_diff)/denom_shares:.4%} 小于阈值 {min_diff_ratio_shares:.4%}，忽略")
                     continue
                 
                 if volume_diff > 0:
@@ -385,6 +430,17 @@ class StrategyEngine:
                     }
                     orders.append(order)
                     self.logger.info(f"智能跟投模式：生成卖出指令: {symbol} {abs(volume_diff)}股 @ {current_price:.2f}")
+
+                # 成功生成买卖指令后，记录冷却时间戳与每日计数
+                from datetime import datetime as _dt
+                if orders:
+                    self._rebalance_cooldown[symbol_norm] = _dt.now()
+                    # 累加每日次数
+                    today_key = _dt.now().strftime('%Y%m%d')
+                    if not hasattr(self, '_rebalance_daily_counter') or self._rebalance_daily_counter.get('date') != today_key:
+                        self._rebalance_daily_counter = {'date': today_key, 'counts': {}}
+                    counts = self._rebalance_daily_counter['counts']
+                    counts[symbol_norm] = counts.get(symbol_norm, 0) + 1
             
             self.logger.info(f"智能跟投模式：生成了 {len(orders)} 个交易指令")
             return orders
@@ -417,7 +473,7 @@ class StrategyEngine:
                 # 跟投模式：直接按目标价值计算股数，不考虑现有持仓
                 target_volume = int(target_value / current_price / 100) * 100
                 
-                # 最小交易单位检查
+                # 最小交易单位检查（保持A股整手100股）
                 if target_volume < 100:
                     self.logger.info(f"{symbol} 目标股数 {target_volume} 小于100股，忽略")
                     continue
@@ -512,9 +568,13 @@ class StrategyEngine:
                     
                     # 获取真实账户信息
                     account_value = self._get_account_value()
+                    # 如果无法获取账户价值，直接拒绝订单
+                    if account_value is None or account_value <= 0:
+                        self.logger.error("无法获取账户价值，拒绝当前交易指令")
+                        continue
                     account_info = {
                         'total_asset': account_value,
-                        'cash': account_value * 0.3,  # 假设30%为现金
+                        'cash': account_value * 0.3,  # 假设30%为现金（仅用于风险评估，不触发下单）
                         'market_value': account_value * 0.7,
                         'daily_pnl': 0
                     }
@@ -630,26 +690,105 @@ class StrategyEngine:
             
             xt_symbol = convert_symbol_format(symbol)
             
-            # 方法1: 尝试使用xtquant.xtdata获取实时价格
+            # 优先方法: 直接使用 DataAPI 获取实时价格（与“基础入门”一致的路径）
+            if hasattr(self.data_api, 'get_current_price'):
+                try:
+                    # 确保DataAPI已初始化（会连接到 QMT 客户端）
+                    if hasattr(self.data_api, 'init_data'):
+                        try:
+                            self.data_api.init_data()
+                        except Exception as init_error:
+                            self.logger.warning(f"DataAPI初始化失败: {init_error}")
+                    price_data = self.data_api.get_current_price([symbol])
+                    if price_data is not None and not price_data.empty and len(price_data) > 0:
+                        price = price_data.iloc[0].get('price') or price_data.iloc[0].get('close')
+                        if price and price > 0:
+                            self.logger.info(f"DataAPI获取到 {symbol} 实时价格: {price}")
+                            return float(price)
+                    else:
+                        self.logger.warning("DataAPI.get_current_price 返回空数据，尝试其他方法")
+                except Exception as api_error:
+                    self.logger.warning(f"DataAPI获取价格失败，尝试其他方法: {api_error}")
+            
+            # 方法1: 尝试使用xtquant.xtdata获取实时价格（初始化 + 订阅 + 获取）
             try:
+                import os as _os
                 import xtquant.xtdata as xtdata
-                
+
+                # 一次性环境初始化：将 QMT 路径注入到环境，避免 xtdata 找不到数据目录
+                try:
+                    if not hasattr(self, '_xtdata_env_inited'):
+                        qmt_path_cfg = (
+                            self.config_manager.get_setting('settings.account.qmt_path') or
+                            self.config_manager.get_setting('account.qmt_path')
+                        )
+                        if qmt_path_cfg and not _os.environ.get('XTQUANT_PATH'):
+                            _os.environ['XTQUANT_PATH'] = str(qmt_path_cfg)
+                            self.logger.info(f"已设置 XTQUANT_PATH={_os.environ['XTQUANT_PATH']}")
+                        self._xtdata_env_inited = True
+                except Exception:
+                    pass
+
+                # 确保已订阅该标的，部分环境未订阅时 get_full_tick 可能返回 0/空
+                if not hasattr(self, '_xtdata_subscribed'):
+                    self._xtdata_subscribed = set()
+                try:
+                    if xt_symbol not in self._xtdata_subscribed:
+                        from easy_xt.utils import StockCodeUtils as _Scu
+                        norm = _Scu.normalize_code(symbol)
+                        code6 = norm.split('.')[0]
+                        market = _Scu.get_market(norm)
+                        self.logger.info(f"准备订阅xtdata: norm={norm}, code6={code6}, market={market}, raw={symbol}")
+                        # 优先尝试常见后缀格式列表签名
+                        try:
+                            xtdata.subscribe_quote([norm], period='tick', count=0)
+                        except Exception as e1:
+                            self.logger.warning(f"xtdata.subscribe_quote 后缀格式失败: {e1}")
+                            # 退化为1m周期尝试
+                            try:
+                                xtdata.subscribe_quote([norm], period='1m', count=0)
+                            except Exception as e2:
+                                self.logger.warning(f"xtdata.subscribe_quote 1m 后缀格式失败: {e2}")
+                                # 某些版本需要分离 market/code 或 whole_quote
+                                tried_alt = False
+                                try:
+                                    # 分离 market/code 的兼容签名（若版本支持）
+                                    if market and code6:
+                                        xtdata.subscribe_quote(stock_code=[code6], market=[market], period='tick', count=0)  # type: ignore
+                                        tried_alt = True
+                                except Exception as e3:
+                                    self.logger.warning(f"xtdata.subscribe_quote 分离market/code失败: {e3}")
+                                if not tried_alt:
+                                    try:
+                                        # 使用全行情订阅接口作为兜底
+                                        xtdata.subscribe_whole_quote(code_list=[norm])  # type: ignore
+                                    except Exception as e4:
+                                        self.logger.warning(f"xtdata.subscribe_whole_quote 兜底失败: {e4}")
+                        self._xtdata_subscribed.add(norm)
+                        self.logger.info(f"xtdata订阅完成: {norm}")
+                except Exception as sub_err:
+                    self.logger.warning(f"xtdata订阅失败，将继续尝试获取: {sub_err}")
+
                 # 获取最新tick数据
                 tick_data = xtdata.get_full_tick([xt_symbol])
                 if tick_data and xt_symbol in tick_data:
                     current_tick = tick_data[xt_symbol]
                     # 尝试获取最新价
-                    if 'last' in current_tick and current_tick['last'] > 0:
-                        price = current_tick['last']
-                        self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新价: {price}")
-                        return float(price)
-                    # 尝试获取当前价
-                    elif 'current' in current_tick and current_tick['current'] > 0:
-                        price = current_tick['current']
-                        self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 当前价: {price}")
-                        return float(price)
+                    if isinstance(current_tick, dict):
+                        last_val = current_tick.get('last') or current_tick.get('price') or current_tick.get('current')
+                        if last_val and last_val > 0:
+                            self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新价: {last_val}")
+                            return float(last_val)
+                    # 某些版本返回对象而非字典，做兜底提取
+                    try:
+                        last_val = getattr(current_tick, 'last', None) or getattr(current_tick, 'price', None) or getattr(current_tick, 'current', None)
+                        if last_val and last_val > 0:
+                            self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新价: {last_val}")
+                            return float(last_val)
+                    except Exception:
+                        pass
                 else:
-                    self.logger.warning(f"xtdata.get_full_tick返回空字典，尝试其他方法")
+                    self.logger.warning(f"xtdata.get_full_tick返回空，尝试分钟数据")
             except Exception as xt_error:
                 self.logger.warning(f"xtdata获取实时价格失败，尝试其他方法: {xt_error}")
             
@@ -663,21 +802,25 @@ class StrategyEngine:
                     period='1m', 
                     count=5
                 )
-                # 检查返回的数据类型，可能是DataFrame或字典
-                if market_data is not None:
-                    if hasattr(market_data, 'empty') and not market_data.empty:
+                # 兼容不同返回：None/0/空、DataFrame、dict、list 等
+                if market_data is None or market_data == 0:
+                    self.logger.warning("xtdata.get_market_data 返回 None/0，尝试其他方法")
+                else:
+                    if hasattr(market_data, 'empty'):
                         # DataFrame类型
-                        close_prices = market_data['close'].dropna()
-                        if len(close_prices) > 0:
-                            latest_close = close_prices.iloc[-1]
-                            if latest_close > 0:
-                                self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新收盘价: {latest_close}")
-                                return float(latest_close)
-                    elif isinstance(market_data, dict) and 'close' in market_data:
+                        if not market_data.empty and 'close' in market_data.columns:
+                            close_prices = market_data['close'].dropna()
+                            if len(close_prices) > 0:
+                                latest_close = close_prices.iloc[-1]
+                                if latest_close and latest_close > 0:
+                                    self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新收盘价: {latest_close}")
+                                    return float(latest_close)
+                        else:
+                            self.logger.warning("xtdata.get_market_data DataFrame 为空或缺少 close 列")
+                    elif isinstance(market_data, dict):
                         # 字典类型
-                        close_data = market_data['close']
-                        if close_data and len(close_data) > 0:
-                            # 获取最后一个非空值
+                        close_data = market_data.get('close')
+                        if close_data is not None and len(close_data) > 0:
                             latest_close = None
                             for i in range(len(close_data)-1, -1, -1):
                                 if close_data[i] is not None and close_data[i] > 0:
@@ -686,7 +829,20 @@ class StrategyEngine:
                             if latest_close is not None:
                                 self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新收盘价: {latest_close}")
                                 return float(latest_close)
-                self.logger.warning(f"xtdata.get_market_data返回空数据，尝试其他方法")
+                        else:
+                            self.logger.warning("xtdata.get_market_data 字典返回缺少 close 或为空")
+                    elif isinstance(market_data, (list, tuple)) and len(market_data) > 0:
+                        # 某些版本可能返回 list
+                        try:
+                            last_item = market_data[-1]
+                            if isinstance(last_item, dict) and 'close' in last_item and last_item['close'] > 0:
+                                self.logger.info(f"xtdata获取到 {symbol}({xt_symbol}) 最新收盘价: {last_item['close']}")
+                                return float(last_item['close'])
+                        except Exception:
+                            pass
+                    else:
+                        self.logger.warning(f"xtdata.get_market_data 返回未识别类型: {type(market_data)}")
+
             except Exception as market_error:
                 self.logger.warning(f"xtdata获取市场数据失败，尝试其他方法: {market_error}")
             
@@ -777,8 +933,8 @@ class StrategyEngine:
                 None
             )
             if not account_id:
-                self.logger.warning("未配置账户ID，使用默认值")
-                return 100000.0
+                self.logger.error("未配置账户ID，无法获取账户价值，终止下单")
+                raise Exception("Missing account_id in settings")
             
             # 获取账户资产信息
             if hasattr(self.trader_api, 'get_account_asset_detailed'):
@@ -791,13 +947,12 @@ class StrategyEngine:
                         self.logger.info(f"获取账户总资产: {total_asset_float:,.2f}")
                         return total_asset_float
             
-            # 如果无法获取实际资产，使用默认值
-            self.logger.warning("无法获取实际账户资产，使用默认值 100,000")
-            return 100000.0
+            # 无法获取实际资产，抛错并阻止下单
+            raise Exception("无法获取实际账户资产，已阻止下单")
             
         except Exception as e:
-            self.logger.error(f"获取账户价值失败: {e}")
-            return 100000.0
+            # 将异常向上抛出，调用方应终止当前交易流程
+            raise Exception(f"获取账户价值失败: {e}")
     
     async def _load_config(self):
         """加载配置文件"""
@@ -1444,7 +1599,7 @@ class StrategyEngine:
             return None
 
     def _export_orders_to_excel(self, orders: List[Dict[str, Any]], filename: str = "orders.xlsx") -> Optional[Path]:
-        """导出已执行交易到Excel（固定文件名覆盖写）"""
+        """导出已执行交易到Excel（同一文件追加写入，保留历史）"""
         try:
             if not orders:
                 return None
@@ -1464,9 +1619,19 @@ class StrategyEngine:
             export_dir = Path(__file__).parent.parent.parent / "reports"
             export_dir.mkdir(parents=True, exist_ok=True)
             filepath = export_dir / filename
+            # 追加写：若文件存在则读取原有数据并合并
+            if filepath.exists():
+                try:
+                    existing_df = pd.read_excel(filepath, sheet_name='交易明细')
+                    combined_df = pd.concat([existing_df, df], ignore_index=True)
+                except Exception:
+                    # 若读取失败，退化为仅写入当前数据
+                    combined_df = df
+            else:
+                combined_df = df
             with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
-                df.to_excel(writer, sheet_name='交易明细', index=False)
-            self.logger.info(f"✅ 交易明细已导出: {filepath}")
+                combined_df.to_excel(writer, sheet_name='交易明细', index=False)
+            self.logger.info(f"✅ 交易明细已追加导出: {filepath}")
             return filepath
         except Exception as e:
             self.logger.error(f"导出交易明细失败: {e}")

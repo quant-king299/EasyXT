@@ -115,6 +115,18 @@
       "min_trade_amount": 100,
       "min_trade_amount_comment": "最小交易数量（手/股）"
     },
+
+    "order": {
+      "order_comment": "再平衡与下单防抖设置",
+      "min_diff_ratio_shares": 0.003,
+      "min_diff_ratio_shares_comment": "最小股数差异比例阈值（相对目标股数），默认0.3%",
+      "value_band_trigger_ratio": 0.005,
+      "value_band_trigger_ratio_comment": "价值带宽触发阈值（目标价值偏差比例），默认0.5%",
+      "cooldown_seconds": 300,
+      "cooldown_seconds_comment": "每标的冷却时间（秒），默认5分钟",
+      "daily_max_rebalances_per_symbol": 1,
+      "daily_max_rebalances_per_symbol_comment": "每个标的每天最多允许触发的再平衡次数，默认1次"
+    },
     "export_holdings": true,
     "export_holdings_comment": "是否导出持仓（true开启导出，false不导出）。导出文件位于 export_dir 指定目录，文件名为 {组合代码}_持仓数据.xlsx",
     "export_dir": "reports",

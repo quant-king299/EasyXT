@@ -115,8 +115,21 @@ def print_banner():
     print("🚀 雪球跟单策略 - EasyXT 版本")
     print("=" * 70)
     print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print("📊 跟单组合: ZH2863835")
-    print("🏦 交易账号: 39020958")
+    try:
+        from core.config_manager import ConfigManager as _Cfg
+        _cfg = _Cfg()
+        portfolios = _cfg.get_portfolios()
+        enabled_names = [p.get('name') or p.get('code') for p in portfolios if p.get('enabled', False)]
+        combo_str = ', '.join(enabled_names) if enabled_names else '未配置'
+    except Exception:
+        combo_str = '未配置'
+    print(f"📊 跟单组合: {combo_str}")
+    try:
+        account_id = _cfg.get_setting('settings.account.account_id')
+        account_str = account_id if account_id else '未配置'
+    except Exception:
+        account_str = '未配置'
+    print(f"🏦 交易账号: {account_str}")
     print("🔧 交易接口: EasyXT (高级交易API)")
     print("=" * 70)
 
