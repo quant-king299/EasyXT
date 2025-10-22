@@ -45,7 +45,7 @@ class XueqiuFollowWidget(QWidget):
     
     # 信号定义
     status_changed = pyqtSignal(str)
-    portfolio_updated = pyqtSignal(dict)
+    portfolio_updated = pyqtSignal(list)
     position_updated = pyqtSignal(dict)
     risk_alert = pyqtSignal(str, str)
     
@@ -584,15 +584,23 @@ class XueqiuFollowWidget(QWidget):
     
     def update_portfolio_display(self, portfolios):
         """更新组合显示"""
+        # portfolios 是列表，每个元素为一个组合配置字典
         self.portfolio_table.setRowCount(len(portfolios))
         
-        for i, (name, data) in enumerate(portfolios.items()):
-            self.portfolio_table.setItem(i, 0, QTableWidgetItem(name))
-            self.portfolio_table.setItem(i, 1, QTableWidgetItem(f"{data.get('ratio', 0):.2%}"))
-            self.portfolio_table.setItem(i, 2, QTableWidgetItem(f"¥{data.get('total_value', 0):,.2f}"))
-            self.portfolio_table.setItem(i, 3, QTableWidgetItem(f"¥{data.get('daily_pnl', 0):,.2f}"))
-            self.portfolio_table.setItem(i, 4, QTableWidgetItem(f"{data.get('return_rate', 0):.2%}"))
-            self.portfolio_table.setItem(i, 5, QTableWidgetItem(data.get('status', '未知')))
+        for i, p in enumerate(portfolios):
+            name = p.get('name') or p.get('code') or f"组合{i+1}"
+            ratio = p.get('ratio', 0)
+            total_value = p.get('total_value', 0)
+            daily_pnl = p.get('daily_pnl', 0)
+            return_rate = p.get('return_rate', 0)
+            status = p.get('status', '未知')
+
+            self.portfolio_table.setItem(i, 0, QTableWidgetItem(str(name)))
+            self.portfolio_table.setItem(i, 1, QTableWidgetItem(f"{float(ratio):.2%}"))
+            self.portfolio_table.setItem(i, 2, QTableWidgetItem(f"¥{float(total_value):,.2f}"))
+            self.portfolio_table.setItem(i, 3, QTableWidgetItem(f"¥{float(daily_pnl):,.2f}"))
+            self.portfolio_table.setItem(i, 4, QTableWidgetItem(f"{float(return_rate):.2%}"))
+            self.portfolio_table.setItem(i, 5, QTableWidgetItem(str(status)))
     
     def update_position_display(self, positions):
         """更新持仓显示"""
