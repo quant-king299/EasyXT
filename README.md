@@ -3,6 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.7+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![QMT](https://img.shields.io/badge/QMT-Compatible-orange.svg)](https://www.gtja.com/)
+[![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
 
 一个基于迅投QMT的量化交易扩展工具包，提供简化的API接口和丰富的学习实例。
 
@@ -212,7 +213,7 @@ miniqmt扩展/
 
 - 项目主页: https://github.com/quant-king299/EasyXT
 - 问题反馈: https://github.com/quant-king299/EasyXT/issues
-- 网站: https://www.ptqmt.com
+- 网站: **https://www.ptqmt.com**
 
 ## 📈 更新日志
 
