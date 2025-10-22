@@ -212,7 +212,7 @@ miniqmt扩展/
 
 - 项目主页: https://github.com/quant-king299/EasyXT
 - 问题反馈: https://github.com/quant-king299/EasyXT/issues
-- 邮箱: quant-king299@example.com
+- 网站: https://www.ptqmt.com
 
 ## 📈 更新日志
 
