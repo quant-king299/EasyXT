@@ -35,6 +35,7 @@ try:
     from xueqiu_follow.core.risk_manager import RiskManager
     from xueqiu_follow.core.strategy_engine import StrategyEngine
     from xueqiu_follow.core.config_manager import ConfigManager
+    from xueqiu_follow.start_xueqiu_follow_easyxt import XueqiuFollowSystem, check_qmt_config, test_qmt_connection
     XUEQIU_AVAILABLE = True
 except ImportError:
     XUEQIU_AVAILABLE = False
@@ -52,9 +53,15 @@ class XueqiuFollowWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.strategy_engine = None
+        self.system = None  # 复用 start_xueqiu_follow_easyxt 的系统类
         self.is_running = False
         self.config = {}
         self.portfolios = {}
+        # 名称缓存，避免重复查询
+        self._code_name_cache = {}
+        # 异步运行所需
+        self._loop = None
+        self._loop_thread = None
         
         # 定时器
         self.update_timer = QTimer()
@@ -217,6 +224,91 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(detail_group)
         
         return widget
+
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
     
     def create_position_tab(self):
         """创建持仓管理选项卡"""
@@ -253,6 +345,91 @@ class XueqiuFollowWidget(QWidget):
         layout.addLayout(button_layout)
         
         return widget
+
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
     
     def create_trade_tab(self):
         """创建交易记录选项卡"""
@@ -290,6 +467,91 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(stats_group)
         
         return widget
+
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
     
     def create_risk_tab(self):
         """创建风险控制选项卡"""
@@ -335,6 +597,91 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(risk_monitor_group)
         
         return widget
+
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
     
     def create_settings_tab(self):
         """创建系统设置选项卡"""
@@ -378,6 +725,91 @@ class XueqiuFollowWidget(QWidget):
         layout.addStretch()
         
         return widget
+
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
     
     def create_status_bar(self, parent_layout):
         """创建状态栏"""
@@ -404,13 +836,52 @@ class XueqiuFollowWidget(QWidget):
         self.risk_alert.connect(self.show_risk_alert)
     
     def load_config(self):
-        """加载配置"""
+        """加载配置（优先 unified_config.json）"""
         try:
-            config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
+            base_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+            unified_path = os.path.normpath(os.path.join(base_dir, 'unified_config.json'))
+            legacy_path = os.path.normpath(os.path.join(base_dir, 'settings.json'))
+
+            if os.path.exists(unified_path):
+                with open(unified_path, 'r', encoding='utf-8') as f:
+                    raw = json.load(f)
+                # 归一化为 GUI 使用的扁平结构（不改变磁盘文件结构）
+                settings = raw.get('settings', {})
+                account = settings.get('account', {})
+                risk = settings.get('risk', {})
+                xq = raw.get('xueqiu_settings', raw.get('xueqiu', {}))
+                self.config = {
+                    'account': {
+                        'account_id': account.get('account_id', ''),
+                        'password': account.get('password', '')
+                    },
+                    'xueqiu': {
+                        'cookie': xq.get('cookie', ''),
+                        'sync_interval': xq.get('sync_interval', 3)
+                    },
+                    'risk': {
+                        'max_position_ratio': risk.get('max_position_ratio', 0.1),
+                        'stop_loss_ratio': risk.get('stop_loss_ratio', 0.05),
+                        'max_daily_loss': risk.get('max_daily_loss', 5000)
+                    }
+                }
+                # 记录路径以便保存时写回 unified
+                self._config_file_path = unified_path
+                self.apply_config()
+            elif os.path.exists(legacy_path):
+                with open(legacy_path, 'r', encoding='utf-8') as f:
                     self.config = json.load(f)
-                    self.apply_config()
+                self._config_file_path = legacy_path
+                self.apply_config()
+            else:
+                # 若均不存在，初始化默认结构并指向 unified 写入路径
+                self.config = {
+                    'account': {'account_id': '', 'password': ''},
+                    'xueqiu': {'cookie': '', 'sync_interval': 3},
+                    'risk': {'max_position_ratio': 0.1, 'stop_loss_ratio': 0.05, 'max_daily_loss': 5000}
+                }
+                self._config_file_path = unified_path
+                self.apply_config()
         except Exception as e:
             QMessageBox.warning(self, "警告", f"加载配置失败: {str(e)}")
     
@@ -432,8 +903,9 @@ class XueqiuFollowWidget(QWidget):
             self.max_daily_loss.setValue(risk.get('max_daily_loss', 5000))
     
     def save_config(self):
-        """保存配置"""
+        """保存配置（优先写回 unified_config.json 的对应结构）"""
         try:
+            # 收集界面值（扁平结构）
             self.config.update({
                 'account': {
                     'account_id': self.account_id.text(),
@@ -450,31 +922,135 @@ class XueqiuFollowWidget(QWidget):
                 }
             })
             
-            config_path = os.path.join(os.path.dirname(__file__), '..', 'config', 'settings.json')
-            with open(config_path, 'w', encoding='utf-8') as f:
-                json.dump(self.config, f, ensure_ascii=False, indent=2)
+            # 构造 unified 结构
+            unified = {
+                'settings': {
+                    'account': {
+                        'account_id': self.config['account']['account_id'],
+                        'password': self.config['account']['password']
+                    },
+                    'risk': {
+                        'max_position_ratio': self.config['risk']['max_position_ratio'],
+                        'stop_loss_ratio': self.config['risk']['stop_loss_ratio'],
+                        'max_daily_loss': self.config['risk']['max_daily_loss']
+                    }
+                },
+                'xueqiu_settings': {
+                    'cookie': self.config['xueqiu']['cookie'],
+                    'sync_interval': self.config['xueqiu']['sync_interval']
+                }
+            }
             
-            QMessageBox.information(self, "成功", "配置保存成功!")
+            # 目标路径：优先统一配置文件
+            target_path = getattr(self, '_config_file_path', None)
+            if not target_path:
+                base_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+                target_path = os.path.normpath(os.path.join(base_dir, 'unified_config.json'))
+            
+            # 确保目录存在
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            
+            with open(target_path, 'w', encoding='utf-8') as f:
+                json.dump(unified, f, ensure_ascii=False, indent=2)
+            
+            QMessageBox.information(self, "成功", f"配置保存成功!\n路径: {target_path}")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"保存配置失败: {str(e)}")
     
+    def _ensure_event_loop(self):
+        """确保存在后台事件循环线程"""
+        if getattr(self, "_loop", None) and self._loop.is_running():
+            return
+        
+        def _run_loop(loop):
+            asyncio.set_event_loop(loop)
+            loop.run_forever()
+        
+        self._loop = asyncio.new_event_loop()
+        self._loop_thread = threading.Thread(target=_run_loop, args=(self._loop,), daemon=True)
+        self._loop_thread.start()
+    
+    def _run_coro(self, coro):
+        """在线程中的事件循环里调度协程"""
+        self._ensure_event_loop()
+        return asyncio.run_coroutine_threadsafe(coro, self._loop)
+    
     def start_strategy(self):
-        """启动策略"""
+        """启动策略（对齐启动脚本：initialize -> start，均为异步）"""
         try:
             if not XUEQIU_AVAILABLE:
                 QMessageBox.warning(self, "警告", "雪球跟单模块不可用，请检查依赖")
                 return
             
-            # 初始化配置管理器与策略引擎（必须传入 ConfigManager 实例）
-            config_manager = ConfigManager()
-            self.strategy_engine = StrategyEngine(config_manager)
-            
-            # 启动策略
-            self.strategy_engine.start()
+            # 复用 start_xueqiu_follow_easyxt 的系统类，保证交易链路一致
+            # 优先加载 strategies/xueqiu_follow/config/unified_config.json 作为完整配置基线
+            base_dir = os.path.join(os.path.dirname(__file__), '..', 'config')
+            unified_path = os.path.normpath(os.path.join(base_dir, 'unified_config.json'))
+            loaded = {}
+            try:
+                if os.path.exists(unified_path):
+                    with open(unified_path, 'r', encoding='utf-8') as f:
+                        loaded = json.load(f) or {}
+            except Exception as _e:
+                # 若加载失败，退回最小结构
+                loaded = {}
+            # 构造配置：以文件为准，覆盖账户ID/密码；若缺失则补齐必要结构
+            settings = loaded.get('settings') or {}
+            settings.setdefault('account', {})
+            if self.account_id.text():
+                settings['account']['account_id'] = self.account_id.text()
+            if self.account_password.text():
+                settings['account']['password'] = self.account_password.text()
+            settings.setdefault('trading', {})
+            settings['trading'].setdefault('trade_mode', 'paper_trading')
+            # 补齐脚本期望的 settings.qmt 字段，避免 KeyError: 'qmt'
+            settings.setdefault('qmt', {})
+            settings['qmt'].setdefault('session_id', 'xueqiu_follow')
+            settings['qmt'].setdefault('api_type', 'advanced')
+            settings['qmt'].setdefault('auto_retry', True)
+            settings['qmt'].setdefault('retry_count', 3)
+            settings['qmt'].setdefault('timeout', 30)
+            loaded['settings'] = settings
+            config_data = loaded
+            # 在系统初始化前做与脚本一致的QMT检查（同步执行，快速失败）
+            try:
+                if not check_qmt_config():
+                    raise Exception('QMT 配置检查失败')
+                if not test_qmt_connection():
+                    raise Exception('QMT 连接测试失败')
+            except Exception as _e:
+                raise Exception(f'前置检查失败: {_e}')
+
+            # 关键配置快速校验（比对脚本前置自检，给出更明确的GUI错误信息）
+            try:
+                acc = (config_data.get('settings', {}).get('account', {}) or {})
+                qmt_path = acc.get('qmt_path') or acc.get('userdata_path') or ''
+                account_id_val = acc.get('account_id') or ''
+                if not account_id_val:
+                    raise Exception('未配置账户ID，请在配置中设置 settings.account.account_id')
+                if qmt_path and not os.path.exists(qmt_path):
+                    raise Exception(f'QMT路径不存在: {qmt_path}，请检查 settings.account.qmt_path')
+            except Exception as pre_e:
+                raise Exception(f'配置校验失败: {pre_e}')
+
+            self.system = XueqiuFollowSystem(config_data)
+            # 使用系统内部的策略引擎供 GUI 查询
+            fut_sys_init = self._run_coro(self.system.initialize())
+            if not fut_sys_init.result(timeout=60):
+                raise Exception('系统初始化失败')
+            self.strategy_engine = self.system.strategy_engine
+            # 启动系统（异步，不阻塞）
+            self._run_coro(self.system.start())
             
             self.is_running = True
             self.start_btn.setEnabled(False)
             self.stop_btn.setEnabled(True)
+
+            # 更新连接状态
+            try:
+                self.connection_status.setText("已连接")
+            except Exception:
+                pass
             
             # 启动定时更新
             self.update_timer.start(self.sync_interval.value() * 1000)
@@ -486,10 +1062,23 @@ class XueqiuFollowWidget(QWidget):
             QMessageBox.critical(self, "错误", f"启动策略失败: {str(e)}")
     
     def stop_strategy(self):
-        """停止策略"""
+        """停止策略（对齐异步 stop）"""
         try:
-            if self.strategy_engine:
-                self.strategy_engine.stop()
+            # 优先停止系统（内部会停止策略引擎/执行器/采集器）
+            if self.system:
+                try:
+                    self._run_coro(self.system.stop()).result(timeout=30)
+                except Exception:
+                    pass
+            elif self.strategy_engine:
+                # 兼容旧逻辑
+                try:
+                    self._run_coro(self.strategy_engine.stop()).result(timeout=15)
+                except Exception:
+                    try:
+                        self.strategy_engine.stop()
+                    except Exception:
+                        pass
             
             self.is_running = False
             self.start_btn.setEnabled(True)
@@ -525,17 +1114,194 @@ class XueqiuFollowWidget(QWidget):
     def refresh_data(self):
         """刷新数据"""
         try:
+            # 刷新策略引擎数据（组合）
             if self.strategy_engine:
-                # 刷新组合数据
                 portfolios = self.strategy_engine.get_portfolios()
                 self.portfolio_updated.emit(portfolios)
-                
-                # 刷新持仓数据
+
+            # 优先用 QMT 详细持仓对齐 GUI；若失败再回退策略引擎的持仓
+            qmt_positions_sent = False
+            try:
+                if getattr(self, 'system', None) and getattr(self.system, 'executor', None):
+                    executor = self.system.executor
+                    trader_api = getattr(executor, 'trader_api', None)
+                    # 获取账号
+                    account_id = self.account_id.text() or ((self.system.config_data.get('settings', {}).get('account', {}) or {}).get('account_id'))
+                    if trader_api and hasattr(trader_api, 'get_positions_detailed') and account_id:
+                        positions_df = trader_api.get_positions_detailed(account_id)
+                        if positions_df is not None and not getattr(positions_df, 'empty', True):
+                            # 映射为 GUI 统一结构
+                            positions_map = {}
+                            for _, row in positions_df.iterrows():
+                                try:
+                                    code = row.get('code') or row.get('stock_code') or ''
+                                    if not code:
+                                        continue
+                                    volume = float(row.get('volume', 0) or 0)
+                                    market_value = float(row.get('market_value', 0) or 0)
+                                    open_price = float(row.get('open_price', 0) or 0)
+                                    can_use = float(row.get('can_use_volume', 0) or 0)
+                                    current_price = (market_value / volume) if volume else 0.0
+                                    pnl = float(row.get('profit_loss', 0) or 0)
+                                    pnl_ratio = float(row.get('profit_loss_ratio', 0) or 0)
+                                    # 兜底计算：若券商未返回盈亏或盈亏率，则依据成本价与现价计算
+                                    if (pnl == 0 or pnl_ratio == 0) and open_price and volume:
+                                        try:
+                                            calc_pnl = (current_price - open_price) * volume
+                                            calc_ratio = (current_price / open_price - 1.0) if open_price else 0.0
+                                            if pnl == 0:
+                                                pnl = calc_pnl
+                                            if pnl_ratio == 0:
+                                                pnl_ratio = calc_ratio
+                                        except Exception:
+                                            pass
+                                    # 名称优先取接口字段，否则通过 xtquant 获取
+                                    name_val = row.get('stock_name') or row.get('name') or ''
+                                    if not name_val:
+                                        try:
+                                            norm = code
+                                            if not norm or ('.' not in norm):
+                                                from easy_xt.utils import StockCodeUtils as _Scu
+                                                norm = _Scu.normalize_code(code)
+                                            cached = self._code_name_cache.get(norm)
+                                            if cached:
+                                                name_val = cached
+                                            else:
+                                                try:
+                                                    from xtquant import xtdata as _xt
+                                                    info = _xt.get_instrument_detail(norm)
+                                                    if info and isinstance(info, dict):
+                                                        name_val = info.get('InstrumentName') or info.get('cn_name') or ''
+                                                        if name_val:
+                                                            self._code_name_cache[norm] = name_val
+                                                except Exception:
+                                                    pass
+                                        except Exception:
+                                            pass
+                                    positions_map[code] = {
+                                        'name': name_val,
+                                        'volume': int(volume),
+                                        'available': int(can_use),
+                                        'cost_price': float(open_price),
+                                        'current_price': float(current_price),
+                                        'pnl': float(pnl),
+                                        'pnl_ratio': float(pnl_ratio)
+                                    }
+                                except Exception:
+                                    continue
+                            if positions_map:
+                                self.position_updated.emit(positions_map)
+                                qmt_positions_sent = True
+            except Exception:
+                qmt_positions_sent = False
+
+            if not qmt_positions_sent and self.strategy_engine:
                 positions = self.strategy_engine.get_positions()
                 self.position_updated.emit(positions)
-            
+
+            # 刷新交易记录与连接状态（复用系统执行器）
+            try:
+                if getattr(self, 'system', None) and getattr(self.system, 'executor', None):
+                    executor = self.system.executor
+                    trader_api = getattr(executor, 'trader_api', None)
+                    account_id = None
+                    # 取账号ID：GUI输入优先，其次配置
+                    if self.account_id.text():
+                        account_id = self.account_id.text()
+                    else:
+                        try:
+                            account_id = (self.system.config_data.get('settings', {}).get('account', {}) or {}).get('account_id')
+                        except Exception:
+                            account_id = None
+
+                    # 连接状态：以 trader_api 内部状态或一次轻量查询推断
+                    connected = False
+                    try:
+                        if trader_api and hasattr(trader_api, 'accounts'):
+                            connected = bool(account_id and trader_api.accounts and account_id in trader_api.accounts)
+                        if not connected and trader_api and hasattr(trader_api, 'get_today_orders') and account_id:
+                            # 轻量探测：调用当日委托（失败不抛到外层）
+                            _ = trader_api.get_today_orders(account_id)
+                            connected = True
+                    except Exception:
+                        connected = False
+
+                    self.connection_status.setText("已连接" if connected else "未连接")
+
+                    # 优先显示“当日成交”，与QMT成交表一致；若无成交再回退展示“当日委托”
+                    try:
+                        rendered = False
+                        if trader_api and hasattr(trader_api, 'get_today_trades') and account_id:
+                            trades_df = trader_api.get_today_trades(account_id)
+                            if trades_df is not None and not getattr(trades_df, 'empty', True):
+                                # 为 trades_df 缺失的股票名称补齐（使用与持仓相同的缓存/xtdata）
+                                try:
+                                    from xtquant import xtdata as _xt
+                                    def _fill_name(code):
+                                        try:
+                                            norm = code
+                                            if not norm or ('.' not in norm):
+                                                from easy_xt.utils import StockCodeUtils as _Scu
+                                                norm = _Scu.normalize_code(code)
+                                            if norm in getattr(self, '_code_name_cache', {}):
+                                                return self._code_name_cache[norm]
+                                            info = _xt.get_instrument_detail(norm)
+                                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                                            if name:
+                                                self._code_name_cache[norm] = name
+                                            return name
+                                        except Exception:
+                                            return ''
+
+                                    # 当列缺失、全为NaN、或全为空字符串时统一补齐；否则只补空白项
+                                    code_col = 'stock_code' if 'stock_code' in trades_df.columns else ('code' if 'code' in trades_df.columns else ('symbol' if 'symbol' in trades_df.columns else None))
+                                    if code_col:
+                                        need_fill_all = ('stock_name' not in trades_df.columns)
+                                        if not need_fill_all:
+                                            name_series = trades_df['stock_name']
+                                            try:
+                                                name_series = name_series.astype(str)
+                                            except Exception:
+                                                pass
+                                            is_blank = name_series.isna() | (name_series.str.strip() == '')
+                                            need_fill_all = bool(is_blank.all())
+                                        
+                                        if need_fill_all:
+                                            trades_df['stock_name'] = trades_df[code_col].apply(_fill_name)
+                                        else:
+                                            blank_mask = trades_df['stock_name'].isna() | (trades_df['stock_name'].astype(str).str.strip() == '')
+                                            trades_df.loc[blank_mask, 'stock_name'] = trades_df.loc[blank_mask, code_col].apply(_fill_name)
+                                except Exception:
+                                    pass
+
+                                self._render_today_trades_table(trades_df)
+                                rendered = True
+                                # 统计
+                                try:
+                                    total_trades = len(trades_df)
+                                    total_amount = float(trades_df.get('traded_amount', []).sum()) if hasattr(trades_df, 'get') else 0.0
+                                    self.total_trades_label.setText(f"总交易次数: {total_trades}")
+                                    self.total_profit_label.setText(f"总盈亏: ¥{total_amount:,.2f}")
+                                    self.today_trades_label.setText(f"今日交易: {total_trades}")
+                                except Exception:
+                                    pass
+                        if not rendered and trader_api and hasattr(trader_api, 'get_today_orders') and account_id:
+                            orders_df = trader_api.get_today_orders(account_id)
+                            self._render_today_orders_table(orders_df)
+                            try:
+                                total_orders = 0 if orders_df is None or getattr(orders_df, 'empty', True) else len(orders_df)
+                                self.total_trades_label.setText(f"总交易次数: {total_orders}")
+                                self.today_trades_label.setText(f"今日交易: {total_orders}")
+                            except Exception:
+                                pass
+                    except Exception:
+                        # 不影响其他展示
+                        pass
+            except Exception:
+                self.connection_status.setText("未连接")
+
             self.last_update_time.setText(f"最后更新: {datetime.now().strftime('%H:%M:%S')}")
-            
+
         except Exception as e:
             QMessageBox.warning(self, "警告", f"刷新数据失败: {str(e)}")
     
