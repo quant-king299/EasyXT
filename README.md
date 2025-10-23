@@ -53,6 +53,30 @@ PY
 ```
 
 > 说明：pip 仅安装 Python 包，不会安装 QMT/xtquant，本地需自备。
+>
+> 必装的 xtquant 特殊版本（强制）：请到以下 Release 页面下载附件 `xtquant.rar`，解压后覆盖到本项目根目录下的 `xtquant/` 目录（若不存在则直接解压到根目录会创建该目录）：
+>
+> https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
+>
+> 为什么必须使用这一份 xtquant：券商侧随各自版本发布，不会与迅投官方保持一致节奏；不同券商包的 xtquant 版本、接口和行为差异会导致本项目运行报错。为确保一致性与稳定性，本项目仅支持上述 Release 附件中的 xtquant 版本，使用高/低其它版本都可能出现连接失败、字段缺失、接口不兼容等错误。
+>
+> 一键下载并解压（PowerShell，推荐）：
+> ```powershell
+> $url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
+> $dest = "$PWD\xtquant.rar"
+> Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+> if (Test-Path "$env:ProgramFiles\7-Zip\7z.exe") {
+>   & "$env:ProgramFiles\7-Zip\7z.exe" x -y "$dest" -o"$PWD"
+> } elseif (Get-Command 7z.exe -ErrorAction SilentlyContinue) {
+>   7z x -y "$dest" -o"$PWD"
+> } else {
+>   Write-Host "未检测到 7-Zip，请手动解压 $dest 到项目根目录（或安装 7-Zip 后重试）"
+> }
+> Remove-Item $dest -ErrorAction SilentlyContinue
+> # 验证目录：应出现 $PWD\xtquant 目录
+> if (Test-Path "$PWD\xtquant") { Write-Host "xtquant 安装完成" } else { Write-Host "xtquant 目录未找到，请检查解压是否成功" }
+> ```
+> 注：PowerShell 无法原生解压 .rar，需本机已安装 7-Zip（https://www.7-zip.org/）。如无 7-Zip，请手动解压 `xtquant.rar` 到项目根目录。
 
 ### 项目源码方式安装（可选）
 
