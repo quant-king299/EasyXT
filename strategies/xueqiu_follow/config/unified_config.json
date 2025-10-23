@@ -120,6 +120,8 @@
       "order_comment": "再平衡与下单防抖设置",
       "min_diff_ratio_shares": 0.003,
       "min_diff_ratio_shares_comment": "最小股数差异比例阈值（相对目标股数），默认0.3%",
+      "min_diff_abs_shares": 500,
+      "min_diff_abs_shares_comment": "最小绝对股数阈值（手数取整后），默认500股；与价值带宽需同时满足才触发再平衡",
       "value_band_trigger_ratio": 0.005,
       "value_band_trigger_ratio_comment": "价值带宽触发阈值（目标价值偏差比例），默认0.5%",
       "cooldown_seconds": 300,

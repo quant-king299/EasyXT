@@ -184,7 +184,7 @@ class StrategyEngine:
                         'action': 'buy',
                         'target_value': target_value,
                         'weight': target_weight,
-                        'reason': f'新增持仓，权重: {target_weight:.2%}'
+                        'reason': f'新增持仓｜目标权重 {target_weight:.2%}｜目标价值=账户市值×跟随比例×目标权重 = {account_value_float:,.2f}×{follow_ratio_float:.2%}×{target_weight:.2%} = ¥{account_value_float * follow_ratio_float * target_weight:,.2f}'
                     }
                     
                 elif change_type == 'modify':
@@ -247,7 +247,7 @@ class StrategyEngine:
                         'action': 'buy',
                         'target_value': target_value,
                         'weight': target_weight,
-                        'reason': f'跟投模式买入，权重: {target_weight:.2%}'
+                        'reason': f'跟投模式买入｜目标权重 {target_weight:.2%}｜目标价值=账户市值×跟随比例×目标权重 = {account_value_float:,.2f}×{follow_ratio_float:.2%}×{target_weight:.2%} = ¥{account_value_float * follow_ratio_float * target_weight:,.2f}'
                     }
                     self.logger.info(f"跟投模式：生成买入指令 {symbol}，目标权重 {target_weight:.2%}")
                 
@@ -257,7 +257,7 @@ class StrategyEngine:
                         'action': 'sell',
                         'target_value': 0,
                         'weight': 0,
-                        'reason': '跟投模式清仓'
+                        'reason': '跟投模式清仓｜目标权重 0%｜将卖出至完全清空'
                     }
                     self.logger.info(f"跟投模式：生成清仓指令 {symbol}")
             
@@ -356,6 +356,17 @@ class StrategyEngine:
                     deviation_ratio = abs(target_value - current_value) / target_value
                     if deviation_ratio < value_band_ratio:
                         self.logger.info(f"{symbol} 价值偏差 {deviation_ratio:.4%} 小于带宽 {value_band_ratio:.4%}，忽略")
+                        # 在订单原因中可引用本次忽略的上下文（记录到实例以便后续使用）
+                        try:
+                            self._last_deviation_context = {
+                                'symbol': symbol_norm,
+                                'deviation_ratio': float(deviation_ratio),
+                                'value_band_ratio': float(value_band_ratio),
+                                'current_value': float(current_value),
+                                'target_value': float(target_value)
+                            }
+                        except Exception:
+                            pass
                         continue
 
                 # 冷却时间（每标的）
@@ -369,7 +380,18 @@ class StrategyEngine:
                 if last_ts:
                     from datetime import datetime, timedelta
                     if datetime.now() - last_ts < timedelta(seconds=cooldown_seconds):
-                        self.logger.info(f"{symbol} 处于冷却期，跳过再平衡")
+                        remain = cooldown_seconds - (datetime.now() - last_ts).seconds
+                        self.logger.info(f"{symbol} 处于冷却期，跳过再平衡，剩余 {remain}s")
+                        try:
+                            self._last_cooldown_context = {
+                                'symbol': symbol_norm,
+                                'cooldown_seconds': int(cooldown_seconds),
+                                'remain_seconds': int(max(remain, 0)),
+                                'last_rebalance_time': last_ts.strftime('%Y-%m-%d %H:%M:%S')
+                            }
+                        except Exception:
+                            pass
+
                         continue
 
                 # 每标的每日再平衡次数上限
@@ -393,26 +415,37 @@ class StrategyEngine:
                 target_volume = int(target_value / current_price / 100) * 100
                 volume_diff = target_volume - current_volume
 
-                # 比例阈值（以目标股数为基准）
+                # 绝对股数阈值（按手数取整后），与价值带宽需同时满足才触发再平衡
                 try:
-                    min_diff_ratio_shares = float(self.config_manager.get_setting('settings.order.min_diff_ratio_shares', 0.003))
+                    min_diff_abs_shares = int(self.config_manager.get_setting('settings.order.min_diff_abs_shares', 500))
                 except Exception:
-                    min_diff_ratio_shares = 0.003
-                denom_shares = max(target_volume, 100)
-                if denom_shares > 0 and abs(volume_diff) / denom_shares < min_diff_ratio_shares:
-                    self.logger.info(f"{symbol} 股数差异比例 {abs(volume_diff)/denom_shares:.4%} 小于阈值 {min_diff_ratio_shares:.4%}，忽略")
+                    min_diff_abs_shares = 500
+                if abs(volume_diff) < min_diff_abs_shares:
+                    self.logger.info(f"{symbol} 股数差异 {abs(volume_diff)} 小于绝对阈值 {min_diff_abs_shares} 股，忽略")
                     continue
                 
                 if volume_diff > 0:
                     # 买入（应用滑点）
                     adjusted_price = self._apply_slippage(symbol_norm, current_price, 'buy')
+                    # 组装详细原因：滑点、带宽、冷却、股数阈值、风险检查
+                    slip_type = self.config_manager.get_setting('settings.slippage.type', '百分比')
+                    slip_value = self.config_manager.get_setting('settings.slippage.value', 0.01)
+                    reason_detail = (
+                        f"新增/增持｜目标权重 {target.get('weight', 0):.2%}"
+                        + (f"（原 {target.get('old_weight', 0):.2%}）" if 'old_weight' in target else "")
+                        + f"｜目标价值 ¥{target_value:,.2f}｜当前 {current_volume} 股｜目标 {target_volume} 股｜需买入 {volume_diff} 股"
+                        + f"｜现价 {current_price:.2f}｜下单价 {adjusted_price:.2f}"
+                        + f"｜滑点 {slip_type}:{slip_value}｜带宽阈值 {value_band_ratio:.2%} 实际偏差 {deviation_ratio:.2%}"
+                        + f"｜冷却 {cooldown_seconds}s｜日内上限 {daily_max}｜股数阈值 {min_diff_abs_shares} 股"
+                        + "｜风控: 通过"
+                    )
                     order = {
                         'symbol': symbol_norm,
                         'action': 'buy',
                         'volume': volume_diff,
                         'price': adjusted_price,
                         'order_type': 'limit',
-                        'reason': target['reason']
+                        'reason': reason_detail
                     }
                     orders.append(order)
                     self.logger.info(f"智能跟投模式：生成买入指令: {symbol} {volume_diff}股 @ {current_price:.2f}，目标市值 {target_value:.2f}")
@@ -420,16 +453,28 @@ class StrategyEngine:
                 elif volume_diff < 0:
                     # 卖出（应用滑点）
                     adjusted_price = self._apply_slippage(symbol_norm, current_price, 'sell')
+                    sell_vol = abs(volume_diff)
+                    slip_type = self.config_manager.get_setting('settings.slippage.type', '百分比')
+                    slip_value = self.config_manager.get_setting('settings.slippage.value', 0.01)
+                    reason_detail = (
+                        f"减持/清仓｜目标权重 {target.get('weight', 0):.2%}"
+                        + (f"（原 {target.get('old_weight', 0):.2%}）" if 'old_weight' in target else "")
+                        + f"｜目标价值 ¥{target_value:,.2f}｜当前 {current_volume} 股｜目标 {target_volume} 股｜需卖出 {sell_vol} 股"
+                        + f"｜现价 {current_price:.2f}｜下单价 {adjusted_price:.2f}"
+                        + f"｜滑点 {slip_type}:{slip_value}｜带宽阈值 {value_band_ratio:.2%} 实际偏差 {deviation_ratio:.2%}"
+                        + f"｜冷却 {cooldown_seconds}s｜日内上限 {daily_max}｜股数阈值 {min_diff_abs_shares} 股"
+                        + "｜风控: 通过"
+                    )
                     order = {
                         'symbol': symbol_norm,
                         'action': 'sell',
-                        'volume': abs(volume_diff),
+                        'volume': sell_vol,
                         'price': adjusted_price,
                         'order_type': 'limit',
-                        'reason': target['reason']
+                        'reason': reason_detail
                     }
                     orders.append(order)
-                    self.logger.info(f"智能跟投模式：生成卖出指令: {symbol} {abs(volume_diff)}股 @ {current_price:.2f}")
+                    self.logger.info(f"智能跟投模式：生成卖出指令: {symbol} {sell_vol}股 @ {current_price:.2f}")
 
                 # 成功生成买卖指令后，记录冷却时间戳与每日计数
                 from datetime import datetime as _dt
@@ -545,58 +590,64 @@ class StrategyEngine:
             return {}
     
     def validate_trade_orders(self, orders: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """验证交易指令的合法性"""
+        """验证交易指令的合法性；并记录被拒绝订单供导出"""
         try:
-            valid_orders = []
+            valid_orders: List[Dict[str, Any]] = []
+            self._last_rejected_orders: List[Dict[str, Any]] = []
             
             for order in orders:
                 symbol_raw = order['symbol']
                 action = order['action']
                 volume = order['volume']
-                # 风险管理器使用前缀格式
                 symbol = self._to_broker_symbol(symbol_raw)
                 
-                # 风险检查
                 if self.risk_manager:
-                    # 使用新的风险检查方法，传递订单列表
                     test_orders = [{
-                        'symbol': symbol,  # 已转换为券商前缀格式
+                        'symbol': symbol,
                         'action': action,
                         'volume': volume,
                         'price': order.get('price', 10.0)
                     }]
                     
-                    # 获取真实账户信息
                     account_value = self._get_account_value()
-                    # 如果无法获取账户价值，直接拒绝订单
                     if account_value is None or account_value <= 0:
                         self.logger.error("无法获取账户价值，拒绝当前交易指令")
+                        # 记录拒绝原因
+                        self._last_rejected_orders.append({
+                            'symbol': symbol,
+                            'action': action,
+                            'volume': volume,
+                            'price': order.get('price', 0),
+                            'reason': '无法获取账户价值',
+                            'risk_level': 'medium'
+                        })
                         continue
                     account_info = {
                         'total_asset': account_value,
-                        'cash': account_value * 0.3,  # 假设30%为现金（仅用于风险评估，不触发下单）
+                        'cash': account_value * 0.3,
                         'market_value': account_value * 0.7,
                         'daily_pnl': 0
                     }
-                    # 将当前持仓键统一为券商前缀，供风险管理器使用
                     current_positions_broker = { self._to_broker_symbol(k): v for k, v in self.current_positions.items() }
-                    
-                    approved_orders = self.risk_manager.check_trade_risk(
-                        test_orders, 
-                        current_positions_broker,
-                        account_info
+                    result = self.risk_manager.check_trade_risk(
+                        test_orders, current_positions_broker, account_info
                     )
+                    approved_orders = result.get('approved') if isinstance(result, dict) else result
+                    rejected_orders = result.get('rejected', []) if isinstance(result, dict) else []
                     
-                    if approved_orders:  # 如果有通过的订单
+                    if approved_orders:
                         valid_orders.append(order)
                         self.logger.info(f"交易指令通过风险检查: {action} {symbol} {volume}")
-                    else:
-                        self.logger.warning(f"交易指令被风险控制拒绝: {action} {symbol} {volume}")
+                    if rejected_orders:
+                        # 合并记录，增加策略侧原始reason（若有）
+                        for rej in rejected_orders:
+                            rej['origin_reason'] = order.get('reason', '')
+                        self._last_rejected_orders.extend(rejected_orders)
+                        self.logger.warning(f"交易指令被风险控制拒绝: {action} {symbol} {volume} - {rejected_orders[0].get('reason','')}")
                 else:
-                    # 如果没有风险管理器，直接通过
                     valid_orders.append(order)
             
-            self.logger.info(f"验证完成，{len(valid_orders)}/{len(orders)} 个指令通过检查")
+            self.logger.info(f"验证完成，{len(valid_orders)}/{len(orders)} 个指令通过检查，拒绝 {len(self._last_rejected_orders)} 个")
             return valid_orders
             
         except Exception as e:
@@ -652,7 +703,8 @@ class StrategyEngine:
                             'symbol': order['symbol'],
                             'action': order['action'],
                             'volume': order['volume'],
-                            'success': order_id is not None
+                            'success': order_id is not None,
+                            'reason': order.get('reason', '')
                         })
                 
                 # 导出交易明细
@@ -660,10 +712,15 @@ class StrategyEngine:
                     self._export_orders_to_excel(execution_results, "orders.xlsx")
                 except Exception:
                     pass
+                # 同时导出被拒订单
+                try:
+                    self._export_rejected_orders_to_excel(getattr(self, '_last_rejected_orders', []), "rejected_orders.xlsx")
+                except Exception:
+                    pass
                 # 更新持仓记录
                 await self._update_positions_after_trade(execution_results)
                 
-                self.logger.info(f"策略执行完成，执行了 {len(execution_results)} 个交易")
+                self.logger.info(f"策略执行完成，执行了 {len(execution_results)} 个交易，拒绝 {len(getattr(self, '_last_rejected_orders', []))} 个")
             else:
                 self.logger.info("没有需要执行的交易指令")
                 
@@ -1185,10 +1242,14 @@ class StrategyEngine:
                 self.logger.warning("没有启用的组合，跳过初始同步")
                 return
             
-            # 获取账户信息
-            account_value = self._get_account_value()
+            # 获取账户信息（容错）
+            try:
+                account_value = self._get_account_value()
+            except Exception as e:
+                self.logger.warning(f"无法获取账户价值，跳过初始同步。原因: {e}")
+                return
             if account_value <= 0:
-                self.logger.error("无法获取账户价值，跳过初始同步")
+                self.logger.warning("账户价值为0，跳过初始同步")
                 return
             
             self.logger.info(f"💰 账户总价值: {account_value:,.2f}")
@@ -1346,7 +1407,7 @@ class StrategyEngine:
                             'action': order['action'],
                             'volume': order['volume'],
                             'status': 'failed',
-                            'reason': '订单提交失败'
+                            'reason': order.get('reason', '订单提交失败')
                         })
                         self.logger.error(f"❌ 订单提交失败: {order['symbol']}")
                         
@@ -1358,7 +1419,7 @@ class StrategyEngine:
                         'action': order['action'],
                         'volume': order['volume'],
                         'status': 'failed',
-                        'reason': str(e)
+                        'reason': order.get('reason', str(e))
                     })
             
             # 统计执行结果
@@ -1625,7 +1686,6 @@ class StrategyEngine:
                     existing_df = pd.read_excel(filepath, sheet_name='交易明细')
                     combined_df = pd.concat([existing_df, df], ignore_index=True)
                 except Exception:
-                    # 若读取失败，退化为仅写入当前数据
                     combined_df = df
             else:
                 combined_df = df
@@ -1646,21 +1706,40 @@ class StrategyEngine:
         return self.current_positions
     
     def get_risk_report(self) -> str:
-        """获取风险报告"""
-        if self.risk_manager:
+        """获取风险报告（容错：无法获取账户资产时也返回可读报告）"""
+        if not self.risk_manager:
+            return "风险管理器未初始化"
+
+        warn_msg = None
+        try:
             account_value = self._get_account_value()
-            account_info = {
-                'total_asset': account_value,
-                'cash': account_value * 0.3,
-                'market_value': account_value * 0.7,
-                'daily_pnl': 0
-            }
-            report = self.risk_manager.generate_risk_report(self.current_positions, account_info)
+        except Exception as e:
+            # 仅用于报告展示的容错：不再向上抛错，返回0资产的报告并附带警告
+            account_value = 0.0
+            warn_msg = f"账户资产不可用: {e}。本报告以0资产生成，仅用于界面展示，不作为交易依据。"
             try:
-                return json.dumps(report, ensure_ascii=False)
+                self.logger.warning(warn_msg)
             except Exception:
-                return str(report)
-        return "风险管理器未初始化"
+                pass
+
+        account_info = {
+            'total_asset': account_value,
+            'cash': account_value * 0.3,
+            'market_value': account_value * 0.7,
+            'daily_pnl': 0
+        }
+
+        report = self.risk_manager.generate_risk_report(self.current_positions, account_info)
+        if warn_msg:
+            try:
+                # 附加非破坏性的提示字段，便于GUI展示
+                report.setdefault('warnings', []).append(warn_msg)
+            except Exception:
+                pass
+        try:
+            return json.dumps(report, ensure_ascii=False)
+        except Exception:
+            return str(report)
     
     def add_callback(self, callback: Callable):
         """添加变化回调函数"""
