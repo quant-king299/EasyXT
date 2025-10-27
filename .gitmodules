@@ -1,0 +1,3 @@
+[submodule "strategies/jq2qmt/qka"]
+	path = strategies/jq2qmt/qka
+	url = https://github.com/quant-king299/qka.git
