@@ -1,0 +1,26 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "jq2qmt-adapter"
+version = "0.1.0"
+description = "Adapter layer integrating EasyXT strategies with JQ2QMT/qka services"
+readme = "README.md"
+authors = [{ name = "MiniQMT Team", email = "noreply@example.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Office/Business :: Financial :: Investment"
+]
+dependencies = [
+  "easy-xt>=0.1.0",
+  "requests>=2.31"
+]
+
+[project.urls]
+Homepage = "https://example.com/jq2qmt-adapter"
+Source = "https://example.com/jq2qmt-adapter"
