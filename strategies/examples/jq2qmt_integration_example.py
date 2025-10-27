@@ -17,6 +17,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from base.strategy_template import BaseStrategy
 from adapters.jq2qmt_adapter import EasyXTJQ2QMTAdapter, jq2qmt_manager
 from adapters.data_converter import DataConverter, PositionDiffer
+from adapters.order_converter import OrderConverter
 
 
 class JQ2QMTIntegratedStrategy(BaseStrategy):
@@ -322,10 +323,14 @@ def demo_jq2qmt_integration():
             print(f"  需要调整: {len(diff_result.get('to_adjust', []))}")
             print(f"  无需变动: {len(diff_result.get('unchanged', []))}")
         
-        # 强制同步测试
-        print("\n执行强制同步...")
-        sync_success = strategy.force_sync_to_jq2qmt()
-        print(f"强制同步结果: {'成功' if sync_success else '失败'}")
+        # 一键同步测试（封装方法）
+        print("\n执行一键同步(订单提交)...")
+        submit_result = strategy.one_click_sync()
+        print(f"一键同步结果: {submit_result}")
+
+        # 连接测试（qka-only）
+        ok = strategy.jq2qmt_adapter.test_connection()
+        print(f"qka连接测试: {'OK' if ok else 'FAIL'}")
     
     else:
         print("JQ2QMT集成未启用，请检查配置")

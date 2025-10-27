@@ -12,16 +12,12 @@ import logging
 from typing import List, Dict, Optional, Any
 from datetime import datetime
 
-# 添加JQ2QMT路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'jq2qmt', 'src'))
-
-try:
-    from api.jq_qmt_api import JQQMTAPI
-except ImportError:
-    JQQMTAPI = None
-    print("警告: JQ2QMT API未找到，请确保已正确克隆jq2qmt项目")
+# 添加 qka 包路径以便导入
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'jq2qmt', 'qka'))
+from qka.client import QMTClient
 
 from .data_converter import DataConverter
+from .order_converter import OrderConverter
 
 
 class EasyXTJQ2QMTAdapter:
@@ -91,8 +87,8 @@ class EasyXTJQ2QMTAdapter:
             self.jq2qmt_api = None
     
     def is_available(self) -> bool:
-        """检查适配器是否可用"""
-        return self.jq2qmt_api is not None
+        """检查适配器是否可用（qka 模式）"""
+        return getattr(self, 'qka_client', None) is not None
     
     def sync_positions_to_qmt(self, strategy_name: str, positions: List[Dict]) -> bool:
         """
@@ -149,152 +145,132 @@ class EasyXTJQ2QMTAdapter:
             return False
     
     def get_strategy_positions(self, strategy_name: str) -> Optional[List[Dict]]:
-        """
-        获取指定策略的持仓信息
-        
-        Args:
-            strategy_name: 策略名称
-        
-        Returns:
-            List[Dict]: EasyXT格式的持仓列表，失败时返回None
-        """
+        """在 qka 模式下，直接查询账户资产/持仓，并返回 EasyXT 格式"""
         if not self.is_available():
             return None
-        
         try:
-            # 这里需要调用JQ2QMT的查询接口
-            # 由于当前JQQMTAPI类没有查询方法，我们需要直接调用HTTP API
-            import requests
-            
-            url = f"{self.config['server_url']}/api/v1/positions/strategy/{strategy_name}"
-            response = requests.get(url)
-            
-            if response.status_code == 200:
-                data = response.json()
-                jq2qmt_positions = data.get('positions', [])
-                
-                # 转换为EasyXT格式
-                easyxt_positions = DataConverter.jq2qmt_to_easyxt(jq2qmt_positions)
-                return easyxt_positions
-            else:
-                self.logger.error(f"查询策略持仓失败: {response.text}")
-                return None
-                
+            data = self.qka_client.api('query_stock_asset')  # qka 返回资产与持仓结构
+            # 预期 data 可能包含 holdings 列表，每项至少有 stock_code/volume/cost 或等价字段
+            jq2qmt_positions = []
+            holdings = data.get('holdings') or data.get('positions') or []
+            for h in holdings:
+                jq2qmt_positions.append({
+                    'code': h.get('stock_code') or h.get('code'),
+                    'name': h.get('name', ''),
+                    'volume': int(h.get('volume') or h.get('position', 0)),
+                    'cost': float(h.get('cost') or h.get('avg_price') or 0.0)
+                })
+            return DataConverter.jq2qmt_to_easyxt(jq2qmt_positions)
         except Exception as e:
-            self.logger.error(f"查询策略持仓异常: {e}")
+            self.logger.error(f"qka 查询持仓失败: {e}")
             return None
     
     def get_total_positions(self, strategy_names: Optional[List[str]] = None) -> Optional[List[Dict]]:
-        """
-        获取合并后的总持仓
-        
-        Args:
-            strategy_names: 策略名称列表，None表示获取所有策略
-        
-        Returns:
-            List[Dict]: EasyXT格式的合并持仓列表
-        """
+        """qka 模式下的总持仓与账户资产查询，返回 EasyXT 格式"""
         if not self.is_available():
             return None
-        
         try:
-            import requests
-            
-            url = f"{self.config['server_url']}/api/v1/positions/total"
-            params = {}
-            if strategy_names:
-                params['strategies'] = ','.join(strategy_names)
-            
-            response = requests.get(url, params=params)
-            
-            if response.status_code == 200:
-                data = response.json()
-                jq2qmt_positions = data.get('positions', [])
-                
-                # 转换为EasyXT格式
-                easyxt_positions = DataConverter.jq2qmt_to_easyxt_total(jq2qmt_positions)
-                return easyxt_positions
-            else:
-                self.logger.error(f"查询总持仓失败: {response.text}")
-                return None
-                
+            data = self.qka_client.api('query_stock_asset')
+            jq2qmt_positions = []
+            holdings = data.get('holdings') or data.get('positions') or []
+            for h in holdings:
+                jq2qmt_positions.append({
+                    'code': h.get('stock_code') or h.get('code'),
+                    'name': h.get('name', ''),
+                    'volume': int(h.get('volume') or h.get('position', 0)),
+                    'cost': float(h.get('cost') or h.get('avg_price') or 0.0)
+                })
+            return DataConverter.jq2qmt_to_easyxt_total(jq2qmt_positions)
         except Exception as e:
-            self.logger.error(f"查询总持仓异常: {e}")
+            self.logger.error(f"qka 查询总持仓失败: {e}")
             return None
     
     def get_all_strategies(self) -> Optional[List[Dict]]:
-        """
-        获取所有策略的持仓信息
-        
-        Returns:
-            List[Dict]: 所有策略信息列表
-                [
-                    {
-                        'strategy_name': '策略名称',
-                        'positions': [...],  # EasyXT格式持仓
-                        'update_time': '2024-01-01 12:00:00'
-                    }
-                ]
-        """
-        if not self.is_available():
-            return None
-        
-        try:
-            import requests
-            
-            url = f"{self.config['server_url']}/api/v1/positions/all"
-            response = requests.get(url)
-            
-            if response.status_code == 200:
-                data = response.json()
-                strategies = data.get('strategies', [])
-                
-                # 转换每个策略的持仓格式
-                result = []
-                for strategy in strategies:
-                    easyxt_positions = DataConverter.jq2qmt_to_easyxt(strategy['positions'])
-                    result.append({
-                        'strategy_name': strategy['strategy_name'],
-                        'positions': easyxt_positions,
-                        'update_time': strategy['update_time']
-                    })
-                
-                return result
-            else:
-                self.logger.error(f"查询所有策略失败: {response.text}")
-                return None
-                
-        except Exception as e:
-            self.logger.error(f"查询所有策略异常: {e}")
-            return None
+        """qka-only 模式不再区分多策略，返回当前账户的单一持仓信息列表"""
+        result = []
+        positions = self.get_total_positions() or []
+        result.append({
+            'strategy_name': 'QKA_ACCOUNT',
+            'positions': positions,
+            'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+        return result
     
     def test_connection(self) -> bool:
-        """
-        测试与JQ2QMT服务器的连接
-        
-        Returns:
-            bool: 连接是否正常
-        """
+        """测试与 qka FastAPI 服务器的连接（校验 token 可用）"""
         if not self.is_available():
             return False
-        
         try:
-            import requests
-            
-            url = f"{self.config['server_url']}/api/v1/auth/info"
-            response = requests.get(url, timeout=5)
-            
-            if response.status_code == 200:
-                self.logger.info("JQ2QMT服务器连接正常")
-                return True
-            else:
-                self.logger.error(f"JQ2QMT服务器连接失败: {response.status_code}")
-                return False
-                
+            # 调用一个轻量接口，比如查询资产（若存在）。若无，尝试访问基座 /api/query_stock_asset
+            resp = self.qka_client.api('query_stock_asset')
+            self.logger.info("qka 服务器连接正常")
+            return True
         except Exception as e:
-            self.logger.error(f"JQ2QMT服务器连接异常: {e}")
+            self.logger.error(f"qka 服务器连接失败: {e}")
             return False
     
+    def submit_orders(self, orders: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        提交订单到服务端：
+        - 若 order_settings.mode == 'qka' 且启用 qka_settings，则调用 qka FastAPI 接口 /api/order_stock 按单下发
+        - 否则，走自有 JQ2QMT 提交端点 /api/v1/orders/submit 批量提交
+        """
+        if not self.is_available():
+            return {"success": False, "message": "adapter not available"}
+        try:
+            import requests
+            order_settings = self.config.get('order_settings', {})
+            mode = order_settings.get('mode', '').lower()
+            if mode == 'qka' and self.config.get('qka_settings', {}).get('enabled'):
+                # 使用 qka 模式：逐单调用 /api/order_stock
+                qka_cfg = self.config.get('qka_settings', {})
+                base_url = qka_cfg.get('base_url', 'http://localhost:8000').rstrip('/')
+                token = qka_cfg.get('token')
+                if not token:
+                    return {"success": False, "message": "qka token missing"}
+                headers = {"Content-Type": "application/json", "X-Token": token}
+                results: List[Dict[str, Any]] = []
+                # xtconstant 映射
+                try:
+                    from xtquant import xtconstant
+                except Exception:
+                    xtconstant = None
+                for od in orders:
+                    code = od.get('code') or od.get('symbol')
+                    volume = int(od.get('volume') or od.get('quantity') or 0)
+                    is_buy = (od.get('direction', '').upper() == 'BUY')
+                    is_limit = (od.get('order_type', '').upper() == 'LIMIT')
+                    price = float(od.get('price') or 0.0)
+                    payload = {
+                        'stock_code': code,
+                        'order_type': (xtconstant.STOCK_BUY if is_buy else xtconstant.STOCK_SELL) if xtconstant else (23 if is_buy else 24),
+                        'order_volume': volume,
+                        'price_type': (xtconstant.FIX_PRICE if is_limit else xtconstant.MARKET_PRICE) if xtconstant else (0 if is_limit else 1),
+                        'price': price
+                    }
+                    resp = requests.post(f"{base_url}/api/order_stock", json=payload, headers=headers, timeout=int(order_settings.get('timeout', 10)))
+                    ok = (resp.status_code == 200)
+                    data = resp.json() if ok else {"detail": resp.text}
+                    results.append({"ok": ok, "status": resp.status_code, "data": data})
+                return {"success": all(r.get('ok') for r in results), "results": results}
+            else:
+                # 默认走 JQ2QMT 批量提交端点
+                base_url = self.config.get('server_url', '').rstrip('/')
+                endpoint = order_settings.get('endpoint', '/api/v1/orders/submit')
+                timeout = int(order_settings.get('timeout', 10))
+                url = f"{base_url}{endpoint}"
+                headers = {"Content-Type": "application/json"}
+                simple_api_key = self.config.get('auth_config', {}).get('simple_api_key')
+                if simple_api_key:
+                    headers['X-API-Key'] = simple_api_key
+                resp = requests.post(url, json={"orders": orders}, headers=headers, timeout=timeout)
+                if resp.status_code == 200:
+                    return {"success": True, "data": resp.json()}
+                else:
+                    return {"success": False, "status": resp.status_code, "message": resp.text}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
     def get_sync_status(self) -> Dict[str, Any]:
         """
         获取同步状态信息

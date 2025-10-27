@@ -466,10 +466,14 @@ class JQ2QMTSyncWidget(QWidget):
         self.sync_button = QPushButton("立即同步")
         self.sync_button.clicked.connect(self.manual_sync)
         sync_layout.addWidget(self.sync_button, 0, 0)
-        
+
+        self.one_click_button = QPushButton("一键同步下单")
+        self.one_click_button.clicked.connect(self.one_click_sync)
+        sync_layout.addWidget(self.one_click_button, 0, 1)
+
         self.sync_all_button = QPushButton("同步所有策略")
         self.sync_all_button.clicked.connect(self.sync_all_strategies)
-        sync_layout.addWidget(self.sync_all_button, 0, 1)
+        sync_layout.addWidget(self.sync_all_button, 0, 2)
         
         self.auto_sync_checkbox = QCheckBox("启用自动同步")
         self.auto_sync_checkbox.setChecked(True)
