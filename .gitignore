@@ -1,4 +1,4 @@
-﻿# Python
+﻿﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -226,5 +226,14 @@ strategies/xueqiu_follow/config/settings.json
 strategies/xueqiu_follow/config/realtime_config.json
 strategies/xueqiu_follow/config/default.json
 strategies/xueqiu_follow/config/jq2qmt_config.json
+
+# 私有实时服务依赖清单（不随仓库发布）
+requirements_realtime.txt
+deploy/requirements_realtime.txt
+
+# 服务器配置文件（包含敏感信息）
+easy_xt/realtime_data/config/server_config.py
+# 服务器配置文件备份
+easy_xt/realtime_data/config/server_config.json
 
 !gui_app/widgets/backtest_widget.py
