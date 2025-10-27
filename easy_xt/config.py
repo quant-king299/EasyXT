@@ -4,6 +4,7 @@ EasyXT配置管理
 
 from typing import Dict, Any, Optional
 import os
+from .qmt_paths import QMT_POSSIBLE_PATHS, QMT_USERDATA_SUBPATH, QMT_SIMULATED_KEYWORDS
 
 
 def deep_update(base_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> None:
@@ -33,37 +34,30 @@ class Config:
                 'callback_timeout': 10
             },
             'qmt': {
-                # QMT可能的安装路径列表
-                'possible_paths': [
-                    "D:/国金证券QMT交易端",
-                    "C:/国金证券QMT交易端", 
-                    "D:/QMT",
-                    "C:/QMT",
-                    "D:/Program Files/QMT",
-                    "C:/Program Files/QMT",
-                    "D:/Program Files (x86)/QMT",
-                    "C:/Program Files (x86)/QMT",
-                ],
-                'userdata_subpath': 'userdata_mini',
+                # QMT可能的安装路径列表（从qmt_paths.py导入）
+                'possible_paths': QMT_POSSIBLE_PATHS,
+                'userdata_subpath': QMT_USERDATA_SUBPATH,
                 'detected_path': None
             }
         }
-        
-        # 自动检测QMT路径
-        self._detect_qmt_path()
     
-    def _detect_qmt_path(self):
-        """自动检测QMT安装路径"""
+    def _detect_qmt_path(self) -> Optional[str]:
+        """自动检测QMT安装路径（仅模拟盘）- 仅在配置路径无效时调用"""
+        # 优先检测包含"模拟"或"mini"关键词的路径（模拟盘）
         for path in self.settings['qmt']['possible_paths']:
             if os.path.exists(path):
                 userdata_path = os.path.join(path, self.settings['qmt']['userdata_subpath'])
                 if os.path.exists(userdata_path):
-                    self.settings['qmt']['detected_path'] = path
-                    self.settings['trade']['userdata_path'] = userdata_path
-                    print(f"✓ 自动检测到QMT路径: {path}")
-                    return path
+                    # 检查是否为模拟盘路径（包含模拟盘关键词）
+                    if any(keyword in path for keyword in QMT_SIMULATED_KEYWORDS):
+                        self.settings['qmt']['detected_path'] = path
+                        self.settings['trade']['userdata_path'] = userdata_path
+                        print(f"✓ 自动检测到模拟盘QMT路径: {path}")
+                        return path
         
-        print("❌ 未能自动检测到QMT路径，请手动配置")
+        # 如果没有找到模拟盘路径，显示提示信息
+        print("❌ 未能自动检测到模拟盘QMT路径")
+        print("💡 提示：当前只检测模拟盘路径，如需使用实盘路径请手动设置")
         return None
     
     def get_qmt_path(self) -> Optional[str]:
@@ -89,8 +83,9 @@ class Config:
         self.settings['trade']['userdata_path'] = userdata_path
         
         # 将新路径添加到可能路径列表的开头
-        if path not in self.settings['qmt']['possible_paths']:
-            self.settings['qmt']['possible_paths'].insert(0, path)
+        possible_paths: list[str] = self.settings['qmt']['possible_paths']
+        if path not in possible_paths:
+            possible_paths.insert(0, path)
         
         print(f"✓ QMT路径设置成功: {path}")
         return True
@@ -113,7 +108,7 @@ class Config:
     def get(self, key: str, default: Any = None) -> Any:
         """获取配置值"""
         keys = key.split('.')
-        value = self.settings
+        value: Any = self.settings
         
         for k in keys:
             if isinstance(value, dict) and k in value:

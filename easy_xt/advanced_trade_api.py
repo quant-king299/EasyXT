@@ -444,6 +444,7 @@ class AdvancedTradeAPI:
                 if position:
                     return pd.DataFrame([{
                         'code': position.stock_code,
+                        'stock_name': getattr(position, 'stock_name', ''),
                         'volume': position.volume,
                         'can_use_volume': position.can_use_volume,
                         'open_price': position.open_price,
@@ -462,6 +463,7 @@ class AdvancedTradeAPI:
                     for pos in positions:
                         data.append({
                             'code': pos.stock_code,
+                            'stock_name': getattr(pos, 'stock_name', ''),
                             'volume': pos.volume,
                             'can_use_volume': pos.can_use_volume,
                             'open_price': pos.open_price,
@@ -544,6 +546,7 @@ class AdvancedTradeAPI:
                         'trade_id': trade.traded_id,
                         'order_id': trade.order_id,
                         'stock_code': trade.stock_code,
+                        'stock_name': getattr(trade, 'stock_name', ''),
                         'order_type': order_type_name,
                         'traded_volume': trade.traded_volume,
                         'traded_price': trade.traded_price,

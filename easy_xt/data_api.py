@@ -25,7 +25,7 @@ except ImportError as e:
 
 from .utils import StockCodeUtils, TimeUtils, DataUtils, ErrorHandler
 from .config import config
-from .types import ConnectionError, DataError
+from .data_types import ConnectionError, DataError
 from typing import Dict
 from datetime import datetime, timedelta
 import time

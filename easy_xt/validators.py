@@ -5,7 +5,7 @@ EasyXT数据验证模块
 import re
 from typing import Union, List, Optional, Any, Dict
 from datetime import datetime, date
-from .types import (
+from .data_types import (
     StockCode, AccountId, PeriodType, AdjustType, PriceType, 
     OrderType, ValidationError, Constants
 )

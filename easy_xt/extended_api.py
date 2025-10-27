@@ -14,7 +14,7 @@ from typing import Union, List, Optional, Dict, Any, Tuple
 from .data_api import DataAPI
 from .trade_api import TradeAPI
 from .config import config
-from .types import ConnectionError, DataError
+from .data_types import ConnectionError, DataError
 from .utils import StockCodeUtils, TimeUtils, ErrorHandler
 from .enhanced_indicators import EnhancedIndicators
 

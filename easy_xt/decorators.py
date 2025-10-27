@@ -7,7 +7,7 @@ import functools
 from typing import Any, Callable, Optional, Dict, Union
 from datetime import datetime, timedelta
 import logging
-from .types import EasyXTError, ConnectionError, TradeError, DataError
+from .data_types import EasyXTError, ConnectionError, TradeError, DataError
 from .validators import ValidationError
 
 # 配置日志
