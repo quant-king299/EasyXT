@@ -82,8 +82,7 @@ pip install -e .\jq2qmt_adapter
 3. **配置系统参数**
    ```bash
    # 编辑配置文件
-   nano xueqiu_follow/config/settings.json
-   nano xueqiu_follow/config/portfolios.json
+   nano xueqiu_follow/config/unified_config.json
    ```
 
 4. **启动系统**
@@ -101,33 +100,37 @@ python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-
 
 ### 基础配置
 
-#### 1. 账户配置 (config/settings.json)
+#### 1. 账户配置 (config/unified_config.json)
 ```json
 {
-  "account": {
-    "qmt_path": "C:/QMT/",
-    "account_id": "your_account_id",
-    "password": "your_encrypted_password"
-  },
-  "risk": {
-    "max_position_ratio": 0.1,
-    "stop_loss_ratio": 0.05,
-    "max_total_exposure": 0.8
+  "settings": {
+    "account": {
+      "qmt_path": "C:/QMT/",
+      "account_id": "your_account_id",
+      "password": "your_encrypted_password"
+    },
+    "risk": {
+      "max_position_ratio": 0.1,
+      "stop_loss_ratio": 0.05,
+      "max_total_exposure": 0.8
+    }
   }
 }
 ```
 
-#### 2. 组合配置 (config/portfolios.json)
+#### 2. 组合配置 (config/unified_config.json)
 ```json
 {
-  "portfolios": [
-    {
-      "name": "价值投资组合",
-      "code": "ZH123456",
-      "follow_ratio": 0.4,
-      "enabled": true
-    }
-  ]
+  "portfolios": {
+    "portfolios": [
+      {
+        "name": "价值投资组合",
+        "code": "ZH123456",
+        "follow_ratio": 0.4,
+        "enabled": true
+      }
+    ]
+  }
 }
 ```
 
