@@ -130,8 +130,8 @@ def load_config():
     config_file = Path(__file__).parent / "config" / "real_trading.json"
     
     if not config_file.exists():
-        # 如果真实交易配置不存在，使用默认配置
-        config_file = Path(__file__).parent / "config" / "default.json"
+        # 如果真实交易配置不存在，使用统一配置
+        config_file = Path(__file__).parent / "config" / "unified_config.json"
     
     try:
         with open(config_file, 'r', encoding='utf-8') as f:

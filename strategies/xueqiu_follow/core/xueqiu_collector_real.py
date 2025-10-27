@@ -231,71 +231,16 @@ class XueqiuCollectorReal:
         try:
             self.logger.info(f"获取组合 {portfolio_code} 的持仓数据...")
             
-            if use_current_only:
-                # 只获取当前实际持仓，不获取历史调仓记录
-                self.logger.info("使用当前持仓模式，只获取当前实际持仓")
-                
-                # 首先尝试详细持仓API（cubes/detail.json）- 最可靠的当前持仓API
-                self.logger.info("尝试详细持仓API...")
-                holdings = await self._get_holdings_from_detail_api(portfolio_code)
-                
-                if holdings is not None:
-                    # 详细持仓API成功返回数据（可能为空列表）
-                    if holdings:
-                        self.logger.info(f"✅ 从详细持仓API成功获取 {len(holdings)} 个当前持仓")
-                    else:
-                        self.logger.info("详细持仓API返回空持仓，组合为空仓状态")
-                    return holdings
-                
-                # 如果详细持仓API失败，尝试当前持仓API作为备用
-                self.logger.info("详细持仓API失败，尝试当前持仓API...")
-                holdings = await self._get_holdings_from_current_api(portfolio_code)
-                
-                if holdings is not None:
-                    # 当前持仓API成功返回数据（可能为空列表）
-                    if holdings:
-                        self.logger.info(f"✅ 从当前持仓API成功获取 {len(holdings)} 个当前持仓")
-                    else:
-                        self.logger.info("当前持仓API返回空持仓，组合为空仓状态")
-                    return holdings
-                
-                # 如果所有当前持仓API都失败，返回空持仓
-                self.logger.warning("所有当前持仓API都失败，返回空持仓")
+            # 强制使用历史调仓接口作为唯一数据源，放弃 quote.json/detail.json
+            holdings = await self._get_holdings_from_history_api(portfolio_code)
+            if holdings is None:
+                self.logger.info("历史调仓接口无返回或请求失败，视为空仓状态")
                 return []
+            if holdings:
+                self.logger.info(f"✅ 仅使用历史调仓记录获取 {len(holdings)} 个持仓")
             else:
-                # 优先使用历史调仓记录API获取所有调仓记录（包含当前持仓权重）
-                self.logger.info("优先使用历史调仓API获取持仓数据...")
-                holdings = await self._get_holdings_from_history_api(portfolio_code)
-                
-                if holdings:
-                    self.logger.info(f"✅ 从历史调仓记录成功获取 {len(holdings)} 个持仓")
-                    return holdings
-                else:
-                    # 如果历史调仓记录为空，则尝试当前持仓API作为备用
-                    self.logger.info("历史调仓记录为空，尝试当前持仓API...")
-                    holdings = await self._get_holdings_from_current_api(portfolio_code)
-                    
-                    if holdings is not None:
-                        if holdings:
-                            self.logger.info(f"✅ 从当前持仓API成功获取 {len(holdings)} 个持仓")
-                        else:
-                            self.logger.info("当前持仓API返回空持仓，组合为空仓状态")
-                        return holdings
-                    
-                    # 如果当前持仓API也失败，尝试详细持仓API
-                    self.logger.info("当前持仓API失败，尝试详细持仓API...")
-                    holdings = await self._get_holdings_from_detail_api(portfolio_code)
-                    
-                    if holdings is not None:
-                        if holdings:
-                            self.logger.info(f"✅ 从详细持仓API成功获取 {len(holdings)} 个持仓")
-                        else:
-                            self.logger.info("详细持仓API返回空持仓，组合为空仓状态")
-                        return holdings
-                    
-                    # 所有API都失败，返回空持仓
-                    self.logger.warning("所有持仓API都失败，返回空持仓")
-                    return []
+                self.logger.info("历史调仓记录为空，组合为空仓状态")
+            return holdings
             
         except Exception as e:
             self.logger.error(f"获取组合持仓失败: {e}")

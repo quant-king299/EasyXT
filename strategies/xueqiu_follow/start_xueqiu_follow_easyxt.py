@@ -119,22 +119,28 @@ def print_banner():
         from core.config_manager import ConfigManager as _Cfg
         _cfg = _Cfg()
         portfolios = _cfg.get_portfolios()
-        enabled_names = [p.get('name') or p.get('code') for p in portfolios if p.get('enabled', False)]
+        enabled_names = [str(p.get('name') or p.get('code')) for p in portfolios if p.get('enabled', False)]
         combo_str = ', '.join(enabled_names) if enabled_names else '未配置'
     except Exception:
         combo_str = '未配置'
     print(f"📊 跟单组合: {combo_str}")
     try:
-        account_id = _cfg.get_setting('settings.account.account_id')
-        account_str = account_id if account_id else '未配置'
+        from core.config_manager import ConfigManager as _Cfg2
+        _cfg2 = _Cfg2()
+        account_id = _cfg2.get_setting('settings.account.account_id')
+        account_str = str(account_id) if account_id else '未配置'
     except Exception:
         account_str = '未配置'
     print(f"🏦 交易账号: {account_str}")
     print("🔧 交易接口: EasyXT (高级交易API)")
     print("=" * 70)
 
-def check_qmt_config() -> bool:
-    """检查 QMT 配置"""
+def check_qmt_config(config_file_path: str) -> bool:
+    """检查 QMT 配置（优先使用配置文件路径，兜底自动检测）
+    
+    Args:
+        config_file_path: 配置文件中的 QMT 路径
+    """
     print("\n🔍 检查 QMT 配置...")
     
     if not qmt_available:
@@ -142,41 +148,34 @@ def check_qmt_config() -> bool:
         return False
     
     try:
-        # 打印 QMT 状态
+        # 第一优先级：使用配置文件中的路径
+        if config_file_path:
+            print(f"📁 尝试使用配置文件中的 QMT 路径: {config_file_path}")
+            
+            # 处理可能的 userdata_mini 后缀
+            if config_file_path.endswith('/userdata_mini') or config_file_path.endswith('\\userdata_mini'):
+                qmt_base_path = os.path.dirname(config_file_path)
+            else:
+                qmt_base_path = config_file_path
+            
+            # 验证配置文件路径
+            if qmt_config.set_qmt_path(qmt_base_path):
+                print("✅ 配置文件中的 QMT 路径设置成功")
+                return True
+            else:
+                print(f"❌ 配置文件中的 QMT 路径无效: {qmt_base_path}")
+        
+        # 第二优先级：自动检测路径（兜底）
+        print("🔧 尝试自动检测 QMT 路径...")
         qmt_config.print_qmt_status()
         
-        # 验证配置
+        # 验证自动检测的配置
         is_valid, msg = qmt_config.validate_qmt_setup()
         if is_valid:
-            print(f"✅ QMT 配置验证通过: {msg}")
+            print(f"✅ 自动检测 QMT 路径成功: {msg}")
             return True
         else:
-            print(f"❌ QMT 配置验证失败: {msg}")
-            
-            # 尝试手动设置路径
-            print("🔧 尝试从配置文件获取 QMT 路径...")
-            config_path = os.path.join(current_dir, 'config', 'default.json')
-            
-            if os.path.exists(config_path):
-                with open(config_path, 'r', encoding='utf-8') as f:
-                    config_data = json.load(f)
-                
-                qmt_path = config_data['settings']['account']['qmt_path']
-                print(f"📁 配置文件中的 QMT 路径: {qmt_path}")
-                
-                # 提取基础路径
-                if qmt_path.endswith('/userdata_mini') or qmt_path.endswith('\\userdata_mini'):
-                    base_path = os.path.dirname(qmt_path)
-                else:
-                    base_path = qmt_path
-                
-                print(f"🔧 尝试设置 QMT 基础路径: {base_path}")
-                if qmt_config.set_qmt_path(base_path):
-                    print("✅ QMT 路径设置成功")
-                    return True
-                else:
-                    print("❌ QMT 路径设置失败")
-            
+            print(f"❌ 自动检测 QMT 路径失败: {msg}")
             return False
             
     except Exception as e:
@@ -724,26 +723,29 @@ async def main():
     if not check_dependencies():
         return
     
-    # 2. 检查 QMT 配置
-    if not check_qmt_config():
-        print("\n❌ QMT 配置检查失败，请运行测试脚本:")
-        print("   python test_qmt_connection.py")
-        return
-    
-    # 3. 测试 QMT 连接
-    if not test_qmt_connection():
-        print("\n❌ QMT 连接测试失败")
-        return
-    
-    # 4. 加载配置
+    # 2. 加载配置
     config_data = load_config()
     if not config_data:
         return
     
-    # 5. 更新配置
+    # 3. 获取配置文件中的 QMT 路径
+    config_file_qmt_path = config_data.get('settings', {}).get('account', {}).get('qmt_path', '')
+    
+    # 4. 检查 QMT 配置（优先使用配置文件路径，兜底自动检测）
+    if not check_qmt_config(config_file_qmt_path):
+        print("\n❌ QMT 配置检查失败，请运行测试脚本:")
+        print("   python test_qmt_connection.py")
+        return
+    
+    # 5. 测试 QMT 连接
+    if not test_qmt_connection():
+        print("\n❌ QMT 连接测试失败")
+        return
+    
+    # 6. 更新配置
     config_data = update_config_with_qmt(config_data)
     
-    # 6. 安全确认
+    # 7. 安全确认
     if config_data['settings']['trading']['trade_mode'] == 'real':
         print("\n⚠️ 警告：当前配置为真实交易模式！")
         print("   这将执行真实的买卖操作，可能造成资金损失")
@@ -758,7 +760,7 @@ async def main():
     else:
         print("✅ 模拟交易模式")
     
-    # 7. 启动系统
+    # 8. 启动系统
     system = XueqiuFollowSystem(config_data)
     
     if await system.initialize():

@@ -123,9 +123,9 @@ class StartupManager:
         print("🔍 执行预启动检查...")
         
         # 检查配置文件
-        config_file = Path('config/default.json')
+        config_file = Path('config/unified_config.json')
         if not config_file.exists():
-            raise Exception("配置文件不存在: config/default.json")
+            raise Exception("配置文件不存在: config/unified_config.json")
         
         print("   ✅ 配置文件存在")
         

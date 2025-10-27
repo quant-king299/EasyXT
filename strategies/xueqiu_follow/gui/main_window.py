@@ -206,7 +206,7 @@ class XueqiuFollowWidget(QWidget):
         self.portfolio_table = QTableWidget()
         self.portfolio_table.setColumnCount(7)
         self.portfolio_table.setHorizontalHeaderLabels([
-            "组合名称", "跟单比例", "总资产", "今日收益", "收益率", "状态", "操作"
+            "组合名称", "跟单比例", "总资产", "组合收益", "收益率", "状态", "操作"
         ])
         self.portfolio_table.horizontalHeader().setStretchLastSection(True)
         
@@ -1116,8 +1116,102 @@ class XueqiuFollowWidget(QWidget):
         try:
             # 刷新策略引擎数据（组合）
             if self.strategy_engine:
-                portfolios = self.strategy_engine.get_portfolios()
-                self.portfolio_updated.emit(portfolios)
+                # 优先使用启用的组合；随后基于实际持仓+雪球持仓成分，计算每个组合的实际资产与当日盈亏
+                try:
+                    enabled = self.strategy_engine.config_manager.get_enabled_portfolios()
+                except Exception:
+                    enabled = self.strategy_engine.get_portfolios()
+                enabled = enabled or []
+
+                # 从策略引擎获取当前账户持仓快照（含 market_value 与 pnl 等字段，若可用）
+                try:
+                    positions_map = self.strategy_engine.get_positions() or {}
+                except Exception:
+                    positions_map = {}
+
+                def normalize_variants(sym: str) -> List[str]:
+                    variants = set()
+                    if not sym:
+                        return []
+                    s = sym.upper()
+                    variants.add(s)
+                    # 兼容 "SZ000001" <-> "000001.SZ"
+                    if len(s) >= 2 and (s.startswith('SZ') or s.startswith('SH')) and len(s) >= 8:
+                        code6 = s[2:8]
+                        suffix = 'SZ' if s.startswith('SZ') else 'SH'
+                        variants.add(f"{code6}.{suffix}")
+                        variants.add(code6)
+                    if '.' in s and len(s) >= 9:
+                        parts = s.split('.')
+                        if len(parts[0]) == 6 and parts[1] in ('SZ','SH'):
+                            variants.add(parts[0])
+                            variants.add(parts[1]+parts[0])
+                    return list(variants)
+
+                def pick_pos(code: str) -> Optional[Dict[str, Any]]:
+                    for k in normalize_variants(code):
+                        if k in positions_map:
+                            return positions_map.get(k)
+                    return None
+
+                enriched = []
+                for p in enabled:
+                    name = p.get('name') or p.get('code') or '组合'
+                    code = p.get('code') or p.get('symbol')
+                    follow_ratio = float(p.get('follow_ratio', 0) or 0.0)
+
+                    total_value = 0.0
+                    # 组合收益：用账户持仓的“总盈亏”聚合（与 QMT 数据一致）
+                    combo_pnl = 0.0
+                    return_rate = None
+
+                    # 若 collector 可用，则用雪球持仓成分来归属实际资产与当日盈亏
+                    holdings = None
+                    try:
+                        if getattr(self.strategy_engine, 'collector', None) and code:
+                            fut = self._run_coro(self.strategy_engine.collector.get_portfolio_holdings(code))
+                            holdings = fut.result(timeout=5)
+                    except Exception:
+                        holdings = None
+
+                    if holdings:
+                        for h in holdings:
+                            sym = h.get('symbol') or h.get('stock_symbol')
+                            pos = pick_pos(sym)
+                            if not pos:
+                                continue
+                            mv = float(pos.get('market_value', pos.get('value', 0)) or 0)
+                            # 组合收益：优先聚合券商持仓的总盈亏（profit_loss/pnl），若无则 0
+                            pnl_total = pos.get('pnl')
+                            if pnl_total is None:
+                                pnl_total = pos.get('profit_loss')
+                            pnl = float(pnl_total or 0.0)
+                            total_value += mv
+                            combo_pnl += pnl
+                        if total_value > 0:
+                            return_rate = (combo_pnl / total_value) if total_value else None
+                    else:
+                        # 回退：按账户总资产×跟随比例估算（维持旧逻辑避免空白）
+                        try:
+                            account_value = float(self.strategy_engine._get_account_value() or 0)
+                        except Exception:
+                            account_value = 0.0
+                        total_value = account_value * follow_ratio if account_value else 0.0
+                        # 无法精确拆分组合收益时，置空等待后续回填
+                        combo_pnl = None
+                        return_rate = None
+
+                    enriched.append({
+                        'name': name,
+                        'code': code,
+                        'ratio': follow_ratio,
+                        'total_value': total_value if total_value else None,
+                        'combo_pnl': combo_pnl,
+                        'return_rate': return_rate,
+                        'status': p.get('status', '就绪')
+                    })
+
+                self.portfolio_updated.emit(enriched)
 
             # 优先用 QMT 详细持仓对齐 GUI；若失败再回退策略引擎的持仓
             qmt_positions_sent = False
@@ -1142,17 +1236,33 @@ class XueqiuFollowWidget(QWidget):
                                     open_price = float(row.get('open_price', 0) or 0)
                                     can_use = float(row.get('can_use_volume', 0) or 0)
                                     current_price = (market_value / volume) if volume else 0.0
-                                    pnl = float(row.get('profit_loss', 0) or 0)
+                                    # 日内盈亏（今日收益）优先：daily_pnl / today_profit / pnl_today
+                                    pnl_today = row.get('daily_pnl')
+                                    if pnl_today is None:
+                                        pnl_today = row.get('today_profit')
+                                    if pnl_today is None:
+                                        pnl_today = row.get('pnl_today')
+                                    pnl = float(pnl_today if pnl_today is not None else (row.get('profit_loss', 0))) or 0.0
                                     pnl_ratio = float(row.get('profit_loss_ratio', 0) or 0)
-                                    # 兜底计算：若券商未返回盈亏或盈亏率，则依据成本价与现价计算
-                                    if (pnl == 0 or pnl_ratio == 0) and open_price and volume:
+                                    # 兜底计算：若券商未返回盈亏或盈亏率，则依据昨收/成本价与现价计算
+                                    if (pnl == 0 or pnl_ratio == 0):
                                         try:
-                                            calc_pnl = (current_price - open_price) * volume
-                                            calc_ratio = (current_price / open_price - 1.0) if open_price else 0.0
-                                            if pnl == 0:
-                                                pnl = calc_pnl
-                                            if pnl_ratio == 0:
-                                                pnl_ratio = calc_ratio
+                                            # 优先昨收（更贴近“今日收益”定义）
+                                            preclose = row.get('preclose') or row.get('prev_close') or row.get('yesterday_close')
+                                            preclose = float(preclose or 0)
+                                            if preclose > 0 and volume > 0:
+                                                calc_pnl_today = (current_price - preclose) * volume
+                                                if pnl == 0:
+                                                    pnl = calc_pnl_today
+                                                if pnl_ratio == 0 and preclose:
+                                                    pnl_ratio = (current_price / preclose - 1.0)
+                                            elif open_price and volume:
+                                                calc_pnl = (current_price - open_price) * volume
+                                                calc_ratio = (current_price / open_price - 1.0) if open_price else 0.0
+                                                if pnl == 0:
+                                                    pnl = calc_pnl
+                                                if pnl_ratio == 0:
+                                                    pnl_ratio = calc_ratio
                                         except Exception:
                                             pass
                                     # 名称优先取接口字段，否则通过 xtquant 获取
@@ -1349,23 +1459,39 @@ class XueqiuFollowWidget(QWidget):
         self.status_label.setText(status)
     
     def update_portfolio_display(self, portfolios):
-        """更新组合显示"""
+        """更新组合显示（对 None/非法数值做健壮格式化）"""
         # portfolios 是列表，每个元素为一个组合配置字典
         self.portfolio_table.setRowCount(len(portfolios))
-        
+
+        def fmt_money(value):
+            if value is None:
+                return "--"
+            try:
+                return f"¥{float(value):,.2f}"
+            except Exception:
+                return "--"
+
+        def fmt_pct(value):
+            if value is None:
+                return "--"
+            try:
+                return f"{float(value):.2%}"
+            except Exception:
+                return "--"
+
         for i, p in enumerate(portfolios):
             name = p.get('name') or p.get('code') or f"组合{i+1}"
-            ratio = p.get('ratio', 0)
-            total_value = p.get('total_value', 0)
-            daily_pnl = p.get('daily_pnl', 0)
-            return_rate = p.get('return_rate', 0)
+            ratio = p.get('ratio')
+            total_value = p.get('total_value')
+            combo_pnl = p.get('combo_pnl')
+            return_rate = p.get('return_rate')
             status = p.get('status', '未知')
 
             self.portfolio_table.setItem(i, 0, QTableWidgetItem(str(name)))
-            self.portfolio_table.setItem(i, 1, QTableWidgetItem(f"{float(ratio):.2%}"))
-            self.portfolio_table.setItem(i, 2, QTableWidgetItem(f"¥{float(total_value):,.2f}"))
-            self.portfolio_table.setItem(i, 3, QTableWidgetItem(f"¥{float(daily_pnl):,.2f}"))
-            self.portfolio_table.setItem(i, 4, QTableWidgetItem(f"{float(return_rate):.2%}"))
+            self.portfolio_table.setItem(i, 1, QTableWidgetItem(fmt_pct(ratio)))
+            self.portfolio_table.setItem(i, 2, QTableWidgetItem(fmt_money(total_value)))
+            self.portfolio_table.setItem(i, 3, QTableWidgetItem(fmt_money(combo_pnl)))
+            self.portfolio_table.setItem(i, 4, QTableWidgetItem(fmt_pct(return_rate)))
             self.portfolio_table.setItem(i, 5, QTableWidgetItem(str(status)))
     
     def update_position_display(self, positions):

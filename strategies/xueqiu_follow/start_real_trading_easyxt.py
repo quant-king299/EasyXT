@@ -46,7 +46,7 @@ def print_banner():
         from core.config_manager import ConfigManager as _Cfg
         _cfg = _Cfg()
         portfolios = _cfg.get_portfolios()
-        enabled_names = [p.get('name') or p.get('code') for p in portfolios if p.get('enabled', False)]
+        enabled_names = [str(p.get('name') or p.get('code')) for p in portfolios if p.get('enabled', False)]
         combo_str = ', '.join(enabled_names) if enabled_names else '未配置'
         account_id = _cfg.get_setting('settings.account.account_id') or '未配置'
     except Exception:
@@ -96,8 +96,8 @@ def load_config():
     config_file = Path(__file__).parent / "config" / "real_trading.json"
     
     if not config_file.exists():
-        # 如果真实交易配置不存在，使用默认配置
-        config_file = Path(__file__).parent / "config" / "default.json"
+        # 如果真实交易配置不存在，使用统一配置
+        config_file = Path(__file__).parent / "config" / "unified_config.json"
     
     try:
         with open(config_file, 'r', encoding='utf-8') as f:

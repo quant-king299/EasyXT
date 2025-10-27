@@ -373,7 +373,7 @@ class RiskManager:
 
     def check_trade_risk(self, orders: List[Dict[str, Any]], 
                         current_positions: Dict[str, Any] = None,
-                        account_info: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+                        account_info: Dict[str, Any] = None) -> Dict[str, List[Dict[str, Any]]]:
         """检查交易指令的风险
         
         Args:
@@ -382,14 +382,15 @@ class RiskManager:
             account_info: 账户信息
             
         Returns:
-            通过风险检查的交易指令列表
+            {'approved': [...], 'rejected': [...]} 结构，包含通过与被拒细节
         """
         if current_positions is None:
             current_positions = {}
         if account_info is None:
             account_info = {'total_asset': 100000, 'cash': 50000}
             
-        approved_orders = []
+        approved_orders: List[Dict[str, Any]] = []
+        rejected_orders: List[Dict[str, Any]] = []
         
         for order in orders:
             symbol_raw = order.get('symbol', '')
@@ -408,9 +409,18 @@ class RiskManager:
                 approved_orders.append(order)
                 self.logger.info(f"交易指令通过风险检查: {symbol} {order_type} {volume}@{price}")
             else:
+                detail = {
+                    'symbol': symbol,
+                    'action': order_type,
+                    'volume': volume,
+                    'price': price,
+                    'reason': reason,
+                    'risk_level': risk_level
+                }
+                rejected_orders.append(detail)
                 self.logger.warning(f"交易指令被风险控制拒绝: {symbol} - {reason}")
         
-        return approved_orders
+        return {'approved': approved_orders, 'rejected': rejected_orders}
 
 
 # 使用示例

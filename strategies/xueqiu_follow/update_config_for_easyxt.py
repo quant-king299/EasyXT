@@ -35,7 +35,7 @@ def print_banner():
 def backup_config():
     """备份现有配置"""
     try:
-        config_path = os.path.join(current_dir, 'config', 'default.json')
+        config_path = os.path.join(current_dir, 'config', 'unified_config.json')
         if not os.path.exists(config_path):
             print("⚠️ 未找到现有配置文件")
             return False
@@ -54,7 +54,7 @@ def backup_config():
 def load_current_config() -> Dict[str, Any]:
     """加载当前配置"""
     try:
-        config_path = os.path.join(current_dir, 'config', 'default.json')
+        config_path = os.path.join(current_dir, 'config', 'unified_config.json')
         
         if not os.path.exists(config_path):
             print("❌ 配置文件不存在")
@@ -199,7 +199,7 @@ def update_config_structure(config_data: Dict[str, Any], qmt_info: Dict[str, Any
 def save_updated_config(config_data: Dict[str, Any]) -> bool:
     """保存更新后的配置"""
     try:
-        config_path = os.path.join(current_dir, 'config', 'default.json')
+        config_path = os.path.join(current_dir, 'config', 'unified_config.json')
         
         with open(config_path, 'w', encoding='utf-8') as f:
             json.dump(config_data, f, indent=2, ensure_ascii=False)
