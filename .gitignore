@@ -1,4 +1,4 @@
-﻿﻿# Python
+﻿﻿﻿﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -249,3 +249,7 @@ demo*/
 deploy/
 demo_config_new/
 PLAN.md
+
+# 根目录下的特定目录
+scripts/
+markdown/
