@@ -237,3 +237,15 @@ easy_xt/realtime_data/config/server_config.py
 easy_xt/realtime_data/config/server_config.json
 
 !gui_app/widgets/backtest_widget.py
+
+# 临时目录和文件
+examples/
+backup/
+integration_test_logs/
+logs/
+reports/
+tests/
+demo*/
+deploy/
+demo_config_new/
+PLAN.md
