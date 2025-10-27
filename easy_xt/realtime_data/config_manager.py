@@ -29,10 +29,16 @@ class DataProviderConfig:
     retry_delay: float = 1.0
     rate_limit: int = 100  # 每分钟请求数
     headers: Optional[Dict[str, str]] = None
+    servers: Optional[list] = None  # 服务器列表
+    base_urls: Optional[Dict[str, str]] = None  # 基础URL配置
     
     def __post_init__(self):
         if self.headers is None:
             self.headers = {}
+        if self.servers is None:
+            self.servers = []
+        if self.base_urls is None:
+            self.base_urls = {}
 
 
 @dataclass
@@ -194,7 +200,13 @@ class ConfigManager:
         """获取数据源配置"""
         config_dict = self.get_config(f"data_providers.{provider_name}")
         if config_dict:
-            return DataProviderConfig(**config_dict)
+            # 过滤掉DataProviderConfig不支持的字段
+            valid_fields = {
+                'enabled', 'timeout', 'retry_count', 'retry_delay', 
+                'rate_limit', 'headers', 'servers', 'base_urls'
+            }
+            filtered_config = {k: v for k, v in config_dict.items() if k in valid_fields}
+            return DataProviderConfig(**filtered_config)
         return DataProviderConfig()
     
     def get_cache_config(self) -> CacheConfig:

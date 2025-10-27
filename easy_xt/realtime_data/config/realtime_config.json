@@ -1,0 +1,51 @@
+{
+  "providers": {
+    "tdx": {
+      "enabled": true,
+      "servers": [
+        {"host": "119.147.212.81", "port": 7709},
+        {"host": "114.80.63.12", "port": 7709},
+        {"host": "180.153.39.51", "port": 7709}
+      ],
+      "timeout": 10,
+      "retry_count": 3,
+      "retry_delay": 1
+    },
+    "ths": {
+      "enabled": true,
+      "base_url": "http://data.10jqka.com.cn",
+      "headers": {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        "Referer": "http://data.10jqka.com.cn/",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+      },
+      "timeout": 15,
+      "retry_count": 2
+    },
+    "eastmoney": {
+      "enabled": true,
+      "base_url": "http://push2his.eastmoney.com",
+      "timeout": 10,
+      "retry_count": 2,
+      "request_delay": 0.5
+    }
+  },
+  "cache": {
+    "enabled": true,
+    "ttl": 60,
+    "max_size": 1000
+  },
+  "websocket": {
+    "host": "localhost",
+    "port": 8765,
+    "max_connections": 100
+  },
+  "scheduler": {
+    "update_interval": 3,
+    "batch_size": 50
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  }
+}
