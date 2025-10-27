@@ -7,17 +7,12 @@
   "last_updated_comment": "最后一次更新配置的日期（YYYY-MM-DD）",
   "config_source": "unified_config.json",
   "config_source_comment": "当前配置来源文件名，用于标识配置加载来源",
-
   "system": {
     "system_comment": "系统级通用设置（配置管理、QMT连接等）",
     "config_manager": {
       "primary_config": "unified_config.json",
       "primary_config_comment": "主配置文件名，优先使用的配置",
-      "fallback_configs": [
-        "default.json",
-        "settings.json",
-        "xueqiu_config.json"
-      ],
+      "fallback_configs": [],
       "fallback_configs_comment": "备用配置文件列表，当主配置缺项时可从这些文件回退读取"
     },
     "qmt": {
@@ -34,14 +29,16 @@
       "max_retries_comment": "最大自动重试次数"
     }
   },
-
   "settings": {
     "settings_comment": "运行时的通用设置（账户、风控、监控、日志、交易参数等）",
     "follow_mode": {
       "follow_mode_comment": "跟单模式选择",
       "mode": "smart_follow",
       "mode_comment": "跟单模式：smart_follow(智能跟投模式) - 基于持仓差异计算，避免重复下单；simple_follow(跟投模式) - 模仿雪球跟单系统3.0，可能重复下单",
-      "available_modes": ["smart_follow", "simple_follow"],
+      "available_modes": [
+        "smart_follow",
+        "simple_follow"
+      ],
       "available_modes_comment": "可用的跟单模式列表：smart_follow(智能跟投模式)，simple_follow(跟投模式)",
       "default_mode": "smart_follow",
       "default_mode_comment": "默认跟单模式：智能跟投模式",
@@ -115,7 +112,6 @@
       "min_trade_amount": 100,
       "min_trade_amount_comment": "最小交易数量（手/股）"
     },
-
     "order": {
       "order_comment": "再平衡与下单防抖设置",
       "min_diff_ratio_shares": 0.003,
@@ -134,7 +130,6 @@
     "export_dir": "reports",
     "export_dir_comment": "持仓导出目录（默认 reports）。建议保持默认，避免在 strategies 目录下生成大量文件"
   },
-
   "portfolios": {
     "portfolios_comment": "组合跟单相关设置",
     "portfolios": [
@@ -177,10 +172,9 @@
       "emergency_stop_comment": "紧急止停（对所有组合生效）"
     }
   },
-
   "xueqiu": {
     "xueqiu_comment": "雪球数据访问设置",
-    "cookie": "smidV2=20240828220851fc36d458234e5b3849e5f8c0d2e39453007c9161b8c22d8c0; cookiesu=371759151586657; device_id=de4db0497aca1d863988e7fdc89a1124; s=ar15r8rtll; remember=1; xq_a_token=2a2d972804f71839c4f65b68e43238be64087fd8; xqat=2a2d972804f71839c4f65b68e43238be64087fd8; xq_id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1aWQiOjg3NzMyNTgxNzYsImlzcyI6InVjIiwiZXhwIjoxNzYxNzQzNjk2LCJjdG0iOjE3NTkxNTE2OTY0NTksImNpZCI6ImQ5ZDBuNEFadXAifQ.hNQveLM9Z1RtAPrEy8rgz6zEPv_sP5iB1mkjldhNaYJj4pCNv0qRne-ul3K-ptGNRdkOlfuovwykfZ6O3rhGR9aXfvM-nJ7PFAOEBHddqc7BwlibA8VVqyQ7iAkoLqVHNocuexoq3c47kpDKuNE0WiIIXuNfYMFBLCMKm7vVXJfRDIg1Uj2XIzZbFDuRHyRHDfAoFEvItj7md4vzKP1dw7b0GyfkffOVKRx5bcCsNSj3WcPxSqVhInP6i1czNRjg0hRIRxXFBCtlsp6wtwo7TYNGyvQU7T3xWngVwBo_AQoHUJs5PUHtiBB2q1LR_08PGBwtQXlR5w2i6lBDzDKkgw; xq_r_token=40889d37108cb4a212b89182a6ffead4252f01dc; xq_is_login=1; u=8773258176; bid=4fce4b73b1efef52004b4a8aa7ef145f_mg55inqz; __utmz=1.1759151715.1.1.utmcsr=(direct)|utmccn=(direct)|utmcmd=(none); aliyungf_tc=a9dabc83c2557f052fd647ade2766a9bdfb6d2be31e8a06ce8d707caa92f054c; Hm_lvt_1db88642e346389874251b5a1eded6e3=1759151577,1759193191,1759240487,1759325515; HMACCOUNT=82B375A20D7CCB08; __utma=1.1471451696.1759151715.1759240510.1759327050.4; __utmc=1; is_overseas=0; Hm_lpvt_1db88642e346389874251b5a1eded6e3=1759331545; .thumbcache_f24b8bbe5a5934237bbc0eda20c1b6e7=ag87igTQ6cnOargR7oviHWmziLMr3/PfQYtDxzWeGIoS1qnTP0xCf1nO0kLlP3mTWjUcEuOBEXWHuSIeWTw9sg%3D%3D",
+    "cookie": "",
     "cookie_comment": "用于访问雪球的cookie（留空表示未设置，注意安全性）",
     "update_time": "2025-10-16T12:00:00",
     "update_time_comment": "cookie或登录信息的更新时间",
@@ -189,7 +183,6 @@
     "refresh_interval": 3600,
     "refresh_interval_comment": "自动刷新间隔（秒）"
   },
-
   "safety": {
     "safety_comment": "安全相关设置（下单限制、黑名单等）",
     "auto_confirm": true,
@@ -201,7 +194,6 @@
     "enable_blacklist": true,
     "enable_blacklist_comment": "是否启用黑名单规则"
   },
-
   "xueqiu_settings": {
     "xueqiu_settings_comment": "雪球登录与用户信息（敏感字段谨慎使用）",
     "cookie": "cookiesu=371759151586657; device_id=de4db0497aca1d863988e7fdc89a1124; s=ar15r8rtll; bid=4fce4b73b1efef52004b4a8aa7ef145f_mg55inqz; Hm_lvt_1db88642e346389874251b5a1eded6e3=1760277557,1760316202,1760404483,1760589260; HMACCOUNT=82B375A20D7CCB08; xq_a_token=20f28801f749d6862a851225d7e96deb35d74541; xqat=20f28801f749d6862a851225d7e96deb35d74541; xq_r_token=d58ad70ed1a03015c7ccc9f08f26ac1a2bab345d; xq_id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1aWQiOjgzNTYzNjQxODAsImlzcyI6InVjIiwiZXhwIjoxNzYzMTg5MjkzLCJjdG0iOjE3NjA1OTcyOTM1NzUsImNpZCI6ImQ5ZDBuNEFadXAifQ.b4DMsVqdPio8L74KHhxc3ik4z85sxGpyOQkqXOwxFluUT-q-36RNhxHP5a_j3y62BZo4Xw2IJvEjItcTtKD5FQJhXkiM7gub4YGp-2mFfXURBriFBTVl4pyOBhThBXRWwbGAnygv7n6xXSec2VccHlGoX-ZJZ_5gEknGkv6nC3udeLRjbhEJUVfFLcZYmGE6S2UC_UtGWACZWJrUMu7bQIwBnkgcw7xN231lfIybe58-dckRfEd5TT1YbJRRamw4dMT98LwofTPcMb5JeRU9E48ePZqr3c5Bfel_02hfhiW2tU8I6QNrmLcxsCR4vNJaRbVpjvsfSYRMAJG1Cuc-jg; xq_is_login=1; u=8356364180; is_overseas=0; Hm_lpvt_1db88642e346389874251b5a1eded6e3=1760597334; ssxmod_itna=1-eq0xcDyD0AD=0Qqi7qitaDOeG7YiOaq7DzxCvyK0C7DLxn4GQDUlYNlitGD7w_rP_5NGgw0Y7MK=DDsqQQ4GzDiuPGhDBnYH=YAigUPKCRCDQehWFh7TP1k/75u3qHfAzTc95nFsz9=jdipKxGLDY=DCkAr87eD4S3Dt4DIDAYDDxDWU4DLDYoDYRT5xGpdMQnrXQbND0YDzqDgD7QNUeDEDG3D0SR5WA5=aDDl7Gx7Q0xDbgbi=QFNIPDSzDnxKBbDjdPD/RDUaBbDGLMXa0WiL/8pH3RHsPGuDG=kZe2OprTWPcrpNfhpDwKgP77eqlI4WxDxvKZDDhD4iG3ADG0Y77xBCrcQYXQGrBPDnn55oQ7nDb_M_5ZUmZ0yYQ4QziDv7TF44G2bz_7W04Bgzt_bBhND_i4h452Nf0t80==iorFbGrPeD; ssxmod_itna2=1-eq0xcDyD0AD=0Qqi7qitaDOeG7YiOaq7DzxCvyK0C7DLxn4GQDUlYNlitGD7w_rP_5NGgw0Y7MKxAEr3KclE_5=KDqDsqKn0oQAC5ELyXGN4aEhyn3eD",
@@ -213,7 +205,6 @@
     "login_status": true,
     "login_status_comment": "是否处于登录状态（用于判断cookie有效性）"
   },
-
   "trading_settings": {
     "trading_settings_comment": "兼容旧版字段的映射，用于适配历史代码逻辑",
     "settings": {
