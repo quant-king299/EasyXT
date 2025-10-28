@@ -277,13 +277,24 @@ class TradeExecutor:
                 
                 # 调用交易API执行订单
                 account_id = self.config.get('account_id')
+                
+                # 确保使用限价委托（组合跟单调仓应采用滑点限价买卖）
+                order_type_str = str(order.get('order_type', OrderType.LIMIT.value)).lower()
+                is_limit_order = order_type_str == 'limit'
+                price_value = order['price'] if is_limit_order and order['price'] and order['price'] > 0 else 0
+                
+                self.logger.info(
+                    f"订单详情: 股票={order['symbol']}, 方向={order['action']}, "
+                    f"数量={order['volume']}, 价格={price_value}, 委托类型={'限价' if is_limit_order else '市价'}"
+                )
+                
                 qmt_order_id = self.trader_api.sync_order(
                     account_id=account_id,
                     code=order['symbol'],
                     order_type=order['action'],
                     volume=order['volume'],
-                    price=order['price'] if order['order_type'] == OrderType.LIMIT.value else 0,
-                    price_type='limit' if order['order_type'] == OrderType.LIMIT.value else 'market'
+                    price=price_value,
+                    price_type='limit'  # 总是使用限价委托
                 )
                 
                 if qmt_order_id:

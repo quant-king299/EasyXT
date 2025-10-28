@@ -1499,13 +1499,20 @@ class StrategyEngine:
 
                 if account_id:
                     for order in clear_orders:
+                        # 确保使用限价委托
+                        order_price = order.get('price', 0)
+                        if not order_price or order_price <= 0:
+                            order_price = self._get_current_price(order['symbol'])
+                            if order_price:
+                                order_price = self._apply_slippage(order['symbol'], order_price, 'sell')
+                        
                         order_id = self.trader_api.sync_order(
                             account_id=account_id,
                             code=self._to_broker_symbol(order['symbol']),
                             order_type=order['action'],
                             volume=order['volume'],
-                            price=order.get('price', 0),
-                            price_type=order.get('price_type', 'limit')
+                            price=order_price,
+                            price_type='limit'  # 总是使用限价委托
                         )
                         results.append({
                             'order_id': order_id,

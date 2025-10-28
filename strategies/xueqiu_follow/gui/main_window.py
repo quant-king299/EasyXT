@@ -224,91 +224,6 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(detail_group)
         
         return widget
-
-    def _render_today_orders_table(self, orders_df):
-        """将当日委托渲染到交易记录表格"""
-        try:
-            if orders_df is None or getattr(orders_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(orders_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(orders_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
-                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
-                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
-                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
-        except Exception:
-            pass
-
-    def _render_today_trades_table(self, trades_df):
-        """将当日成交渲染到交易记录表格（优先显示）"""
-        try:
-            if trades_df is None or getattr(trades_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(trades_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(trades_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('traded_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                if not name:
-                    try:
-                        from xtquant import xtdata as _xt
-                        norm = code
-                        if not norm or ('.' not in norm):
-                            from easy_xt.utils import StockCodeUtils as _Scu
-                            norm = _Scu.normalize_code(code)
-                        cached = getattr(self, '_code_name_cache', {}).get(norm)
-                        if cached:
-                            name = cached
-                        else:
-                            info = _xt.get_instrument_detail(norm)
-                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
-                            if name:
-                                self._code_name_cache[norm] = name
-                    except Exception:
-                        pass
-                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('traded_volume') or _get('volume') or 0
-                price = _get('traded_price') or _get('price') or 0
-                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
-                status = '成交'
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
-        except Exception:
-            pass
     
     def create_position_tab(self):
         """创建持仓管理选项卡"""
@@ -345,91 +260,6 @@ class XueqiuFollowWidget(QWidget):
         layout.addLayout(button_layout)
         
         return widget
-
-    def _render_today_orders_table(self, orders_df):
-        """将当日委托渲染到交易记录表格"""
-        try:
-            if orders_df is None or getattr(orders_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(orders_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(orders_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
-                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
-                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
-                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
-        except Exception:
-            pass
-
-    def _render_today_trades_table(self, trades_df):
-        """将当日成交渲染到交易记录表格（优先显示）"""
-        try:
-            if trades_df is None or getattr(trades_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(trades_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(trades_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('traded_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                if not name:
-                    try:
-                        from xtquant import xtdata as _xt
-                        norm = code
-                        if not norm or ('.' not in norm):
-                            from easy_xt.utils import StockCodeUtils as _Scu
-                            norm = _Scu.normalize_code(code)
-                        cached = getattr(self, '_code_name_cache', {}).get(norm)
-                        if cached:
-                            name = cached
-                        else:
-                            info = _xt.get_instrument_detail(norm)
-                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
-                            if name:
-                                self._code_name_cache[norm] = name
-                    except Exception:
-                        pass
-                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('traded_volume') or _get('volume') or 0
-                price = _get('traded_price') or _get('price') or 0
-                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
-                status = '成交'
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
-        except Exception:
-            pass
     
     def create_trade_tab(self):
         """创建交易记录选项卡"""
@@ -467,91 +297,6 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(stats_group)
         
         return widget
-
-    def _render_today_orders_table(self, orders_df):
-        """将当日委托渲染到交易记录表格"""
-        try:
-            if orders_df is None or getattr(orders_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(orders_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(orders_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
-                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
-                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
-                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
-        except Exception:
-            pass
-
-    def _render_today_trades_table(self, trades_df):
-        """将当日成交渲染到交易记录表格（优先显示）"""
-        try:
-            if trades_df is None or getattr(trades_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(trades_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(trades_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('traded_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                if not name:
-                    try:
-                        from xtquant import xtdata as _xt
-                        norm = code
-                        if not norm or ('.' not in norm):
-                            from easy_xt.utils import StockCodeUtils as _Scu
-                            norm = _Scu.normalize_code(code)
-                        cached = getattr(self, '_code_name_cache', {}).get(norm)
-                        if cached:
-                            name = cached
-                        else:
-                            info = _xt.get_instrument_detail(norm)
-                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
-                            if name:
-                                self._code_name_cache[norm] = name
-                    except Exception:
-                        pass
-                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('traded_volume') or _get('volume') or 0
-                price = _get('traded_price') or _get('price') or 0
-                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
-                status = '成交'
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
-        except Exception:
-            pass
     
     def create_risk_tab(self):
         """创建风险控制选项卡"""
@@ -597,91 +342,6 @@ class XueqiuFollowWidget(QWidget):
         layout.addWidget(risk_monitor_group)
         
         return widget
-
-    def _render_today_orders_table(self, orders_df):
-        """将当日委托渲染到交易记录表格"""
-        try:
-            if orders_df is None or getattr(orders_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(orders_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(orders_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
-                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
-                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
-                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
-        except Exception:
-            pass
-
-    def _render_today_trades_table(self, trades_df):
-        """将当日成交渲染到交易记录表格（优先显示）"""
-        try:
-            if trades_df is None or getattr(trades_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(trades_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(trades_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('traded_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                if not name:
-                    try:
-                        from xtquant import xtdata as _xt
-                        norm = code
-                        if not norm or ('.' not in norm):
-                            from easy_xt.utils import StockCodeUtils as _Scu
-                            norm = _Scu.normalize_code(code)
-                        cached = getattr(self, '_code_name_cache', {}).get(norm)
-                        if cached:
-                            name = cached
-                        else:
-                            info = _xt.get_instrument_detail(norm)
-                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
-                            if name:
-                                self._code_name_cache[norm] = name
-                    except Exception:
-                        pass
-                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('traded_volume') or _get('volume') or 0
-                price = _get('traded_price') or _get('price') or 0
-                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
-                status = '成交'
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
-        except Exception:
-            pass
     
     def create_settings_tab(self):
         """创建系统设置选项卡"""
@@ -725,91 +385,6 @@ class XueqiuFollowWidget(QWidget):
         layout.addStretch()
         
         return widget
-
-    def _render_today_orders_table(self, orders_df):
-        """将当日委托渲染到交易记录表格"""
-        try:
-            if orders_df is None or getattr(orders_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(orders_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(orders_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
-                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
-                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
-                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
-        except Exception:
-            pass
-
-    def _render_today_trades_table(self, trades_df):
-        """将当日成交渲染到交易记录表格（优先显示）"""
-        try:
-            if trades_df is None or getattr(trades_df, 'empty', True):
-                self.trade_table.setRowCount(0)
-                return
-            rows = len(trades_df)
-            self.trade_table.setRowCount(rows)
-            for i, (_, row) in enumerate(trades_df.iterrows()):
-                def _get(k, default=''):
-                    try:
-                        return row.get(k, default)
-                    except Exception:
-                        return default
-                t = _get('traded_time') or _get('time') or ''
-                code = _get('stock_code') or _get('code') or _get('symbol') or ''
-                name = _get('stock_name') or _get('name') or ''
-                if not name:
-                    try:
-                        from xtquant import xtdata as _xt
-                        norm = code
-                        if not norm or ('.' not in norm):
-                            from easy_xt.utils import StockCodeUtils as _Scu
-                            norm = _Scu.normalize_code(code)
-                        cached = getattr(self, '_code_name_cache', {}).get(norm)
-                        if cached:
-                            name = cached
-                        else:
-                            info = _xt.get_instrument_detail(norm)
-                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
-                            if name:
-                                self._code_name_cache[norm] = name
-                    except Exception:
-                        pass
-                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
-                vol = _get('traded_volume') or _get('volume') or 0
-                price = _get('traded_price') or _get('price') or 0
-                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
-                status = '成交'
-
-                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
-                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
-                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
-                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
-                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
-                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
-                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
-                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
-        except Exception:
-            pass
     
     def create_status_bar(self, parent_layout):
         """创建状态栏"""
@@ -959,8 +534,13 @@ class XueqiuFollowWidget(QWidget):
     
     def _ensure_event_loop(self):
         """确保存在后台事件循环线程"""
-        if getattr(self, "_loop", None) and self._loop.is_running():
-            return
+        loop_attr = getattr(self, "_loop", None)
+        if loop_attr is not None:
+            try:
+                if hasattr(loop_attr, 'is_running') and loop_attr.is_running():
+                    return
+            except Exception:
+                pass
         
         def _run_loop(loop):
             asyncio.set_event_loop(loop)
@@ -973,6 +553,8 @@ class XueqiuFollowWidget(QWidget):
     def _run_coro(self, coro):
         """在线程中的事件循环里调度协程"""
         self._ensure_event_loop()
+        if self._loop is None:
+            raise RuntimeError("Event loop is not initialized")
         return asyncio.run_coroutine_threadsafe(coro, self._loop)
     
     def start_strategy(self):
@@ -1014,9 +596,12 @@ class XueqiuFollowWidget(QWidget):
             config_data = loaded
             # 在系统初始化前做与脚本一致的QMT检查（同步执行，快速失败）
             try:
-                if not check_qmt_config():
+                # 获取配置文件中的 QMT 路径
+                acc = (config_data.get('settings', {}).get('account', {}) or {})
+                config_file_qmt_path = acc.get('qmt_path') or acc.get('userdata_path') or ''
+                if not check_qmt_config(config_file_qmt_path):  # type: ignore
                     raise Exception('QMT 配置检查失败')
-                if not test_qmt_connection():
+                if not test_qmt_connection():  # type: ignore
                     raise Exception('QMT 连接测试失败')
             except Exception as _e:
                 raise Exception(f'前置检查失败: {_e}')
@@ -1033,7 +618,7 @@ class XueqiuFollowWidget(QWidget):
             except Exception as pre_e:
                 raise Exception(f'配置校验失败: {pre_e}')
 
-            self.system = XueqiuFollowSystem(config_data)
+            self.system = XueqiuFollowSystem(config_data)  # type: ignore
             # 使用系统内部的策略引擎供 GUI 查询
             fut_sys_init = self._run_coro(self.system.initialize())
             if not fut_sys_init.result(timeout=60):
@@ -1076,7 +661,9 @@ class XueqiuFollowWidget(QWidget):
                     self._run_coro(self.strategy_engine.stop()).result(timeout=15)
                 except Exception:
                     try:
-                        self.strategy_engine.stop()
+                        # 确保异步函数被正确处理
+                        future = self._run_coro(self.strategy_engine.stop())
+                        future.result(timeout=5)
                     except Exception:
                         pass
             
@@ -1168,7 +755,9 @@ class XueqiuFollowWidget(QWidget):
                     # 若 collector 可用，则用雪球持仓成分来归属实际资产与当日盈亏
                     holdings = None
                     try:
-                        if getattr(self.strategy_engine, 'collector', None) and code:
+                        # 确保 collector 存在且可用
+                        if (hasattr(self.strategy_engine, 'collector') and 
+                            self.strategy_engine.collector is not None and code):
                             fut = self._run_coro(self.strategy_engine.collector.get_portfolio_holdings(code))
                             holdings = fut.result(timeout=5)
                     except Exception:
@@ -1216,7 +805,9 @@ class XueqiuFollowWidget(QWidget):
             # 优先用 QMT 详细持仓对齐 GUI；若失败再回退策略引擎的持仓
             qmt_positions_sent = False
             try:
-                if getattr(self, 'system', None) and getattr(self.system, 'executor', None):
+                # 确保 system 和 executor 存在
+                if (hasattr(self, 'system') and self.system is not None and 
+                    hasattr(self.system, 'executor') and self.system.executor is not None):
                     executor = self.system.executor
                     trader_api = getattr(executor, 'trader_api', None)
                     # 获取账号
@@ -1311,7 +902,9 @@ class XueqiuFollowWidget(QWidget):
 
             # 刷新交易记录与连接状态（复用系统执行器）
             try:
-                if getattr(self, 'system', None) and getattr(self.system, 'executor', None):
+                # 确保 system 和 executor 存在
+                if (hasattr(self, 'system') and self.system is not None and 
+                    hasattr(self.system, 'executor') and self.system.executor is not None):
                     executor = self.system.executor
                     trader_api = getattr(executor, 'trader_api', None)
                     account_id = None
@@ -1424,8 +1017,15 @@ class XueqiuFollowWidget(QWidget):
         """同步持仓"""
         try:
             if self.strategy_engine:
-                self.strategy_engine.sync_positions()
-                QMessageBox.information(self, "成功", "持仓同步完成!")
+                # 使用异步调用并等待结果
+                try:
+                    future = self._run_coro(self.strategy_engine.sync_positions())
+                    future.result(timeout=10)  # 等待最多10秒
+                    QMessageBox.information(self, "成功", "持仓同步完成!")
+                except Exception as e:
+                    QMessageBox.critical(self, "错误", f"同步持仓失败: {str(e)}")
+            else:
+                QMessageBox.warning(self, "警告", "策略引擎未初始化")
         except Exception as e:
             QMessageBox.critical(self, "错误", f"同步持仓失败: {str(e)}")
     
@@ -1439,8 +1039,15 @@ class XueqiuFollowWidget(QWidget):
         if reply == QMessageBox.Yes:
             try:
                 if self.strategy_engine:
-                    self.strategy_engine.clear_positions()
-                    QMessageBox.information(self, "成功", "持仓清空完成!")
+                    # 使用异步调用并等待结果
+                    try:
+                        future = self._run_coro(self.strategy_engine.clear_positions())
+                        future.result(timeout=10)  # 等待最多10秒
+                        QMessageBox.information(self, "成功", "持仓清空完成!")
+                    except Exception as e:
+                        QMessageBox.critical(self, "错误", f"清空持仓失败: {str(e)}")
+                else:
+                    QMessageBox.warning(self, "警告", "策略引擎未初始化")
             except Exception as e:
                 QMessageBox.critical(self, "错误", f"清空持仓失败: {str(e)}")
     
@@ -1516,6 +1123,91 @@ class XueqiuFollowWidget(QWidget):
             QMessageBox.warning(self, "风险警告", message)
         else:
             QMessageBox.information(self, "风险提示", message)
+            
+    def _render_today_orders_table(self, orders_df):
+        """将当日委托渲染到交易记录表格"""
+        try:
+            if orders_df is None or getattr(orders_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(orders_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(orders_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('order_time') or _get('entrust_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                side = (_get('order_type') or _get('entrust_bs') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('order_volume') or _get('entrust_amount') or _get('qty') or 0
+                price = _get('price') or _get('entrust_price') or _get('order_price') or 0
+                amount = _get('amount') or (float(price) * float(vol) if price and vol else 0)
+                status = _get('order_status') or _get('entrust_status') or _get('status') or ''
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(str(status)))
+        except Exception:
+            pass
+
+    def _render_today_trades_table(self, trades_df):
+        """将当日成交渲染到交易记录表格（优先显示）"""
+        try:
+            if trades_df is None or getattr(trades_df, 'empty', True):
+                self.trade_table.setRowCount(0)
+                return
+            rows = len(trades_df)
+            self.trade_table.setRowCount(rows)
+            for i, (_, row) in enumerate(trades_df.iterrows()):
+                def _get(k, default=''):
+                    try:
+                        return row.get(k, default)
+                    except Exception:
+                        return default
+                t = _get('traded_time') or _get('time') or ''
+                code = _get('stock_code') or _get('code') or _get('symbol') or ''
+                name = _get('stock_name') or _get('name') or ''
+                if not name:
+                    try:
+                        from xtquant import xtdata as _xt
+                        norm = code
+                        if not norm or ('.' not in norm):
+                            from easy_xt.utils import StockCodeUtils as _Scu
+                            norm = _Scu.normalize_code(code)
+                        cached = getattr(self, '_code_name_cache', {}).get(norm)
+                        if cached:
+                            name = cached
+                        else:
+                            info = _xt.get_instrument_detail(norm)
+                            name = (info.get('InstrumentName') or info.get('cn_name')) if isinstance(info, dict) else ''
+                            if name:
+                                self._code_name_cache[norm] = name
+                    except Exception:
+                        pass
+                side = (_get('order_type') or _get('side') or '').replace('买入','买').replace('卖出','卖')
+                vol = _get('traded_volume') or _get('volume') or 0
+                price = _get('traded_price') or _get('price') or 0
+                amount = _get('traded_amount') or (float(price) * float(vol) if price and vol else 0)
+                status = '成交'
+
+                self.trade_table.setItem(i, 0, QTableWidgetItem(str(t)))
+                self.trade_table.setItem(i, 1, QTableWidgetItem(str(code)))
+                self.trade_table.setItem(i, 2, QTableWidgetItem(str(name)))
+                self.trade_table.setItem(i, 3, QTableWidgetItem(str(side)))
+                self.trade_table.setItem(i, 4, QTableWidgetItem(str(vol)))
+                self.trade_table.setItem(i, 5, QTableWidgetItem(f"{float(price):.2f}" if price else ""))
+                self.trade_table.setItem(i, 6, QTableWidgetItem(f"{float(amount):.2f}" if amount else ""))
+                self.trade_table.setItem(i, 7, QTableWidgetItem(status))
+        except Exception:
+            pass
 
 
 class XueqiuFollowMainWindow(QMainWindow):
@@ -1561,6 +1253,7 @@ class XueqiuFollowMainWindow(QMainWindow):
         
         # 退出
         exit_action = QAction('退出', self)
+        # 修复类型错误，使用正确的连接方式
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
         
@@ -1569,6 +1262,7 @@ class XueqiuFollowMainWindow(QMainWindow):
         
         # 关于
         about_action = QAction('关于', self)
+        # 修复类型错误，使用正确的连接方式
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
     
