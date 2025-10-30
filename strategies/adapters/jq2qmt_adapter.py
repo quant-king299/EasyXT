@@ -13,11 +13,17 @@ from typing import List, Dict, Optional, Any
 from datetime import datetime
 
 # 添加 qka 包路径以便导入
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'jq2qmt'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'jq2qmt', 'qka'))
-from qka.client import QMTClient
 
 from .data_converter import DataConverter
 from .order_converter import OrderConverter
+
+# 尝试导入QMTClient，如果不存在则设为None
+try:
+    from qka.client import QMTClient
+except ImportError:
+    QMTClient = None
 
 
 class EasyXTJQ2QMTAdapter:
@@ -46,9 +52,9 @@ class EasyXTJQ2QMTAdapter:
         self.config = config
         self.logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
-        # 初始化JQ2QMT API客户端
-        self.jq2qmt_api = None
-        self._init_jq2qmt_api()
+        # 初始化qka客户端（如果启用）
+        self.qka_client = None
+        self._init_qka_client()
         
         # 同步设置
         self.sync_settings = config.get('sync_settings', {})
@@ -63,90 +69,36 @@ class EasyXTJQ2QMTAdapter:
         
         self.logger.info("EasyXT-JQ2QMT适配器初始化完成")
     
-    def _init_jq2qmt_api(self):
-        """初始化JQ2QMT API客户端"""
-        if JQQMTAPI is None:
-            self.logger.error("JQ2QMT API不可用，请检查jq2qmt项目是否正确安装")
+    def _init_qka_client(self):
+        """初始化qka客户端"""
+        if QMTClient is None:
+            self.logger.warning("QMTClient不可用，请检查qka包是否正确安装")
             return
-        
+            
         try:
-            auth_config = self.config.get('auth_config', {})
-            
-            self.jq2qmt_api = JQQMTAPI(
-                api_url=self.config.get('server_url', 'http://localhost:5366'),
-                private_key_file=auth_config.get('private_key_file'),
-                client_id=auth_config.get('client_id', 'easyxt_client'),
-                use_crypto_auth=auth_config.get('use_crypto_auth', True),
-                simple_api_key=auth_config.get('simple_api_key')
-            )
-            
-            self.logger.info("JQ2QMT API客户端初始化成功")
-            
+            qka_settings = self.config.get('qka_settings', {})
+            if qka_settings.get('enabled', False):
+                base_url = qka_settings.get('base_url', 'http://localhost:8000')
+                token = qka_settings.get('token', '')
+                
+                if base_url and token:
+                    self.qka_client = QMTClient(base_url=base_url, token=token)
+                    self.logger.info("qka客户端初始化成功")
+                else:
+                    self.logger.warning("qka配置不完整，缺少base_url或token")
+            else:
+                self.logger.info("qka模式未启用")
         except Exception as e:
-            self.logger.error(f"JQ2QMT API客户端初始化失败: {e}")
-            self.jq2qmt_api = None
+            self.logger.error(f"qka客户端初始化失败: {e}")
+            self.qka_client = None
     
     def is_available(self) -> bool:
         """检查适配器是否可用（qka 模式）"""
         return getattr(self, 'qka_client', None) is not None
     
-    def sync_positions_to_qmt(self, strategy_name: str, positions: List[Dict]) -> bool:
-        """
-        将EasyXT策略持仓同步到QMT
-        
-        Args:
-            strategy_name: 策略名称
-            positions: EasyXT格式的持仓列表
-                [
-                    {
-                        'symbol': '000001.SZ',
-                        'name': '平安银行',
-                        'quantity': 1000,
-                        'avg_price': 12.50
-                    }
-                ]
-        
-        Returns:
-            bool: 同步是否成功
-        """
-        if not self.is_available():
-            self.logger.error("JQ2QMT适配器不可用")
-            return False
-        
-        self.sync_status = 'syncing'
-        self.last_error = None
-        
-        try:
-            # 转换持仓格式
-            jq2qmt_positions = DataConverter.easyxt_to_jq2qmt(positions)
-            
-            # 重试机制
-            for attempt in range(self.retry_times):
-                try:
-                    result = self.jq2qmt_api.update_positions(strategy_name, jq2qmt_positions)
-                    
-                    self.sync_status = 'success'
-                    self.last_sync_time = datetime.now()
-                    
-                    self.logger.info(f"策略 {strategy_name} 持仓同步成功: {len(jq2qmt_positions)} 个持仓")
-                    return True
-                    
-                except Exception as e:
-                    self.logger.warning(f"同步尝试 {attempt + 1}/{self.retry_times} 失败: {e}")
-                    if attempt < self.retry_times - 1:
-                        time.sleep(1)  # 重试前等待1秒
-                    else:
-                        raise e
-        
-        except Exception as e:
-            self.sync_status = 'error'
-            self.last_error = str(e)
-            self.logger.error(f"策略 {strategy_name} 持仓同步失败: {e}")
-            return False
-    
     def get_strategy_positions(self, strategy_name: str) -> Optional[List[Dict]]:
         """在 qka 模式下，直接查询账户资产/持仓，并返回 EasyXT 格式"""
-        if not self.is_available():
+        if not self.is_available() or self.qka_client is None:
             return None
         try:
             data = self.qka_client.api('query_stock_asset')  # qka 返回资产与持仓结构
@@ -167,7 +119,7 @@ class EasyXTJQ2QMTAdapter:
     
     def get_total_positions(self, strategy_names: Optional[List[str]] = None) -> Optional[List[Dict]]:
         """qka 模式下的总持仓与账户资产查询，返回 EasyXT 格式"""
-        if not self.is_available():
+        if not self.is_available() or self.qka_client is None:
             return None
         try:
             data = self.qka_client.api('query_stock_asset')
@@ -198,7 +150,7 @@ class EasyXTJQ2QMTAdapter:
     
     def test_connection(self) -> bool:
         """测试与 qka FastAPI 服务器的连接（校验 token 可用）"""
-        if not self.is_available():
+        if not self.is_available() or self.qka_client is None:
             return False
         try:
             # 调用一个轻量接口，比如查询资产（若存在）。若无，尝试访问基座 /api/query_stock_asset
@@ -213,10 +165,9 @@ class EasyXTJQ2QMTAdapter:
         """
         提交订单到服务端：
         - 若 order_settings.mode == 'qka' 且启用 qka_settings，则调用 qka FastAPI 接口 /api/order_stock 按单下发
-        - 否则，走自有 JQ2QMT 提交端点 /api/v1/orders/submit 批量提交
         """
-        if not self.is_available():
-            return {"success": False, "message": "adapter not available"}
+        if not self.is_available() or self.qka_client is None:
+            return {"success": False, "message": "qka client not available"}
         try:
             import requests
             order_settings = self.config.get('order_settings', {})
@@ -241,11 +192,17 @@ class EasyXTJQ2QMTAdapter:
                     is_buy = (od.get('direction', '').upper() == 'BUY')
                     is_limit = (od.get('order_type', '').upper() == 'LIMIT')
                     price = float(od.get('price') or 0.0)
+                    # 使用默认值而不是xtconstant
+                    order_type = 23 if is_buy else 24
+                    price_type = 0 if is_limit else 1
+                    if xtconstant:
+                        order_type = xtconstant.STOCK_BUY if is_buy else xtconstant.STOCK_SELL
+                        price_type = xtconstant.FIX_PRICE if is_limit else xtconstant.LATEST_PRICE
                     payload = {
                         'stock_code': code,
-                        'order_type': (xtconstant.STOCK_BUY if is_buy else xtconstant.STOCK_SELL) if xtconstant else (23 if is_buy else 24),
+                        'order_type': order_type,
                         'order_volume': volume,
-                        'price_type': (xtconstant.FIX_PRICE if is_limit else xtconstant.MARKET_PRICE) if xtconstant else (0 if is_limit else 1),
+                        'price_type': price_type,
                         'price': price
                     }
                     resp = requests.post(f"{base_url}/api/order_stock", json=payload, headers=headers, timeout=int(order_settings.get('timeout', 10)))
@@ -254,20 +211,7 @@ class EasyXTJQ2QMTAdapter:
                     results.append({"ok": ok, "status": resp.status_code, "data": data})
                 return {"success": all(r.get('ok') for r in results), "results": results}
             else:
-                # 默认走 JQ2QMT 批量提交端点
-                base_url = self.config.get('server_url', '').rstrip('/')
-                endpoint = order_settings.get('endpoint', '/api/v1/orders/submit')
-                timeout = int(order_settings.get('timeout', 10))
-                url = f"{base_url}{endpoint}"
-                headers = {"Content-Type": "application/json"}
-                simple_api_key = self.config.get('auth_config', {}).get('simple_api_key')
-                if simple_api_key:
-                    headers['X-API-Key'] = simple_api_key
-                resp = requests.post(url, json={"orders": orders}, headers=headers, timeout=timeout)
-                if resp.status_code == 200:
-                    return {"success": True, "data": resp.json()}
-                else:
-                    return {"success": False, "status": resp.status_code, "message": resp.text}
+                return {"success": False, "message": "qka mode not enabled"}
         except Exception as e:
             return {"success": False, "message": str(e)}
 

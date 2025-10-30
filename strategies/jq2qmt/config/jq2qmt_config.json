@@ -20,8 +20,8 @@
   },
   "qka_settings": {
     "enabled": true,
-    "base_url": "http://localhost:8000",
-    "token": "CHANGE_ME_QKA_TOKEN"
+    "base_url": "http://127.0.0.1:8000",
+    "token": "2056dd149a0715886698f37f3d4caf031cb1569f581334e05d7bf4277514d33d"
   },
   "advanced_settings": {
     "enable_position_diff_check": true,

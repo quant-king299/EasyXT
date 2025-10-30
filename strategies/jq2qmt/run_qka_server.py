@@ -23,7 +23,13 @@ XTQUANT_ENV = os.environ.get('XTQUANT_PATH')
 if XTQUANT_ENV and XTQUANT_ENV not in sys.path:
     sys.path.append(XTQUANT_ENV)
 
-from qka.qka.server import qmt_server  # noqa: E402
+# 确保优先使用本地qka目录而不是pip安装的qka包
+# 如果存在pip安装的qka包，将其从sys.path中移除
+for path in sys.path[:]:
+    if 'site-packages' in path and 'qka' in path:
+        sys.path.remove(path)
+
+from qka.server import qmt_server  # noqa: E402
 
 
 def main() -> None:
