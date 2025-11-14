@@ -31,6 +31,7 @@ class TDXEasyXTIntegration:
         self.config = self._load_config(config_file)
         self._trade_initialized = False
         self._account_added = False
+        self._processed_signals = set()  # 用于跟踪已处理的信号
         
     def _load_config(self, config_file: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -146,27 +147,38 @@ class TDXEasyXTIntegration:
                 print("❌ 股票信息缺失")
                 return None
                 
+            # 创建信号标识
+            signal_key = f"buy_{stock.get('code', '')}_{stock.get('time', '')}"
+            if signal_key in self._processed_signals:
+                print(f"⚠️  买入信号已处理过: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
+                return None
+                
             print(f"📈 买入信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
             print(f"   价格: {stock.get('price', '未知')}, 时间: {stock.get('time', '未知')}")
             
             # 检查交易服务是否已初始化
             if not self._trade_initialized:
                 if not self.initialize_trade_service():
+                    self._processed_signals.add(signal_key)
                     return None
             
             # 检查账户是否已添加
             if not self._account_added:
                 if not self.add_account():
+                    self._processed_signals.add(signal_key)
                     return None
             
             # 从统一配置中获取账户ID
             account_id = config.get('settings.account.account_id')
             if not account_id:
                 print("❌ 未在统一配置中找到账户ID")
+                self._processed_signals.add(signal_key)
                 return None
+                
             volume = self.config.get("default_volume", 100)
             price_type = self.config.get("price_type", "limit")
             
+            # 执行买入操作
             order_id = self.easy_xt.buy(
                 account_id=account_id,
                 code=stock.get('code'),
@@ -174,6 +186,9 @@ class TDXEasyXTIntegration:
                 price=stock.get('price') if price_type == "limit" else 0,
                 price_type=price_type
             )
+            
+            # 将信号添加到已处理集合
+            self._processed_signals.add(signal_key)
             
             if order_id:
                 print(f"✅ 买入委托成功，委托号: {order_id}")
@@ -210,31 +225,43 @@ class TDXEasyXTIntegration:
                 print("❌ 股票信息缺失")
                 return None
                 
+            # 创建信号标识
+            signal_key = f"sell_{stock.get('code', '')}_{stock.get('time', '')}"
+            if signal_key in self._processed_signals:
+                print(f"⚠️  卖出信号已处理过: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
+                return None
+                
             print(f"📉 卖出信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
             print(f"   价格: {stock.get('price', '未知')}, 时间: {stock.get('time', '未知')}")
             
             # 检查是否有持仓
             if position is None:
                 print("⚠️  无持仓，不执行卖出操作")
+                self._processed_signals.add(signal_key)
                 return None
             
             # 检查交易服务是否已初始化
             if not self._trade_initialized:
                 if not self.initialize_trade_service():
+                    self._processed_signals.add(signal_key)
                     return None
             
             # 检查账户是否已添加
             if not self._account_added:
                 if not self.add_account():
+                    self._processed_signals.add(signal_key)
                     return None
             
             # 从统一配置中获取账户ID
             account_id = config.get('settings.account.account_id')
             if not account_id:
                 print("❌ 未在统一配置中找到账户ID")
+                self._processed_signals.add(signal_key)
                 return None
+                
             price_type = self.config.get("price_type", "limit")
             
+            # 执行卖出操作
             order_id = self.easy_xt.sell(
                 account_id=account_id,
                 code=stock.get('code'),
@@ -242,6 +269,9 @@ class TDXEasyXTIntegration:
                 price=stock.get('price') if price_type == "limit" else 0,
                 price_type=price_type
             )
+            
+            # 将信号添加到已处理集合
+            self._processed_signals.add(signal_key)
             
             if order_id:
                 print(f"✅ 卖出委托成功，委托号: {order_id}")
@@ -286,16 +316,16 @@ class TDXEasyXTIntegration:
             print(f"   买入信号: {self.config.get('buy_signals')}")
             print(f"   卖出信号: {self.config.get('sell_signals')}")
             
-            # 启动tdxtrader
-            tdx_start(
+            # 启动tdxtrader（不自动清空文件内容）
+            self._start_tdx_trader(
                 account_id=account_id,
                 mini_qmt_path=qmt_path,
                 file_path=self.config.get("tdx_file_path"),
-                interval=self.config.get("interval", 1),
                 buy_sign=self.config.get("buy_signals"),
                 sell_sign=self.config.get("sell_signals"),
                 buy_event=self.buy_event,
                 sell_event=self.sell_event,
+                interval=self.config.get("interval", 1),
                 cancel_after=self.config.get("cancel_after", 10),
                 wechat_webhook_url=self.config.get("wechat_webhook_url")
             )
@@ -306,6 +336,44 @@ class TDXEasyXTIntegration:
             print("\n⏹️  交易系统已停止")
         except Exception as e:
             print(f"❌ 交易系统启动失败: {e}")
+    
+    def _start_tdx_trader(self, account_id, mini_qmt_path, file_path, buy_sign, sell_sign, buy_event, sell_event, interval=1, cancel_after=None, wechat_webhook_url=None):
+        """
+        自定义启动tdxtrader，避免清空预警文件
+        """
+        try:
+            import time
+            from tdxtrader.trader import create_trader
+            from tdxtrader.order import create_order, cancel_order
+            from tdxtrader.logger import logger, add_wechat_handler
+            
+            add_wechat_handler(logger, wechat_webhook_url)
+            
+            xt_trader, account = create_trader(account_id, mini_qmt_path)
+            
+            previous_df = None
+            
+            # 不再清空文件内容，保留历史信号
+            print("⚠️  不清空预警文件内容，保留历史信号")
+            
+            while True:
+                try:
+                    previous_df = create_order(xt_trader, account, file_path, previous_df, buy_sign, sell_sign, buy_event, sell_event)
+                    # 撤单
+                    cancel_order(xt_trader, account, cancel_after)
+                    
+                    # 定期清理已处理信号集合，避免内存泄漏
+                    if len(self._processed_signals) > 1000:
+                        print("🧹 清理已处理信号集合")
+                        self._processed_signals.clear()
+                        
+                except Exception as e:
+                    logger.error(f"【程序错误】{e}")
+                
+                time.sleep(interval)
+                
+        except Exception as e:
+            print(f"❌ tdxtrader启动失败: {e}")
 
 def create_config_template(config_file: str = "tdx_easyxt_config.json"):
     """
