@@ -1,0 +1,197 @@
+"""
+通达信预警与EasyXT集成示例
+展示如何将tdxtrader与EasyXT结合使用，实现通达信预警信号的程序化交易
+"""
+
+import sys
+import os
+from typing import Dict, Any
+
+# 添加项目根目录到Python路径
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+from easy_xt import EasyXT
+from easy_xt.config import config
+
+# tdxtrader模块导入
+try:
+    from strategies.tdxtrader.tdxtrader import start as tdx_start
+    TDX_AVAILABLE = True
+except ImportError:
+    TDX_AVAILABLE = False
+    print("⚠️  tdxtrader模块未找到，请确保已正确安装")
+
+def buy_event(params: Dict[str, Any]):
+    """
+    买入事件处理函数
+    使用EasyXT API执行买入操作
+    
+    Args:
+        params: 包含交易相关信息的字典
+            - xt_trader: 交易对象
+            - account: 账户对象
+            - stock: 股票信息
+            - position: 持仓信息
+    """
+    # 获取股票信息
+    stock = params.get('stock')
+    position = params.get('position')
+    xt_trader = params.get('xt_trader')
+    account = params.get('account')
+    
+    print(f"📈 买入信号触发: {stock.get('name')} ({stock.get('code')})")
+    print(f"   价格: {stock.get('price')}, 时间: {stock.get('time')}")
+    
+    # 使用EasyXT进行买入操作
+    try:
+        # 初始化EasyXT
+        easy_xt = EasyXT()
+        
+        # 获取账户ID（需要根据实际情况设置）
+        account_id = "your_account_id"  # 请替换为实际账户ID
+        
+        # 连接交易服务（需要根据实际情况设置QMT路径）
+        qmt_path = config.get_userdata_path()
+        if qmt_path and easy_xt.init_trade(qmt_path):
+            # 添加账户
+            if easy_xt.add_account(account_id):
+                # 执行买入操作
+                order_id = easy_xt.buy(
+                    account_id=account_id,
+                    code=stock.get('code'),
+                    volume=100,  # 买入100股（可根据需要调整）
+                    price=stock.get('price'),
+                    price_type='limit'  # 限价单
+                )
+                
+                if order_id:
+                    print(f"✅ 买入委托成功，委托号: {order_id}")
+                    return {'size': 100, 'price': stock.get('price'), 'type': '限价'}
+                else:
+                    print("❌ 买入委托失败")
+                    return None
+            else:
+                print("❌ 账户添加失败")
+                return None
+        else:
+            print("❌ 交易服务连接失败")
+            return None
+            
+    except Exception as e:
+        print(f"❌ 买入操作异常: {e}")
+        return None
+
+def sell_event(params: Dict[str, Any]):
+    """
+    卖出事件处理函数
+    使用EasyXT API执行卖出操作
+    
+    Args:
+        params: 包含交易相关信息的字典
+            - xt_trader: 交易对象
+            - account: 账户对象
+            - stock: 股票信息
+            - position: 持仓信息
+    """
+    # 获取股票信息
+    stock = params.get('stock')
+    position = params.get('position')
+    xt_trader = params.get('xt_trader')
+    account = params.get('account')
+    
+    print(f"📉 卖出信号触发: {stock.get('name')} ({stock.get('code')})")
+    print(f"   价格: {stock.get('price')}, 时间: {stock.get('time')}")
+    
+    # 检查是否有持仓
+    if position is None:
+        print("⚠️  无持仓，不执行卖出操作")
+        return None
+    
+    # 使用EasyXT进行卖出操作
+    try:
+        # 初始化EasyXT
+        easy_xt = EasyXT()
+        
+        # 获取账户ID（需要根据实际情况设置）
+        account_id = "your_account_id"  # 请替换为实际账户ID
+        
+        # 连接交易服务（需要根据实际情况设置QMT路径）
+        qmt_path = config.get_userdata_path()
+        if qmt_path and easy_xt.init_trade(qmt_path):
+            # 添加账户
+            if easy_xt.add_account(account_id):
+                # 卖出全部可用持仓
+                order_id = easy_xt.sell(
+                    account_id=account_id,
+                    code=stock.get('code'),
+                    volume=position.can_use_volume,
+                    price=stock.get('price'),
+                    price_type='limit'  # 限价单
+                )
+                
+                if order_id:
+                    print(f"✅ 卖出委托成功，委托号: {order_id}")
+                    return {'size': position.can_use_volume, 'price': stock.get('price'), 'type': '限价'}
+                else:
+                    print("❌ 卖出委托失败")
+                    return None
+            else:
+                print("❌ 账户添加失败")
+                return None
+        else:
+            print("❌ 交易服务连接失败")
+            return None
+            
+    except Exception as e:
+        print(f"❌ 卖出操作异常: {e}")
+        return None
+
+def start_tdx_trading_with_easyxt():
+    """
+    启动通达信预警交易系统（使用EasyXT）
+    """
+    if not TDX_AVAILABLE:
+        print("❌ tdxtrader模块不可用，无法启动交易系统")
+        return
+    
+    # 配置参数（请根据实际情况修改）
+    account_id = "your_account_id"  # 请替换为实际账户ID
+    mini_qmt_path = config.get_userdata_path() or r"D:\国金证券QMT交易端\userdata_mini"  # QMT路径
+    file_path = r"D:\new_tdx\sign.txt"  # 通达信预警文件路径
+    interval = 1  # 轮询间隔（秒）
+    buy_sign = "KDJ买入条件选股"  # 买入信号名称
+    sell_sign = "KDJ卖出条件选股"  # 卖出信号名称
+    cancel_after = 10  # 未成交撤单时间（秒）
+    wechat_webhook_url = None  # 企业微信机器人webhook url（可选）
+    
+    print("🚀 启动通达信预警交易系统（EasyXT版）")
+    print(f"   账户ID: {account_id}")
+    print(f"   QMT路径: {mini_qmt_path}")
+    print(f"   预警文件: {file_path}")
+    print(f"   轮询间隔: {interval}秒")
+    print(f"   买入信号: {buy_sign}")
+    print(f"   卖出信号: {sell_sign}")
+    
+    try:
+        # 启动tdxtrader
+        tdx_start(
+            account_id=account_id,
+            mini_qmt_path=mini_qmt_path,
+            file_path=file_path,
+            interval=interval,
+            buy_sign=buy_sign,
+            sell_sign=sell_sign,
+            buy_event=buy_event,
+            sell_event=sell_event,
+            cancel_after=cancel_after,
+            wechat_webhook_url=wechat_webhook_url
+        )
+    except KeyboardInterrupt:
+        print("\n⏹️  交易系统已停止")
+    except Exception as e:
+        print(f"❌ 交易系统启动失败: {e}")
+
+# 使用示例
+if __name__ == "__main__":
+    # 启动通达信预警交易系统
+    start_tdx_trading_with_easyxt()

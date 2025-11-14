@@ -5,6 +5,7 @@ EasyXT配置管理
 from typing import Dict, Any, Optional
 import os
 from .qmt_paths import QMT_POSSIBLE_PATHS, QMT_USERDATA_SUBPATH, QMT_SIMULATED_KEYWORDS
+from .load_config import update_config_with_unified_settings
 
 
 def deep_update(base_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> None:
@@ -168,3 +169,9 @@ class Config:
 
 # 全局配置实例
 config = Config()
+
+# 尝试从统一配置文件加载配置
+update_config_with_unified_settings(config)
+        
+# 尝试从统一配置文件加载配置
+update_config_with_unified_settings(config)

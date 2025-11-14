@@ -1,0 +1,16 @@
+{
+    "tdx_file_path": "D:/new_tdx/sign.txt",
+    "interval": 1,
+    "buy_signals": [
+        "KDJ买入条件选股",
+        "MACD买入条件选股"
+    ],
+    "sell_signals": [
+        "KDJ卖出条件选股",
+        "MACD卖出条件选股"
+    ],
+    "cancel_after": 10,
+    "wechat_webhook_url": null,
+    "default_volume": 100,
+    "price_type": "limit"
+}
