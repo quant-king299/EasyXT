@@ -1,0 +1,46 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "qka"
+version = "0.1.0"
+description = ""
+authors = [{name = "myc", email = "mayuanchi1029@gmail.com"}]
+readme = "README.md"
+license = {file = "LICENSE"}
+classifiers = ["License :: OSI Approved :: MIT License"]
+dependencies = [
+    "xtquant",
+    "fastapi",
+    "uvicorn"
+]
+
+[project.urls]
+Home = "https://github.com/zsrl/qka"
+
+[tool.semantic_release]
+version_toml = [
+    "pyproject.toml:project.version"
+]
+
+branch = "main"
+upload_to_PyPI = true
+upload_to_release = true
+commit_author = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "style",
+    "refactor",
+    "test"
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
