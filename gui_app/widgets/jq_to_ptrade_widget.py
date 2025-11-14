@@ -1,0 +1,386 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+聚宽到Ptrade代码转换GUI组件
+提供聚宽策略代码转换为Ptrade格式的可视化界面
+"""
+
+import sys
+import os
+import json
+from typing import Dict, List, Optional, Any
+from datetime import datetime
+
+from PyQt5.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
+    QGroupBox, QLabel, QLineEdit, QPushButton, QTextEdit,
+    QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
+    QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
+    QProgressBar, QSplitter, QFrame, QMessageBox,
+    QFileDialog, QFormLayout, QScrollArea, QTextBrowser
+)
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
+from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
+
+# 添加项目路径
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'code_converter'))
+
+try:
+    from code_converter.converters.jq_to_ptrade import JQToPtradeConverter
+    CONVERTER_AVAILABLE = True
+except ImportError:
+    CONVERTER_AVAILABLE = False
+    print("⚠️ 代码转换器不可用")
+
+
+class CodeConversionWorker(QThread):
+    """代码转换工作线程"""
+    conversion_finished = pyqtSignal(bool, str, str)  # success, input_code, output_code
+    progress_updated = pyqtSignal(int, str)  # progress, message
+    
+    def __init__(self, input_code: str, mapping_file: Optional[str] = None):
+        super().__init__()
+        self.input_code = input_code
+        self.mapping_file = mapping_file
+        
+    def run(self):
+        try:
+            self.progress_updated.emit(10, "初始化转换器...")
+            
+            # 创建转换器
+            converter = JQToPtradeConverter(self.mapping_file)
+            self.progress_updated.emit(50, "正在转换代码...")
+            
+            # 执行转换
+            output_code = converter.convert(self.input_code)
+            self.progress_updated.emit(90, "转换完成...")
+            
+            self.conversion_finished.emit(True, self.input_code, output_code)
+        except Exception as e:
+            error_msg = f"转换失败: {str(e)}"
+            self.conversion_finished.emit(False, self.input_code, error_msg)
+
+
+class JQToPtradeWidget(QWidget):
+    """聚宽到Ptrade代码转换组件"""
+    
+    def __init__(self):
+        super().__init__()
+        self.current_input_file = ""
+        self.current_output_file = ""
+        self.conversion_thread = None
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # 标题
+        title_label = QLabel("聚宽到Ptrade代码转换器")
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        title_label.setFont(title_font)
+        title_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # 主要功能区域
+        main_splitter = QSplitter(Qt.Horizontal)
+        layout.addWidget(main_splitter)
+        
+        # 左侧控制面板
+        control_widget = QWidget()
+        control_layout = QVBoxLayout(control_widget)
+        
+        # 文件操作组
+        file_group = QGroupBox("文件操作")
+        file_layout = QFormLayout(file_group)
+        
+        # 输入文件
+        input_file_layout = QHBoxLayout()
+        self.input_file_edit = QLineEdit()
+        self.input_file_edit.setPlaceholderText("请选择聚宽策略文件...")
+        self.browse_input_button = QPushButton("浏览")
+        self.browse_input_button.clicked.connect(self.browse_input_file)
+        input_file_layout.addWidget(self.input_file_edit)
+        input_file_layout.addWidget(self.browse_input_button)
+        file_layout.addRow("输入文件:", input_file_layout)
+        
+        # 输出文件
+        output_file_layout = QHBoxLayout()
+        self.output_file_edit = QLineEdit()
+        self.output_file_edit.setPlaceholderText("请选择输出文件路径...")
+        self.browse_output_button = QPushButton("浏览")
+        self.browse_output_button.clicked.connect(self.browse_output_file)
+        output_file_layout.addWidget(self.output_file_edit)
+        output_file_layout.addWidget(self.browse_output_button)
+        file_layout.addRow("输出文件:", output_file_layout)
+        
+        # API映射文件
+        mapping_file_layout = QHBoxLayout()
+        self.mapping_file_edit = QLineEdit()
+        self.mapping_file_edit.setPlaceholderText("可选：自定义API映射文件...")
+        self.browse_mapping_button = QPushButton("浏览")
+        self.browse_mapping_button.clicked.connect(self.browse_mapping_file)
+        mapping_file_layout.addWidget(self.mapping_file_edit)
+        mapping_file_layout.addWidget(self.browse_mapping_button)
+        file_layout.addRow("映射文件:", mapping_file_layout)
+        
+        control_layout.addWidget(file_group)
+        
+        # 转换控制组
+        control_group = QGroupBox("转换控制")
+        control_layout_main = QVBoxLayout(control_group)
+        
+        # 转换按钮
+        self.convert_button = QPushButton("开始转换")
+        self.convert_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 10px;
+                font-size: 14px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        self.convert_button.clicked.connect(self.start_conversion)
+        control_layout_main.addWidget(self.convert_button)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        control_layout_main.addWidget(self.progress_bar)
+        
+        # 状态标签
+        self.status_label = QLabel("就绪")
+        self.status_label.setAlignment(Qt.AlignCenter)
+        control_layout_main.addWidget(self.status_label)
+        
+        control_layout.addWidget(control_group)
+        
+        # 示例代码组
+        example_group = QGroupBox("使用示例")
+        example_layout = QVBoxLayout(example_group)
+        
+        example_text = QTextBrowser()
+        example_text.setMaximumHeight(150)
+        example_text.setHtml("""
+        <h3>使用说明：</h3>
+        <ol>
+            <li>选择聚宽策略Python文件（.py）</li>
+            <li>选择转换后的输出文件路径</li>
+            <li>可选择自定义API映射文件（可选）</li>
+            <li>点击"开始转换"按钮</li>
+            <li>等待转换完成，查看结果</li>
+        </ol>
+        <p><b>支持的转换：</b></p>
+        <ul>
+            <li>数据获取API</li>
+            <li>交易API</li>
+            <li>账户API</li>
+            <li>系统API</li>
+            <li>风险控制API</li>
+            <li>定时任务API</li>
+        </ul>
+        """)
+        example_layout.addWidget(example_text)
+        
+        control_layout.addWidget(example_group)
+        control_layout.addStretch()
+        
+        # 右侧代码预览区域
+        preview_widget = QWidget()
+        preview_layout = QVBoxLayout(preview_widget)
+        
+        # 代码预览标签页
+        self.preview_tabs = QTabWidget()
+        preview_layout.addWidget(self.preview_tabs)
+        
+        # 输入代码预览
+        self.input_code_preview = QTextEdit()
+        self.input_code_preview.setReadOnly(True)
+        self.input_code_preview.setFont(QFont("Consolas", 10))
+        self.preview_tabs.addTab(self.input_code_preview, "输入代码（聚宽）")
+        
+        # 输出代码预览
+        self.output_code_preview = QTextEdit()
+        self.output_code_preview.setReadOnly(True)
+        self.output_code_preview.setFont(QFont("Consolas", 10))
+        self.preview_tabs.addTab(self.output_code_preview, "输出代码（Ptrade）")
+        
+        main_splitter.addWidget(control_widget)
+        main_splitter.addWidget(preview_widget)
+        main_splitter.setSizes([300, 700])  # 设置初始大小比例
+        
+        # 底部按钮区域
+        bottom_layout = QHBoxLayout()
+        
+        self.clear_button = QPushButton("清空")
+        self.clear_button.clicked.connect(self.clear_all)
+        
+        self.save_output_button = QPushButton("保存输出")
+        self.save_output_button.clicked.connect(self.save_output)
+        self.save_output_button.setEnabled(False)
+        
+        bottom_layout.addWidget(self.clear_button)
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(self.save_output_button)
+        
+        layout.addLayout(bottom_layout)
+        
+        # 设置初始状态
+        self.update_ui_state()
+    
+    def browse_input_file(self):
+        """浏览输入文件"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择聚宽策略文件", "", "Python文件 (*.py);;所有文件 (*)"
+        )
+        if file_path:
+            self.input_file_edit.setText(file_path)
+            self.current_input_file = file_path
+            self.load_input_file()
+            
+            # 自动设置输出文件名
+            if not self.output_file_edit.text():
+                output_path = file_path.replace('.py', '_ptrade.py')
+                self.output_file_edit.setText(output_path)
+                self.current_output_file = output_path
+    
+    def browse_output_file(self):
+        """浏览输出文件"""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "保存转换结果", "", "Python文件 (*.py);;所有文件 (*)"
+        )
+        if file_path:
+            self.output_file_edit.setText(file_path)
+            self.current_output_file = file_path
+    
+    def browse_mapping_file(self):
+        """浏览API映射文件"""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "选择API映射文件", "", "JSON文件 (*.json);;所有文件 (*)"
+        )
+        if file_path:
+            self.mapping_file_edit.setText(file_path)
+    
+    def load_input_file(self):
+        """加载输入文件内容"""
+        try:
+            with open(self.current_input_file, 'r', encoding='utf-8') as f:
+                content = f.read()
+                self.input_code_preview.setPlainText(content)
+                self.status_label.setText(f"已加载输入文件: {os.path.basename(self.current_input_file)}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"无法读取输入文件: {str(e)}")
+    
+    def start_conversion(self):
+        """开始转换"""
+        if not self.current_input_file:
+            QMessageBox.warning(self, "警告", "请先选择输入文件")
+            return
+            
+        # 读取输入文件内容
+        try:
+            with open(self.current_input_file, 'r', encoding='utf-8') as f:
+                input_code = f.read()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"无法读取输入文件: {str(e)}")
+            return
+        
+        # 检查转换器是否可用
+        if not CONVERTER_AVAILABLE:
+            QMessageBox.critical(self, "错误", "代码转换器不可用，请检查安装")
+            return
+        
+        # 获取映射文件路径
+        mapping_file = self.mapping_file_edit.text()
+        if not mapping_file:
+            mapping_file = None
+        elif not os.path.exists(mapping_file):
+            QMessageBox.warning(self, "警告", "指定的映射文件不存在，将使用默认映射")
+            mapping_file = None
+        
+        # 禁用界面
+        self.convert_button.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self.status_label.setText("正在转换...")
+        
+        # 启动转换线程
+        self.conversion_thread = CodeConversionWorker(input_code, mapping_file)
+        self.conversion_thread.conversion_finished.connect(self.on_conversion_finished)
+        self.conversion_thread.progress_updated.connect(self.on_progress_updated)
+        self.conversion_thread.start()
+    
+    def on_progress_updated(self, progress: int, message: str):
+        """进度更新"""
+        self.progress_bar.setValue(progress)
+        self.status_label.setText(message)
+    
+    def on_conversion_finished(self, success: bool, input_code: str, output_code: str):
+        """转换完成"""
+        # 恢复界面
+        self.convert_button.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        
+        if success:
+            self.output_code_preview.setPlainText(output_code)
+            self.status_label.setText("转换完成")
+            self.save_output_button.setEnabled(True)
+            QMessageBox.information(self, "成功", "代码转换完成！")
+        else:
+            self.output_code_preview.setPlainText(output_code)
+            self.status_label.setText("转换失败")
+            QMessageBox.critical(self, "错误", output_code)
+    
+    def save_output(self):
+        """保存输出文件"""
+        if not self.current_output_file:
+            self.browse_output_file()
+            if not self.current_output_file:
+                return
+        
+        try:
+            output_content = self.output_code_preview.toPlainText()
+            with open(self.current_output_file, 'w', encoding='utf-8') as f:
+                f.write(output_content)
+            QMessageBox.information(self, "成功", f"文件已保存到: {self.current_output_file}")
+            self.status_label.setText(f"已保存: {os.path.basename(self.current_output_file)}")
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"保存文件失败: {str(e)}")
+    
+    def clear_all(self):
+        """清空所有内容"""
+        self.input_file_edit.clear()
+        self.output_file_edit.clear()
+        self.mapping_file_edit.clear()
+        self.input_code_preview.clear()
+        self.output_code_preview.clear()
+        self.status_label.setText("就绪")
+        self.current_input_file = ""
+        self.current_output_file = ""
+        self.save_output_button.setEnabled(False)
+    
+    def update_ui_state(self):
+        """更新UI状态"""
+        has_input = bool(self.current_input_file)
+        self.convert_button.setEnabled(has_input and CONVERTER_AVAILABLE)
+
+
+# 测试代码
+if __name__ == "__main__":
+    from PyQt5.QtWidgets import QApplication
+    import sys
+    
+    app = QApplication(sys.argv)
+    widget = JQToPtradeWidget()
+    widget.show()
+    sys.exit(app.exec_())
