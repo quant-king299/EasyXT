@@ -63,7 +63,9 @@ def read_file(file_path):
 
             # 构建 DataFrame
             df = pd.DataFrame(rows, columns=COLUMNS)
-            logger.debug(f"使用 {encoding} 编码成功读取文件")
+            # 只有在成功读取且非空时才记录日志，减少冗余信息
+            if not df.empty:
+                logger.info(f"读取到 {len(df)} 条新的预警信号")
             return df
 
         except UnicodeError:
@@ -82,6 +84,6 @@ def clear_file_content(file_path):
             # 写入表头
             # header = ' '.join(COLUMNS) + '\n'
             # file.write(header)
-        logger.debug(f"【重置文件】内容已清空")
+        logger.info(f"【重置文件】内容已清空")
     except Exception as e:
         logger.error(f"清空文件内容时发生错误: {e}")
