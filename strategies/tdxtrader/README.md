@@ -301,3 +301,8 @@ QMT mini路径
 ### wechat_webhook_url
 
 企业微信机器人webhook url
+
+## 第三方组件
+
+本项目包含来自[zsrl/tdxtrader](https://github.com/zsrl/tdxtrader)的tdxtrader组件，该组件使用MIT许可证。
+原始项目地址：[https://github.com/zsrl/tdxtrader](https://github.com/zsrl/tdxtrader)
