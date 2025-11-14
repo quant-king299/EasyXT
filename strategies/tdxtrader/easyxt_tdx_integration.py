@@ -51,7 +51,7 @@ class TDXEasyXTIntegration:
             "cancel_after": 10,
             "wechat_webhook_url": None,
             "default_volume": 100,
-            "price_type": "limit"
+            "price_type": "市价"
         }
         
         if config_file and os.path.exists(config_file):
@@ -127,9 +127,9 @@ class TDXEasyXTIntegration:
             print(f"❌ 账户添加异常: {e}")
             return False
     
-    def buy_event(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def buy_event(self, params):
         """
-        买入事件处理函数
+        买入事件处理函数（兼容tdxtrader接口）
         
         Args:
             params: 包含交易相关信息的字典
@@ -141,6 +141,8 @@ class TDXEasyXTIntegration:
             # 获取股票信息
             stock = params.get('stock')
             position = params.get('position')
+            xt_trader = params.get('xt_trader')
+            account = params.get('account')
             
             # 检查股票信息是否存在
             if not stock:
@@ -176,38 +178,29 @@ class TDXEasyXTIntegration:
                 return None
                 
             volume = self.config.get("default_volume", 100)
-            price_type = self.config.get("price_type", "limit")
+            price_type = self.config.get("price_type", "市价")
             
-            # 执行买入操作
-            order_id = self.easy_xt.buy(
-                account_id=account_id,
-                code=stock.get('code'),
-                volume=volume,
-                price=stock.get('price') if price_type == "limit" else 0,
-                price_type=price_type
-            )
+            # 返回交易参数，与tdxtrader的demo保持一致
+            result = {
+                'size': volume,
+                'price': -1,  # 市价单使用-1
+                'type': price_type
+            }
+            
+            print(f"✅ 买入事件处理完成: {result}")
             
             # 将信号添加到已处理集合
             self._processed_signals.add(signal_key)
             
-            if order_id:
-                print(f"✅ 买入委托成功，委托号: {order_id}")
-                return {
-                    'size': volume,
-                    'price': stock.get('price') if price_type == "limit" else -1,
-                    'type': '限价' if price_type == "limit" else '市价'
-                }
-            else:
-                print("❌ 买入委托失败")
-                return None
+            return result
                 
         except Exception as e:
             print(f"❌ 买入操作异常: {e}")
             return None
     
-    def sell_event(self, params: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    def sell_event(self, params):
         """
-        卖出事件处理函数
+        卖出事件处理函数（兼容tdxtrader接口）
         
         Args:
             params: 包含交易相关信息的字典
@@ -219,6 +212,8 @@ class TDXEasyXTIntegration:
             # 获取股票信息
             stock = params.get('stock')
             position = params.get('position')
+            xt_trader = params.get('xt_trader')
+            account = params.get('account')
             
             # 检查股票信息是否存在
             if not stock:
@@ -259,30 +254,21 @@ class TDXEasyXTIntegration:
                 self._processed_signals.add(signal_key)
                 return None
                 
-            price_type = self.config.get("price_type", "limit")
+            price_type = self.config.get("price_type", "市价")
             
-            # 执行卖出操作
-            order_id = self.easy_xt.sell(
-                account_id=account_id,
-                code=stock.get('code'),
-                volume=position.can_use_volume,
-                price=stock.get('price') if price_type == "limit" else 0,
-                price_type=price_type
-            )
+            # 返回交易参数，与tdxtrader的demo保持一致
+            result = {
+                'size': position.can_use_volume,
+                'price': -1,  # 市价单使用-1
+                'type': price_type
+            }
+            
+            print(f"✅ 卖出事件处理完成: {result}")
             
             # 将信号添加到已处理集合
             self._processed_signals.add(signal_key)
             
-            if order_id:
-                print(f"✅ 卖出委托成功，委托号: {order_id}")
-                return {
-                    'size': position.can_use_volume,
-                    'price': stock.get('price') if price_type == "limit" else -1,
-                    'type': '限价' if price_type == "limit" else '市价'
-                }
-            else:
-                print("❌ 卖出委托失败")
-                return None
+            return result
                 
         except Exception as e:
             print(f"❌ 卖出操作异常: {e}")
@@ -390,7 +376,7 @@ def create_config_template(config_file: str = "tdx_easyxt_config.json"):
         "cancel_after": 10,
         "wechat_webhook_url": None,
         "default_volume": 100,
-        "price_type": "limit"
+        "price_type": "市价"
     }
     
     with open(config_file, 'w', encoding='utf-8') as f:
