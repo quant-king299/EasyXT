@@ -23,6 +23,9 @@ python cli.py input_strategy.py
 # 指定输出文件
 python cli.py input_strategy.py -o output_strategy.py
 
+# 使用自定义API映射文件
+python cli.py input_strategy.py -m custom_mapping.json
+
 # 查看帮助
 python cli.py -h
 ```
@@ -56,6 +59,12 @@ with open('ptrade_strategy.py', 'w', encoding='utf-8') as f:
 | `get_price()` | `get_price()` | ✅ 支持 |
 | `get_current_data()` | `get_current_data()` | ✅ 支持 |
 | `get_fundamentals()` | `get_fundamentals()` | ✅ 支持 |
+| `get_index_stocks()` | `get_index_stocks()` | ✅ 支持 |
+| `get_industry_stocks()` | `get_industry_stocks()` | ✅ 支持 |
+| `get_concept_stocks()` | `get_concept_stocks()` | ✅ 支持 |
+| `get_all_securities()` | `get_all_securities()` | ✅ 支持 |
+| `get_security_info()` | `get_security_info()` | ✅ 支持 |
+| `attribute_history()` | `get_price()` | ✅ 支持 |
 
 ### 交易API
 
@@ -66,13 +75,44 @@ with open('ptrade_strategy.py', 'w', encoding='utf-8') as f:
 | `order_target()` | `order_target()` | ✅ 支持 |
 | `order_target_value()` | `order_target_value()` | ✅ 支持 |
 | `cancel_order()` | `cancel_order()` | ✅ 支持 |
+| `get_open_orders()` | `get_open_orders()` | ✅ 支持 |
 
-### 其他API
+### 账户API
+
+| 聚宽API | Ptrade对应API | 状态 |
+|---------|---------------|------|
+| `get_portfolio()` | `get_portfolio()` | ✅ 支持 |
+| `get_positions()` | `get_positions()` | ✅ 支持 |
+| `get_orders()` | `get_orders()` | ✅ 支持 |
+| `get_trades()` | `get_trades()` | ✅ 支持 |
+
+### 系统API
 
 | 聚宽API | Ptrade对应API | 状态 |
 |---------|---------------|------|
 | `log.info()` | `log.info()` | ✅ 支持 |
+| `log.warn()` | `log.warn()` | ✅ 支持 |
+| `log.error()` | `log.error()` | ✅ 支持 |
 | `record()` | `record()` | ✅ 支持 |
+| `plot()` | `plot()` | ✅ 支持 |
+| `set_benchmark()` | `set_benchmark()` | ✅ 支持 |
+| `set_option()` | `set_option()` | ✅ 支持 |
+
+### 风险控制API
+
+| 聚宽API | Ptrade对应API | 状态 |
+|---------|---------------|------|
+| `set_slippage()` | `set_slippage()` | ✅ 支持 |
+| `set_commission()` | `set_commission()` | ✅ 支持 |
+| `set_price_limit()` | `set_price_limit()` | ✅ 支持 |
+
+### 定时任务API
+
+| 聚宽API | Ptrade对应API | 状态 |
+|---------|---------------|------|
+| `run_daily()` | `run_daily()` | ✅ 支持 |
+| `run_weekly()` | `run_weekly()` | ✅ 支持 |
+| `run_monthly()` | `run_monthly()` | ✅ 支持 |
 
 ## 🛠️ 高级功能
 
@@ -95,12 +135,30 @@ converter = JQToPtradeConverter()
 converter.special_handlers['special_func'] = custom_handler
 ```
 
+### 自定义API映射文件
+
+可以创建一个JSON文件来定义API映射关系：
+
+```json
+{
+  "get_price": "get_price",
+  "order": "order",
+  "log.info": "log.info"
+}
+```
+
+然后在命令行中使用：
+```bash
+python cli.py input.py -m custom_mapping.json
+```
+
 ## 📈 最佳实践
 
 1. **代码规范**：确保聚宽代码符合Python语法规范
 2. **API兼容性**：检查使用的API是否在映射表中
 3. **测试验证**：转换后在Ptrade环境中测试策略逻辑
 4. **逐步迁移**：建议先转换简单策略，再处理复杂策略
+5. **全局变量处理**：聚宽中的`g`变量会被自动转换为`context`变量
 
 ## 🆘 故障排除
 
@@ -113,6 +171,10 @@ converter.special_handlers['special_func'] = custom_handler
 2. **运行时错误**
    - 验证转换后的代码逻辑
    - 检查API参数是否匹配
+
+3. **API未找到**
+   - 检查API映射文件是否正确
+   - 确认Ptrade平台是否支持该API
 
 ### 调试方法
 
@@ -128,6 +190,30 @@ converter = JQToPtradeConverter()
 
 - [聚宽API文档](https://www.joinquant.com/help/api/help)
 - [Ptrade API文档](https://www.ptrade.com.cn/api)
+
+## 📁 项目结构
+
+```
+code_converter/
+├── cli.py                 # 命令行接口
+├── api_mapping.json       # API映射文件
+├── converters/
+│   └── jq_to_ptrade.py    # 核心转换器
+├── utils/
+│   ├── code_parser.py     # 代码解析工具
+│   └── code_generator.py  # 代码生成工具
+├── samples/               # 示例文件
+└── README.md              # 项目说明
+```
+
+## 🧪 测试示例
+
+项目包含多个测试示例：
+
+1. 基础示例：`samples/jq_sample_strategy.py`
+2. 完整示例：`samples/jq_sample_strategy_complete.py`
+
+转换后的文件保存在相同目录下，文件名带有`ptrade_`前缀。
 
 ## 📞 技术支持
 

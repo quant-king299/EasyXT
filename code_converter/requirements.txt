@@ -1,1 +1,5 @@
-# 代码转换器依赖
+# 项目依赖
+astunparse>=1.6.3
+beautifulsoup4>=4.12.2
+python-docx>=1.2.0
+pdfminer.six>=20251107
