@@ -81,6 +81,8 @@ class TDXEasyXTIntegration:
                 print("❌ 未配置QMT路径")
                 return False
             
+            print(f"🔍 尝试连接交易服务: {qmt_path}")
+            
             # 初始化交易服务
             if self.easy_xt.init_trade(qmt_path):
                 self._trade_initialized = True
@@ -114,6 +116,8 @@ class TDXEasyXTIntegration:
             if not account_id:
                 print("❌ 未配置账户ID")
                 return False
+            
+            print(f"🔍 尝试添加账户: {account_id}")
             
             if self.easy_xt.add_account(account_id):
                 self._account_added = True
@@ -160,12 +164,14 @@ class TDXEasyXTIntegration:
             
             # 检查交易服务是否已初始化
             if not self._trade_initialized:
+                print("🔄 初始化交易服务...")
                 if not self.initialize_trade_service():
                     self._processed_signals.add(signal_key)
                     return None
             
             # 检查账户是否已添加
             if not self._account_added:
+                print("🔄 添加账户...")
                 if not self.add_account():
                     self._processed_signals.add(signal_key)
                     return None
@@ -237,12 +243,14 @@ class TDXEasyXTIntegration:
             
             # 检查交易服务是否已初始化
             if not self._trade_initialized:
+                print("🔄 初始化交易服务...")
                 if not self.initialize_trade_service():
                     self._processed_signals.add(signal_key)
                     return None
             
             # 检查账户是否已添加
             if not self._account_added:
+                print("🔄 添加账户...")
                 if not self.add_account():
                     self._processed_signals.add(signal_key)
                     return None
@@ -301,6 +309,17 @@ class TDXEasyXTIntegration:
             print(f"   轮询间隔: {self.config.get('interval')}秒")
             print(f"   买入信号: {self.config.get('buy_signals')}")
             print(f"   卖出信号: {self.config.get('sell_signals')}")
+            
+            # 预先初始化交易服务和账户
+            print("🔄 预初始化交易服务...")
+            if not self.initialize_trade_service():
+                print("❌ 交易服务初始化失败，无法启动交易系统")
+                return
+                
+            print("🔄 预添加账户...")
+            if not self.add_account():
+                print("❌ 账户添加失败，无法启动交易系统")
+                return
             
             # 启动tdxtrader（不自动清空文件内容）
             self._start_tdx_trader(

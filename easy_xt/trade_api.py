@@ -138,23 +138,30 @@ class TradeAPI:
                 # 根据错误信息，XtQuantAsyncClient需要的第三个参数是int类型
                 # 尝试将session_id转换为数字，如果失败则使用默认值
                 try:
-                    session_int = int(self._session_id) if self._session_id.isdigit() else hash(self._session_id) % 10000
+                    # 使用时间戳作为session_id以确保唯一性
+                    session_int = int(time.time() * 1000) % 1000000
                 except:
-                    session_int = 1001  # 默认session ID
+                    session_int = 123456  # 默认session ID
+                
+                print(f"🔧 使用session_id: {session_int}")
                 
                 # 创建交易对象，使用数字类型的session_id
-                self.trader = xt_trader.XtQuantTrader(userdata_path, session_int, self.callback)
+                self.trader = xt_trader.XtQuantTrader(userdata_path, session_int)
+                # 注册回调
+                self.trader.register_callback(self.callback)
             except Exception as create_error:
                 ErrorHandler.log_error(f"创建交易对象失败: {str(create_error)}")
                 return False
             
             # 启动交易
+            print("🚀 启动交易服务...")
             self.trader.start()
             
             # 连接
+            print("🔗 连接交易服务...")
             result = self.trader.connect()
             if result == 0:
-                print("交易服务连接成功")
+                print("✅ 交易服务连接成功")
                 return True
             else:
                 ErrorHandler.log_error(f"交易服务连接失败，错误码: {result}")
@@ -180,16 +187,18 @@ class TradeAPI:
             return False
             
         try:
+            print(f"➕ 添加账户: {account_id}")
             account = xt_type.StockAccount(account_id, account_type)
             if isinstance(account, str):  # 错误信息
                 ErrorHandler.log_error(account)
                 return False
                 
             # 订阅账户
+            print("📡 订阅账户...")
             result = self.trader.subscribe(account)
             if result == 0:
                 self.accounts[account_id] = account
-                print(f"账户 {account_id} 添加成功")
+                print(f"✅ 账户 {account_id} 添加成功")
                 return True
             else:
                 ErrorHandler.log_error(f"订阅账户失败，错误码: {result}")
@@ -234,9 +243,10 @@ class TradeAPI:
             '限价': xt_const.FIX_PRICE
         }
         
-        xt_price_type = price_type_map.get(price_type, xt_const.FIX_PRICE)
+        xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
         
         try:
+            print(f"🛒 买入 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
                 account=account,
                 stock_code=code,
@@ -249,10 +259,10 @@ class TradeAPI:
             )
             
             if order_id > 0:
-                print(f"买入委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
+                print(f"✅ 买入委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
-                ErrorHandler.log_error("买入委托失败")
+                ErrorHandler.log_error(f"买入委托失败，返回值: {order_id}")
                 return None
                 
         except Exception as e:
@@ -294,9 +304,10 @@ class TradeAPI:
             '限价': xt_const.FIX_PRICE
         }
         
-        xt_price_type = price_type_map.get(price_type, xt_const.FIX_PRICE)
+        xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
         
         try:
+            print(f"💰 卖出 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
                 account=account,
                 stock_code=code,
@@ -309,10 +320,10 @@ class TradeAPI:
             )
             
             if order_id > 0:
-                print(f"卖出委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
+                print(f"✅ 卖出委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
-                ErrorHandler.log_error("卖出委托失败")
+                ErrorHandler.log_error(f"卖出委托失败，返回值: {order_id}")
                 return None
                 
         except Exception as e:
@@ -340,7 +351,7 @@ class TradeAPI:
         try:
             result = self.trader.cancel_order_stock(account, order_id)
             if result == 0:
-                print(f"撤单成功: {order_id}")
+                print(f"✅ 撤单成功: {order_id}")
                 return True
             else:
                 ErrorHandler.log_error(f"撤单失败，错误码: {result}")
