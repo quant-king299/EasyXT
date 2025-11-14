@@ -63,3 +63,8 @@ borker = qka.broker(type='qmt', config={})
 qka.trade(datas, start_time='', strategy=strategy, borker=borker)
 
 ``` -->
+
+## 第三方组件
+
+本项目包含来自[zsrl/qka](https://gitee.com/zsrl/qka)的qka组件，该组件使用MIT许可证。
+原始项目地址：[https://gitee.com/zsrl/qka](https://gitee.com/zsrl/qka)
