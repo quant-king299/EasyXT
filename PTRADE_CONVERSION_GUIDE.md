@@ -183,7 +183,155 @@ git pull origin main
 3. 提交Pull Request
 4. 等待代码审查和合并
 
-## 11. 许可证
+## 11. 示例策略
+
+以下是一个完整的聚宽策略示例，展示了如何使用该策略以及转换后的Ptrade版本：
+
+### 11.1 聚宽策略示例 (jq_demo_strategy.py)
+
+```python
+# 导入函数库
+from jqdata import *
+
+# 初始化函数，设定基准等等
+def initialize(context):
+    # 设定沪深300作为基准
+    set_benchmark('000300.XSHG')
+    # 开启动态复权模式(真实价格)
+    set_option('use_real_price', True)
+    # 输出内容到日志 log.info()
+    log.info('初始函数开始运行且全局只运行一次')
+    # 过滤掉order系列API产生的比error级别低的log
+    # log.set_level('order', 'error')
+
+    ### 股票相关设定 ###
+    # 股票类每笔交易时的手续费是：买入时佣金万分之三，卖出时佣金万分之三加千分之一印花税, 每笔交易佣金最低扣5块钱
+    set_order_cost(OrderCost(close_tax=0.001, open_commission=0.0003, close_commission=0.0003, min_commission=5), type='stock')
+
+    ## 运行函数（reference_security为运行时间的参考标的；传入的标的只做种类区分，因此传入'000300.XSHG'或'510300.XSHG'是一样的）
+      # 开盘前运行
+    run_daily(before_market_open, time='before_open', reference_security='000300.XSHG')
+      # 开盘时运行
+    run_daily(market_open, time='open', reference_security='000300.XSHG')
+      # 收盘后运行
+    run_daily(after_market_close, time='after_close', reference_security='000300.XSHG')
+
+## 开盘前运行函数
+def before_market_open(context):
+    # 输出运行时间
+    log.info('函数运行时间(before_market_open)：'+str(context.current_dt.time()))
+
+    # 给微信发送消息（添加模拟交易，并绑定微信生效）
+    # send_message('美好的一天~')
+
+    # 要操作的股票：平安银行（g.为全局变量）
+    g.security = '000001.XSHE'
+
+## 开盘时运行函数
+def market_open(context):
+    log.info('函数运行时间(market_open):'+str(context.current_dt.time()))
+    security = g.security
+    # 获取股票的收盘价
+    close_data = get_bars(security, count=5, unit='1d', fields=['close'])
+    # 取得过去五天的平均价格
+    MA5 = close_data['close'].mean()
+    # 取得上一时间点价格
+    current_price = close_data['close'][-1]
+    # 取得当前的现金
+    cash = context.portfolio.available_cash
+
+    # 如果上一时间点价格高出五天平均价1%, 则全仓买入
+    if (current_price > 1.01*MA5) and (cash > 0):
+        # 记录这次买入
+        log.info("价格高于均价 1%%, 买入 %s" % (security))
+        # 用所有 cash 买入股票
+        order_value(security, cash)
+    # 如果上一时间点价格低于五天平均价, 则空仓卖出
+    elif current_price < MA5 and context.portfolio.positions[security].closeable_amount > 0:
+        # 记录这次卖出
+        log.info("价格低于均价, 卖出 %s" % (security))
+        # 卖出所有股票,使这只股票的最终持有量为0
+        order_target(security, 0)
+
+## 收盘后运行函数
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):'+str(context.current_dt.time())))
+    #得到当天所有成交记录
+    trades = get_trades()
+    for _trade in trades.values():
+        log.info('成交记录：'+str(_trade))
+    log.info('一天结束')
+    log.info('##############################################################')
+```
+
+### 11.2 转换后的Ptrade策略示例
+
+使用转换工具转换后的Ptrade策略代码如下：
+
+```python
+# 自动生成的Ptrade策略代码
+# 原始代码来自聚宽策略
+
+def initialize(context):
+    set_benchmark('000300.XSHG')
+    set_option('use_real_price', True)
+    log.info('初始函数开始运行且全局只运行一次')
+    set_order_cost(OrderCost(close_tax=0.001, open_commission=0.0003, close_commission=0.0003, min_commission=5), type='stock')
+    run_daily(before_market_open, time='before_open', reference_security='000300.XSHG')
+    run_daily(market_open, time='open', reference_security='000300.XSHG')
+    run_daily(after_market_close, time='after_close', reference_security='000300.XSHG')
+
+def before_market_open(context):
+    log.info('函数运行时间(before_market_open)：' + str(context.current_dt.time()))
+    context.security = '000001.XSHE'
+
+def market_open(context):
+    log.info('函数运行时间(market_open):' + str(context.current_dt.time()))
+    security = context.security
+    close_data = get_bars(security, count=5, unit='1d', fields=['close'])
+    MA5 = close_data['close'].mean()
+    current_price = close_data['close'][-1]
+    cash = context.portfolio.available_cash
+    if current_price > 1.01 * MA5 and cash > 0:
+        log.info('价格高于均价 1%%, 买入 %s' % security)
+        order_value(security, cash)
+    elif current_price < MA5 and context.portfolio.positions[security].closeable_amount > 0:
+        log.info('价格低于均价, 卖出 %s' % security)
+        order_target(security, 0)
+
+def after_market_close(context):
+    log.info(str('函数运行时间(after_market_close):' + str(context.current_dt.time())))
+    trades = get_trades()
+    for _trade in trades.values():
+        log.info('成交记录：' + str(_trade))
+    log.info('一天结束')
+    log.info('##############################################################')
+```
+
+
+## 12. 技术支持
+
+如在使用过程中遇到问题，请通过以下方式获取技术支持：
+- 查看工具文档和FAQ
+- 提交GitHub Issue
+- 联系项目维护人员
+
+## 13. 版本更新
+
+工具会持续更新以支持更多的API和功能，请定期检查更新：
+```bash
+git pull origin main
+```
+
+## 14. 贡献指南
+
+欢迎贡献代码和改进意见：
+1. Fork项目仓库
+2. 创建功能分支
+3. 提交Pull Request
+4. 等待代码审查和合并
+
+## 15. 许可证
 
 本工具采用MIT许可证，详情请查看LICENSE文件。
 
