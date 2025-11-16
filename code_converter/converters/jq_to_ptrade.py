@@ -3,35 +3,71 @@
 """
 import ast
 import sys
+import json
+import os
 from typing import Dict, List, Any
 
 class JQToPtradeConverter:
     """聚宽到Ptrade代码转换器"""
     
-    def __init__(self):
+    def __init__(self, api_mapping_file=None):
         # API映射规则
-        self.api_mapping = {
-            # 数据获取API
-            'get_price': 'get_price',
-            'get_current_data': 'get_current_data',
-            'get_fundamentals': 'get_fundamentals',
-            
-            # 交易API
-            'order': 'order',
-            'order_value': 'order_value',
-            'order_target': 'order_target',
-            'order_target_value': 'order_target_value',
-            'cancel_order': 'cancel_order',
-            
-            # 其他常用API
-            'log': 'log',
-            'record': 'record',
-        }
+        if api_mapping_file and os.path.exists(api_mapping_file):
+            with open(api_mapping_file, 'r', encoding='utf-8') as f:
+                self.api_mapping = json.load(f)
+        else:
+            # 默认API映射规则
+            self.api_mapping = {
+                # 数据获取API
+                'get_price': 'get_price',
+                'get_current_data': 'get_current_data',
+                'get_fundamentals': 'get_fundamentals',
+                'get_index_stocks': 'get_index_stocks',
+                'get_industry_stocks': 'get_industry_stocks',
+                'get_concept_stocks': 'get_concept_stocks',
+                'get_all_securities': 'get_all_securities',
+                'get_security_info': 'get_security_info',
+                'attribute_history': 'get_price',  # 聚宽的attribute_history映射到Ptrade的get_price
+                
+                # 交易API
+                'order': 'order',
+                'order_value': 'order_value',
+                'order_target': 'order_target',
+                'order_target_value': 'order_target_value',
+                'cancel_order': 'cancel_order',
+                'get_open_orders': 'get_open_orders',
+                
+                # 账户API
+                'get_portfolio': 'get_portfolio',
+                'get_positions': 'get_positions',
+                'get_orders': 'get_orders',
+                'get_trades': 'get_trades',
+                
+                # 系统API
+                'log': 'log',
+                'record': 'record',
+                'plot': 'plot',
+                'set_benchmark': 'set_benchmark',
+                'set_option': 'set_option',
+                
+                # 风险控制API
+                'set_slippage': 'set_slippage',
+                'set_commission': 'set_commission',
+                'set_price_limit': 'set_price_limit',
+                
+                # 定时任务API
+                'run_daily': 'run_daily',
+                'run_weekly': 'run_weekly',
+                'run_monthly': 'run_monthly',
+            }
         
         # 需要特殊处理的API
         self.special_handlers = {
             # 可以添加特殊处理函数
         }
+        
+        # 导入映射 - Ptrade不需要导入语句
+        self.import_mapping = {}
     
     def convert(self, jq_code: str) -> str:
         """
@@ -53,7 +89,7 @@ class JQToPtradeConverter:
             # 生成代码
             ptrade_code = ast.unparse(converted_tree)
             
-            # 添加必要的导入和头部信息
+            # 添加必要的头部信息（不包含导入语句）
             ptrade_code = self._add_header(ptrade_code)
             
             return ptrade_code
@@ -72,12 +108,12 @@ class JQToPtradeConverter:
             ast.AST: 转换后的AST树
         """
         # 创建转换器访问器
-        transformer = JQToPtradeTransformer(self.api_mapping, self.special_handlers)
+        transformer = JQToPtradeTransformer(self.api_mapping, self.special_handlers, self.import_mapping)
         return transformer.visit(tree)
     
     def _add_header(self, code: str) -> str:
         """
-        添加必要的头部信息
+        添加必要的头部信息（不包含导入语句）
         
         Args:
             code: 转换后的代码
@@ -94,9 +130,10 @@ class JQToPtradeConverter:
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
     
-    def __init__(self, api_mapping: Dict[str, str], special_handlers: Dict[str, Any]):
+    def __init__(self, api_mapping: Dict[str, str], special_handlers: Dict[str, Any], import_mapping: Dict[str, str]):
         self.api_mapping = api_mapping
         self.special_handlers = special_handlers
+        self.import_mapping = import_mapping
     
     def visit_Call(self, node: ast.Call) -> ast.AST:
         """
@@ -114,34 +151,71 @@ class JQToPtradeTransformer(ast.NodeTransformer):
             if func_name in self.api_mapping:
                 # 映射函数名
                 node.func.id = self.api_mapping[func_name]
+        elif isinstance(node.func, ast.Attribute):
+            # 处理属性访问，如 log.info
+            attr_name = node.func.attr
+            if isinstance(node.func.value, ast.Name):
+                full_name = f"{node.func.value.id}.{attr_name}"
+                if full_name in self.api_mapping:
+                    # 如果是完整路径映射，需要特殊处理
+                    if '.' in self.api_mapping[full_name]:
+                        # 映射到新的属性访问
+                        new_parts = self.api_mapping[full_name].split('.')
+                        node.func.value.id = new_parts[0]
+                        node.func.attr = new_parts[1]
+                    else:
+                        # 映射到简单函数名
+                        node.func = ast.Name(id=self.api_mapping[full_name], ctx=ast.Load())
         
         # 继续遍历子节点
         return self.generic_visit(node)
     
-    def visit_Import(self, node: ast.Import) -> ast.AST:
+    def visit_Import(self, node: ast.Import) -> Any:
         """
-        转换导入语句
+        转换导入语句 - Ptrade不需要导入语句，直接移除
+        """
+        # 返回None来移除节点
+        return None
+    
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+        """
+        转换from导入语句 - Ptrade不需要导入语句，直接移除
+        """
+        # 返回None来移除节点
+        return None
+    
+    def visit_Assign(self, node: ast.Assign) -> ast.AST:
+        """
+        转换赋值语句
         
         Args:
-            node: 导入节点
+            node: 赋值节点
             
         Returns:
             ast.AST: 转换后的节点
         """
-        # 可以根据需要修改导入语句
+        # 处理 g.xxx = ... 这样的全局变量赋值
+        for target in node.targets:
+            if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name):
+                if target.value.id == 'g':
+                    # 将 g.xxx 转换为 context.xxx
+                    target.value.id = 'context'
         return self.generic_visit(node)
     
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> ast.AST:
+    def visit_Name(self, node: ast.Name) -> ast.AST:
         """
-        转换from导入语句
+        转换名称引用
         
         Args:
-            node: from导入节点
+            node: 名称节点
             
         Returns:
             ast.AST: 转换后的节点
         """
-        # 可以根据需要修改from导入语句
+        # 处理对 g 的直接引用
+        if node.id == 'g':
+            # 将 g 转换为 context
+            node.id = 'context'
         return self.generic_visit(node)
 
 # 使用示例
@@ -152,7 +226,8 @@ import jqdata
 
 def initialize(context):
     # 初始化函数
-    pass
+    g.security = '000001.XSHE'
+    set_benchmark('000300.XSHG')
 
 def handle_data(context, data):
     # 处理数据函数
