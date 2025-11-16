@@ -8,6 +8,7 @@ __author__ = "CodeBuddy"
 
 # 显示作者信息
 print("作者微信: www_ptqmt_com")
+print("欢迎关注微信公众号: 王者quant")
 
 # 延迟导入避免循环依赖
 def _get_api():
