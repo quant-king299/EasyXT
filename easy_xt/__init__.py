@@ -6,6 +6,9 @@ EasyXT - xtquant的简化API封装
 __version__ = "1.0.0"
 __author__ = "CodeBuddy"
 
+# 显示作者信息
+print("作者微信: www_ptqmt_com")
+
 # 延迟导入避免循环依赖
 def _get_api():
     from .api import EasyXT
