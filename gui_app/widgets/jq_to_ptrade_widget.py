@@ -17,7 +17,8 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
     QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
     QProgressBar, QSplitter, QFrame, QMessageBox,
-    QFileDialog, QFormLayout, QScrollArea, QTextBrowser
+    QFileDialog, QFormLayout, QScrollArea, QTextBrowser,
+    QDialog, QDialogButtonBox
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
@@ -26,12 +27,47 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'code_converter'))
 
+# 尝试导入转换器
 try:
     from code_converter.converters.jq_to_ptrade import JQToPtradeConverter
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
+    JQToPtradeConverter = None
     print("⚠️ 代码转换器不可用")
+
+
+class PasteInputDialog(QDialog):
+    """粘贴输入对话框"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("粘贴聚宽策略代码")
+        self.setGeometry(200, 200, 800, 600)
+        self.init_ui()
+    
+    def init_ui(self):
+        layout = QVBoxLayout(self)
+        
+        # 说明标签
+        info_label = QLabel("请在下方文本框中粘贴您的聚宽策略代码：")
+        layout.addWidget(info_label)
+        
+        # 代码输入区域
+        self.code_editor = QTextEdit()
+        self.code_editor.setFont(QFont("Consolas", 10))
+        self.code_editor.setPlaceholderText("在此粘贴您的聚宽策略代码...")
+        layout.addWidget(self.code_editor)
+        
+        # 按钮区域
+        button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+        layout.addWidget(button_box)
+    
+    def get_code_content(self):
+        """获取代码内容"""
+        return self.code_editor.toPlainText()
 
 
 class CodeConversionWorker(QThread):
@@ -49,14 +85,17 @@ class CodeConversionWorker(QThread):
             self.progress_updated.emit(10, "初始化转换器...")
             
             # 创建转换器
-            converter = JQToPtradeConverter(self.mapping_file)
-            self.progress_updated.emit(50, "正在转换代码...")
-            
-            # 执行转换
-            output_code = converter.convert(self.input_code)
-            self.progress_updated.emit(90, "转换完成...")
-            
-            self.conversion_finished.emit(True, self.input_code, output_code)
+            if CONVERTER_AVAILABLE and JQToPtradeConverter:
+                converter = JQToPtradeConverter(self.mapping_file)
+                self.progress_updated.emit(50, "正在转换代码...")
+                
+                # 执行转换
+                output_code = converter.convert(self.input_code)
+                self.progress_updated.emit(90, "转换完成...")
+                
+                self.conversion_finished.emit(True, self.input_code, output_code)
+            else:
+                raise ImportError("代码转换器不可用")
         except Exception as e:
             error_msg = f"转换失败: {str(e)}"
             self.conversion_finished.emit(False, self.input_code, error_msg)
@@ -81,11 +120,11 @@ class JQToPtradeWidget(QWidget):
         title_font.setPointSize(16)
         title_font.setBold(True)
         title_label.setFont(title_font)
-        title_label.setAlignment(Qt.AlignCenter)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
         
         # 主要功能区域
-        main_splitter = QSplitter(Qt.Horizontal)
+        main_splitter = QSplitter(Qt.Orientation.Horizontal)
         layout.addWidget(main_splitter)
         
         # 左侧控制面板
@@ -105,6 +144,11 @@ class JQToPtradeWidget(QWidget):
         input_file_layout.addWidget(self.input_file_edit)
         input_file_layout.addWidget(self.browse_input_button)
         file_layout.addRow("输入文件:", input_file_layout)
+        
+        # 粘贴输入按钮
+        self.paste_input_button = QPushButton("粘贴代码")
+        self.paste_input_button.clicked.connect(self.use_paste_input)
+        file_layout.addRow("", self.paste_input_button)
         
         # 输出文件
         output_file_layout = QHBoxLayout()
@@ -160,7 +204,7 @@ class JQToPtradeWidget(QWidget):
         
         # 状态标签
         self.status_label = QLabel("就绪")
-        self.status_label.setAlignment(Qt.AlignCenter)
+        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         control_layout_main.addWidget(self.status_label)
         
         control_layout.addWidget(control_group)
@@ -254,6 +298,19 @@ class JQToPtradeWidget(QWidget):
                 self.output_file_edit.setText(output_path)
                 self.current_output_file = output_path
     
+    def use_paste_input(self):
+        """使用粘贴输入"""
+        # 创建一个对话框让用户粘贴代码
+        paste_dialog = PasteInputDialog(self)
+        if paste_dialog.exec_() == PasteInputDialog.Accepted:
+            code_content = paste_dialog.get_code_content()
+            if code_content:
+                self.input_code_preview.setPlainText(code_content)
+                self.current_input_file = ""  # 清空文件路径，表示使用粘贴输入
+                self.input_file_edit.clear()
+                self.status_label.setText("已加载粘贴的代码")
+                self.update_ui_state()
+    
     def browse_output_file(self):
         """浏览输出文件"""
         file_path, _ = QFileDialog.getSaveFileName(
@@ -283,17 +340,22 @@ class JQToPtradeWidget(QWidget):
     
     def start_conversion(self):
         """开始转换"""
-        if not self.current_input_file:
-            QMessageBox.warning(self, "警告", "请先选择输入文件")
-            return
-            
-        # 读取输入文件内容
-        try:
-            with open(self.current_input_file, 'r', encoding='utf-8') as f:
-                input_code = f.read()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"无法读取输入文件: {str(e)}")
-            return
+        input_code = ""
+        
+        # 如果有文件路径，则从文件读取
+        if self.current_input_file:
+            try:
+                with open(self.current_input_file, 'r', encoding='utf-8') as f:
+                    input_code = f.read()
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"无法读取输入文件: {str(e)}")
+                return
+        else:
+            # 否则从输入预览区域获取代码
+            input_code = self.input_code_preview.toPlainText()
+            if not input_code.strip():
+                QMessageBox.warning(self, "警告", "请输入或粘贴聚宽策略代码")
+                return
         
         # 检查转换器是否可用
         if not CONVERTER_AVAILABLE:
@@ -371,7 +433,7 @@ class JQToPtradeWidget(QWidget):
     
     def update_ui_state(self):
         """更新UI状态"""
-        has_input = bool(self.current_input_file)
+        has_input = bool(self.current_input_file) or bool(self.input_code_preview.toPlainText().strip())
         self.convert_button.setEnabled(has_input and CONVERTER_AVAILABLE)
 
 
