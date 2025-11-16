@@ -49,13 +49,14 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
 
 # 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_path)
 import easy_xt
 
 # 导入各个功能组件
-from widgets.backtest_widget import BacktestWidget
-from widgets.jq2qmt_widget import JQ2QMTWidget
-from widgets.jq_to_ptrade_widget import JQToPtradeWidget
+from gui_app.widgets.backtest_widget import BacktestWidget
+from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
+from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
 
 
 class MainWindow(QMainWindow):
