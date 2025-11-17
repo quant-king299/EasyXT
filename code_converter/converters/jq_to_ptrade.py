@@ -110,6 +110,9 @@ class JQToPtradeConverter:
             # 清理重复内容
             ptrade_code = self._clean_duplicate_content(ptrade_code)
             
+            # 移除聚宽的定时任务函数，将它们的逻辑整合到Ptrade的标准函数中
+            ptrade_code = self._integrate_timing_functions(ptrade_code)
+            
             return ptrade_code
             
         except Exception as e:
@@ -211,6 +214,16 @@ def handle_data(context, data):
 '''
             code = code.rstrip() + handle_func
         
+        # 确保有after_trading_end函数
+        if 'after_trading_end' not in existing_functions:
+            # 在代码末尾添加after_trading_end函数
+            after_func = '''
+def after_trading_end(context, data):
+    # 收盘后处理
+    pass
+'''
+            code = code.rstrip() + after_func
+        
         return code
     
     def _clean_duplicate_content(self, code: str) -> str:
@@ -251,6 +264,136 @@ def handle_data(context, data):
                 seen_lines.add(line.strip())
         
         return '\n'.join(cleaned_lines)
+    
+    def _integrate_timing_functions(self, code: str) -> str:
+        """
+        整合定时任务函数逻辑到Ptrade标准函数中
+        
+        Args:
+            code: 代码
+            
+        Returns:
+            str: 整合后的代码
+        """
+        lines = code.split('\n')
+        new_lines = []
+        timing_functions = {}
+        current_func = None
+        func_lines = []
+        
+        # 提取聚宽的定时任务函数
+        for line in lines:
+            if line.startswith('def '):
+                # 保存之前的函数
+                if current_func and current_func in ['before_market_open', 'market_open', 'after_market_close']:
+                    timing_functions[current_func] = func_lines[:]
+                
+                # 开始新函数
+                current_func = line.split('(')[0].replace('def ', '').strip()
+                func_lines = [line]
+            elif current_func:
+                func_lines.append(line)
+            else:
+                new_lines.append(line)
+        
+        # 保存最后一个函数
+        if current_func and current_func in ['before_market_open', 'market_open', 'after_market_close']:
+            timing_functions[current_func] = func_lines[:]
+        
+        # 将定时任务函数的逻辑整合到Ptrade标准函数中
+        # before_market_open -> before_trading_start
+        # market_open -> handle_data
+        # after_market_close -> after_trading_end
+        
+        # 处理before_trading_start函数
+        if 'before_market_open' in timing_functions:
+            before_trading_lines = []
+            for i, line in enumerate(new_lines):
+                if line.strip() == 'def before_trading_start(context, data):':
+                    before_trading_lines.append(line)
+                    # 跳过原来的函数体
+                    j = i + 1
+                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
+                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                            break
+                        before_trading_lines.append(new_lines[j])
+                        j += 1
+                    
+                    # 添加before_market_open函数的逻辑（移除函数定义行）
+                    for func_line in timing_functions['before_market_open'][1:]:
+                        # 替换参数 (context, data) -> (context)
+                        if 'context, data' in func_line:
+                            func_line = func_line.replace('context, data', 'context')
+                        before_trading_lines.append(func_line)
+                    
+                    # 继续添加剩余的行
+                    new_lines = before_trading_lines + new_lines[j:]
+                    break
+        
+        # 处理handle_data函数
+        if 'market_open' in timing_functions:
+            handle_data_lines = []
+            for i, line in enumerate(new_lines):
+                if line.strip() == 'def handle_data(context, data):':
+                    handle_data_lines.append(line)
+                    # 跳过原来的函数体
+                    j = i + 1
+                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
+                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                            break
+                        handle_data_lines.append(new_lines[j])
+                        j += 1
+                    
+                    # 添加market_open函数的逻辑（移除函数定义行）
+                    for func_line in timing_functions['market_open'][1:]:
+                        # 替换参数 (context, data) -> (context)
+                        if 'context, data' in func_line:
+                            func_line = func_line.replace('context, data', 'context')
+                        handle_data_lines.append(func_line)
+                    
+                    # 继续添加剩余的行
+                    new_lines = handle_data_lines + new_lines[j:]
+                    break
+        
+        # 处理after_trading_end函数
+        if 'after_market_close' in timing_functions:
+            after_trading_lines = []
+            for i, line in enumerate(new_lines):
+                if line.strip() == 'def after_trading_end(context, data):':
+                    after_trading_lines.append(line)
+                    # 跳过原来的函数体
+                    j = i + 1
+                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
+                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                            break
+                        after_trading_lines.append(new_lines[j])
+                        j += 1
+                    
+                    # 添加after_market_close函数的逻辑（移除函数定义行）
+                    for func_line in timing_functions['after_market_close'][1:]:
+                        # 替换参数 (context, data) -> (context)
+                        if 'context, data' in func_line:
+                            func_line = func_line.replace('context, data', 'context')
+                        after_trading_lines.append(func_line)
+                    
+                    # 继续添加剩余的行
+                    new_lines = after_trading_lines + new_lines[j:]
+                    break
+        
+        # 移除原始的定时任务函数定义
+        final_lines = []
+        skip_function = False
+        for line in new_lines:
+            if line.startswith('def before_market_open(') or line.startswith('def market_open(') or line.startswith('def after_market_close('):
+                skip_function = True
+                continue
+            elif skip_function and line.strip() != '' and not line.startswith(' ') and not line.startswith('\t'):
+                skip_function = False
+                final_lines.append(line)
+            elif not skip_function:
+                final_lines.append(line)
+        
+        return '\n'.join(final_lines)
 
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
@@ -376,15 +519,7 @@ class JQToPtradeTransformer(ast.NodeTransformer):
         Returns:
             ast.AST: 转换后的节点
         """
-        # 检查是否是聚宽的定时任务函数，需要转换为Ptrade兼容的函数
-        function_name = node.name
-        if function_name in ['before_market_open', 'market_open', 'after_market_close']:
-            # 保持函数定义，但确保参数正确
-            # Ptrade函数通常接收context和data参数
-            if len(node.args.args) == 1 and node.args.args[0].arg == 'context':
-                # 添加data参数
-                node.args.args.append(ast.arg(arg='data', annotation=None))
-        
+        # 不再需要转换聚宽的定时任务函数参数，因为这些函数的逻辑会被整合到Ptrade标准函数中
         # 继续遍历子节点
         return self.generic_visit(node)
 
