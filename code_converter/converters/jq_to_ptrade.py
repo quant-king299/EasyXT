@@ -5,7 +5,7 @@ import ast
 import sys
 import json
 import os
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 
 class JQToPtradeConverter:
     """聚宽到Ptrade代码转换器"""
@@ -28,6 +28,7 @@ class JQToPtradeConverter:
                 'get_all_securities': 'get_all_securities',
                 'get_security_info': 'get_security_info',
                 'attribute_history': 'get_price',  # 聚宽的attribute_history映射到Ptrade的get_price
+                'get_bars': 'get_price',  # 聚宽的get_bars映射到Ptrade的get_price
                 
                 # 交易API
                 'order': 'order',
@@ -36,12 +37,13 @@ class JQToPtradeConverter:
                 'order_target_value': 'order_target_value',
                 'cancel_order': 'cancel_order',
                 'get_open_orders': 'get_open_orders',
+                'get_trades': 'get_trades',
+                'set_order_cost': 'set_order_cost',
                 
                 # 账户API
                 'get_portfolio': 'get_portfolio',
                 'get_positions': 'get_positions',
                 'get_orders': 'get_orders',
-                'get_trades': 'get_trades',
                 
                 # 系统API
                 'log': 'log',
@@ -60,6 +62,15 @@ class JQToPtradeConverter:
                 'run_weekly': 'run_weekly',
                 'run_monthly': 'run_monthly',
             }
+        
+        # 需要移除的API（Ptrade不支持的API）
+        self.removed_apis = {
+            'set_option',
+            'set_commission',
+            'set_slippage',
+            'set_price_limit',
+            'set_benchmark'
+        }
         
         # 需要特殊处理的API
         self.special_handlers = {
@@ -108,7 +119,7 @@ class JQToPtradeConverter:
             ast.AST: 转换后的AST树
         """
         # 创建转换器访问器
-        transformer = JQToPtradeTransformer(self.api_mapping, self.special_handlers, self.import_mapping)
+        transformer = JQToPtradeTransformer(self.api_mapping, self.special_handlers, self.import_mapping, self.removed_apis)
         return transformer.visit(tree)
     
     def _add_header(self, code: str) -> str:
@@ -130,12 +141,13 @@ class JQToPtradeConverter:
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
     
-    def __init__(self, api_mapping: Dict[str, str], special_handlers: Dict[str, Any], import_mapping: Dict[str, str]):
+    def __init__(self, api_mapping: Dict[str, str], special_handlers: Dict[str, Any], import_mapping: Dict[str, str], removed_apis: set):
         self.api_mapping = api_mapping
         self.special_handlers = special_handlers
         self.import_mapping = import_mapping
+        self.removed_apis = removed_apis
     
-    def visit_Call(self, node: ast.Call) -> ast.AST:
+    def visit_Call(self, node: ast.Call) -> Optional[ast.AST]:
         """
         转换函数调用节点
         
@@ -148,7 +160,11 @@ class JQToPtradeTransformer(ast.NodeTransformer):
         # 如果是函数调用，检查是否需要映射
         if isinstance(node.func, ast.Name):
             func_name = node.func.id
-            if func_name in self.api_mapping:
+            # 检查是否是需要移除的API
+            if func_name in self.removed_apis:
+                # 返回None来移除节点
+                return None
+            elif func_name in self.api_mapping:
                 # 映射函数名
                 node.func.id = self.api_mapping[func_name]
         elif isinstance(node.func, ast.Attribute):
@@ -170,14 +186,14 @@ class JQToPtradeTransformer(ast.NodeTransformer):
         # 继续遍历子节点
         return self.generic_visit(node)
     
-    def visit_Import(self, node: ast.Import) -> Any:
+    def visit_Import(self, node: ast.Import) -> Optional[ast.AST]:
         """
         转换导入语句 - Ptrade不需要导入语句，直接移除
         """
         # 返回None来移除节点
         return None
     
-    def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
+    def visit_ImportFrom(self, node: ast.ImportFrom) -> Optional[ast.AST]:
         """
         转换from导入语句 - Ptrade不需要导入语句，直接移除
         """
@@ -216,6 +232,24 @@ class JQToPtradeTransformer(ast.NodeTransformer):
         if node.id == 'g':
             # 将 g 转换为 context
             node.id = 'context'
+        return self.generic_visit(node)
+    
+    def visit_Expr(self, node: ast.Expr) -> Optional[ast.AST]:
+        """
+        转换表达式语句
+        
+        Args:
+            node: 表达式节点
+            
+        Returns:
+            ast.AST: 转换后的节点
+        """
+        # 如果表达式包含需要移除的函数调用，移除整个表达式
+        if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
+            if node.value.func.id in self.removed_apis:
+                return None
+        
+        # 继续遍历子节点
         return self.generic_visit(node)
 
 # 使用示例
