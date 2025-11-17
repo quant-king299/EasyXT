@@ -388,8 +388,16 @@ def after_trading_end(context, data):
                         # 替换g.为context.，但避免错误替换log为locontext
                         func_line = func_line.replace('g.', 'context.')
                         func_line = func_line.replace('locontext.', 'log.')
-                        # 替换get_bars为get_price
-                        func_line = func_line.replace('get_bars', 'get_price')
+                        # 替换get_bars为get_price，并修正参数
+                        func_line = func_line.replace("get_bars(security, count=5, unit='1d', fields=['close'])", 
+                                                    "get_price(security, count=5, fields=['close'])")
+                        # 修正get_price参数，移除unit参数
+                        func_line = func_line.replace("get_price(security, count=5, unit='1d', fields=['close'])", 
+                                                    "get_price(security, count=5, fields=['close'])")
+                        # 修正Portfolio属性访问，将available_cash替换为cash
+                        func_line = func_line.replace('context.portfolio.available_cash', 'context.portfolio.cash')
+                        # 修正StockPosition属性访问，将closeable_amount替换为amount
+                        func_line = func_line.replace('.closeable_amount', '.amount')
                         # 添加适当的缩进
                         if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
                             result_lines.append('    ' + func_line)

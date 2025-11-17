@@ -16,6 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description='聚宽到Ptrade代码转换器')
     parser.add_argument('input_file', help='输入的聚宽策略文件路径')
     parser.add_argument('-o', '--output', help='输出的Ptrade策略文件路径')
+    parser.add_argument('-m', '--mapping', help='API映射文件路径')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     
     args = parser.parse_args()
@@ -31,8 +32,16 @@ def main():
         print(f"错误: 读取输入文件失败: {e}")
         sys.exit(1)
     
+    # 确定API映射文件路径
+    api_mapping_file = args.mapping
+    if not api_mapping_file:
+        # 默认使用项目中的映射文件
+        default_mapping = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'api_mapping.json')
+        if os.path.exists(default_mapping):
+            api_mapping_file = default_mapping
+    
     # 创建转换器
-    converter = JQToPtradeConverter()
+    converter = JQToPtradeConverter(api_mapping_file)
     
     # 转换代码
     try:
