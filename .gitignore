@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿# Python
+﻿﻿﻿﻿﻿﻿﻿﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -259,3 +259,6 @@ QMT-MCP/
 code_converter/*.pdf
 code_converter/*.html
 code_converter/*.docx
+code_converter/api_docs/*.pdf
+code_converter/api_docs/*.html
+code_converter/api_docs/*.docx
