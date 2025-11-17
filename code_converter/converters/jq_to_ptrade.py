@@ -69,7 +69,8 @@ class JQToPtradeConverter:
             'set_commission',
             'set_slippage',
             'set_price_limit',
-            'set_benchmark'
+            'set_benchmark',
+            'set_order_cost'
         }
         
         # 需要特殊处理的API
@@ -102,6 +103,9 @@ class JQToPtradeConverter:
             
             # 添加必要的头部信息（不包含导入语句）
             ptrade_code = self._add_header(ptrade_code)
+            
+            # 确保生成符合Ptrade要求的策略结构
+            ptrade_code = self._ensure_ptrade_structure(ptrade_code)
             
             return ptrade_code
             
@@ -137,6 +141,75 @@ class JQToPtradeConverter:
 
 '''
         return header + code
+    
+    def _ensure_ptrade_structure(self, code: str) -> str:
+        """
+        确保生成符合Ptrade要求的策略结构
+        
+        Args:
+            code: 转换后的代码
+            
+        Returns:
+            str: 符合Ptrade结构的代码
+        """
+        # 移除重复的头部信息
+        if code.startswith('# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n'):
+            code = '# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n' + code.split('\n\n', 2)[-1]
+        
+        # 检查是否包含initialize函数
+        if 'def initialize(context):' not in code:
+            # 添加initialize函数
+            init_function = '''def initialize(context):
+    # 初始化
+    pass
+
+'''
+            code = init_function + code
+        
+        # 检查是否包含handle_data函数
+        if 'def handle_data(context, data):' not in code:
+            # 添加handle_data函数
+            handle_data_function = '''
+def handle_data(context, data):
+    # 盘中处理
+    pass
+'''
+            code = code.rstrip() + '\n' + handle_data_function
+        
+        # 检查是否包含before_trading_start函数
+        if 'def before_trading_start(context, data):' not in code:
+            # 添加before_trading_start函数
+            before_trading_function = '''def before_trading_start(context, data):
+    # 盘前处理
+    pass
+
+'''
+            # 在initialize函数后插入before_trading_start函数
+            if 'def initialize(context):' in code:
+                lines = code.split('\n')
+                new_lines = []
+                inserted = False
+                for i, line in enumerate(lines):
+                    new_lines.append(line)
+                    # 在initialize函数结束后插入
+                    if (not inserted and line.strip() == 'def initialize(context):' and 
+                        i + 1 < len(lines) and lines[i + 1].strip() != '' and 
+                        not lines[i + 1].startswith(' ')):
+                        new_lines.append('')
+                        new_lines.append('def before_trading_start(context, data):')
+                        new_lines.append('    # 盘前处理')
+                        new_lines.append('    pass')
+                        new_lines.append('')
+                        inserted = True
+                if not inserted:
+                    # 如果没有找到合适的位置，就添加到代码末尾
+                    code = code.rstrip() + '\n\n' + before_trading_function
+                else:
+                    code = '\n'.join(new_lines)
+            else:
+                code = code.rstrip() + '\n\n' + before_trading_function
+        
+        return code
 
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
