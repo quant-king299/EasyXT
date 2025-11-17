@@ -107,6 +107,9 @@ class JQToPtradeConverter:
             # 确保生成符合Ptrade要求的策略结构
             ptrade_code = self._ensure_ptrade_structure(ptrade_code)
             
+            # 清理重复内容
+            ptrade_code = self._clean_duplicate_content(ptrade_code)
+            
             return ptrade_code
             
         except Exception as e:
@@ -156,60 +159,98 @@ class JQToPtradeConverter:
         if code.startswith('# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n'):
             code = '# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n' + code.split('\n\n', 2)[-1]
         
-        # 检查是否包含initialize函数
-        if 'def initialize(context):' not in code:
-            # 添加initialize函数
-            init_function = '''def initialize(context):
+        # 确保有正确的函数结构
+        required_functions = ['initialize', 'before_trading_start', 'handle_data']
+        existing_functions = []
+        
+        # 检查已存在的函数
+        lines = code.split('\n')
+        for line in lines:
+            if line.startswith('def '):
+                func_name = line.split('(')[0].replace('def ', '').strip()
+                existing_functions.append(func_name)
+        
+        # 添加缺失的函数
+        if 'initialize' not in existing_functions:
+            # 在代码开头添加initialize函数
+            init_func = '''def initialize(context):
     # 初始化
     pass
 
 '''
-            code = init_function + code
+            code = init_func + code
         
-        # 检查是否包含handle_data函数
-        if 'def handle_data(context, data):' not in code:
-            # 添加handle_data函数
-            handle_data_function = '''
+        if 'before_trading_start' not in existing_functions:
+            # 在initialize函数后添加before_trading_start函数
+            lines = code.split('\n')
+            new_lines = []
+            inserted = False
+            for line in lines:
+                new_lines.append(line)
+                if line.strip() == 'def initialize(context):' and not inserted:
+                    # 跳过initialize函数体
+                    i = len(new_lines)
+                    while i < len(lines) and (lines[i].strip() == '' or lines[i].startswith(' ') or lines[i].startswith('\t')):
+                        new_lines.append(lines[i])
+                        i += 1
+                    # 添加before_trading_start函数
+                    new_lines.append('')
+                    new_lines.append('def before_trading_start(context, data):')
+                    new_lines.append('    # 盘前处理')
+                    new_lines.append('    pass')
+                    new_lines.append('')
+                    inserted = True
+            code = '\n'.join(new_lines)
+        
+        if 'handle_data' not in existing_functions:
+            # 在代码末尾添加handle_data函数
+            handle_func = '''
 def handle_data(context, data):
     # 盘中处理
     pass
 '''
-            code = code.rstrip() + '\n' + handle_data_function
-        
-        # 检查是否包含before_trading_start函数
-        if 'def before_trading_start(context, data):' not in code:
-            # 添加before_trading_start函数
-            before_trading_function = '''def before_trading_start(context, data):
-    # 盘前处理
-    pass
-
-'''
-            # 在initialize函数后插入before_trading_start函数
-            if 'def initialize(context):' in code:
-                lines = code.split('\n')
-                new_lines = []
-                inserted = False
-                for i, line in enumerate(lines):
-                    new_lines.append(line)
-                    # 在initialize函数结束后插入
-                    if (not inserted and line.strip() == 'def initialize(context):' and 
-                        i + 1 < len(lines) and lines[i + 1].strip() != '' and 
-                        not lines[i + 1].startswith(' ')):
-                        new_lines.append('')
-                        new_lines.append('def before_trading_start(context, data):')
-                        new_lines.append('    # 盘前处理')
-                        new_lines.append('    pass')
-                        new_lines.append('')
-                        inserted = True
-                if not inserted:
-                    # 如果没有找到合适的位置，就添加到代码末尾
-                    code = code.rstrip() + '\n\n' + before_trading_function
-                else:
-                    code = '\n'.join(new_lines)
-            else:
-                code = code.rstrip() + '\n\n' + before_trading_function
+            code = code.rstrip() + handle_func
         
         return code
+    
+    def _clean_duplicate_content(self, code: str) -> str:
+        """
+        清理重复内容
+        
+        Args:
+            code: 代码
+            
+        Returns:
+            str: 清理后的代码
+        """
+        lines = code.split('\n')
+        cleaned_lines = []
+        seen_lines = set()
+        
+        for line in lines:
+            # 跳过空行的重复检查
+            if line.strip() == '':
+                cleaned_lines.append(line)
+                continue
+                
+            # 如果是函数定义行，重置seen_lines
+            if line.startswith('def '):
+                seen_lines = set()
+                cleaned_lines.append(line)
+                seen_lines.add(line.strip())
+                continue
+                
+            # 如果是注释行，允许重复
+            if line.strip().startswith('#'):
+                cleaned_lines.append(line)
+                continue
+                
+            # 检查是否已经见过这一行
+            if line.strip() not in seen_lines:
+                cleaned_lines.append(line)
+                seen_lines.add(line.strip())
+        
+        return '\n'.join(cleaned_lines)
 
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
@@ -321,6 +362,28 @@ class JQToPtradeTransformer(ast.NodeTransformer):
         if isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Name):
             if node.value.func.id in self.removed_apis:
                 return None
+        
+        # 继续遍历子节点
+        return self.generic_visit(node)
+    
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> ast.AST:
+        """
+        转换函数定义
+        
+        Args:
+            node: 函数定义节点
+            
+        Returns:
+            ast.AST: 转换后的节点
+        """
+        # 检查是否是聚宽的定时任务函数，需要转换为Ptrade兼容的函数
+        function_name = node.name
+        if function_name in ['before_market_open', 'market_open', 'after_market_close']:
+            # 保持函数定义，但确保参数正确
+            # Ptrade函数通常接收context和data参数
+            if len(node.args.args) == 1 and node.args.args[0].arg == 'context':
+                # 添加data参数
+                node.args.args.append(ast.arg(arg='data', annotation=None))
         
         # 继续遍历子节点
         return self.generic_visit(node)
