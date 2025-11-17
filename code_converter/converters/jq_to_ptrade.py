@@ -279,7 +279,6 @@ def after_trading_end(context, data):
             str: 整合后的代码
         """
         lines = code.split('\n')
-        new_lines = []
         timing_functions = {}
         current_func = None
         func_lines = []
@@ -296,12 +295,14 @@ def after_trading_end(context, data):
                 func_lines = [line]
             elif current_func:
                 func_lines.append(line)
-            else:
-                new_lines.append(line)
+            # 不再添加else子句，因为我们只关心函数定义内的内容
         
         # 保存最后一个函数
         if current_func and current_func in ['before_market_open', 'market_open', 'after_market_close']:
             timing_functions[current_func] = func_lines[:]
+        
+        # 重置current_func
+        current_func = None
         
         # 将定时任务函数的逻辑整合到Ptrade标准函数中
         # before_market_open -> before_trading_start
@@ -310,137 +311,126 @@ def after_trading_end(context, data):
         
         # 处理initialize函数 - 移除run_daily调用
         final_lines = []
-        for line in new_lines:
+        for line in lines:
             if 'run_daily(' in line:
                 # 跳过run_daily调用行
                 continue
             final_lines.append(line)
         
-        # 处理before_trading_start函数
-        if 'before_market_open' in timing_functions:
-            before_trading_lines = []
-            for i, line in enumerate(final_lines):
-                if line.strip() == 'def before_trading_start(context, data):':
-                    before_trading_lines.append(line)
-                    # 跳过原来的函数体直到找到结束位置
-                    j = i + 1
-                    indent_level = None
-                    while j < len(final_lines):
-                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
-                            if final_lines[j].strip() != '':
-                                if indent_level is None:
-                                    # 计算缩进级别
-                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
-                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
-                                    # 函数体结束
-                                    break
-                            before_trading_lines.append(final_lines[j])
-                            j += 1
-                        else:
+        # 处理各个标准函数
+        result_lines = []
+        i = 0
+        while i < len(final_lines):
+            line = final_lines[i]
+            
+            # 跳过原始的定时任务函数定义
+            if line.startswith('def before_market_open(') or line.startswith('def market_open(') or line.startswith('def after_market_close('):
+                # 跳过整个函数定义
+                i += 1
+                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
+                    i += 1
+                continue
+            
+            # 处理before_trading_start函数
+            if line.strip() == 'def before_trading_start(context, data):':
+                result_lines.append(line)
+                i += 1
+                # 复制原函数体
+                indent_level = None
+                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
+                    current_line = final_lines[i]
+                    # 计算缩进级别
+                    if current_line.strip() != '':
+                        if indent_level is None:
+                            indent_level = len(current_line) - len(current_line.lstrip())
+                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
                             # 函数体结束
                             break
-                    
-                    # 添加before_market_open函数的逻辑（移除函数定义行）
+                    result_lines.append(current_line)
+                    i += 1
+                
+                # 添加before_market_open函数的逻辑
+                if 'before_market_open' in timing_functions:
+                    result_lines.append('')
                     for func_line in timing_functions['before_market_open'][1:]:
-                        # 替换g.为context.
+                        # 替换g.为context.，但避免错误替换log为locontext
                         func_line = func_line.replace('g.', 'context.')
+                        func_line = func_line.replace('locontext.', 'log.')
                         # 添加适当的缩进
                         if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            func_line = '    ' + func_line
-                        before_trading_lines.append(func_line)
-                    
-                    # 继续添加剩余的行
-                    final_lines = before_trading_lines + final_lines[j:]
-                    break
-        
-        # 处理handle_data函数
-        if 'market_open' in timing_functions:
-            handle_data_lines = []
-            for i, line in enumerate(final_lines):
-                if line.strip() == 'def handle_data(context, data):':
-                    handle_data_lines.append(line)
-                    # 跳过原来的函数体直到找到结束位置
-                    j = i + 1
-                    indent_level = None
-                    while j < len(final_lines):
-                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
-                            if final_lines[j].strip() != '':
-                                if indent_level is None:
-                                    # 计算缩进级别
-                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
-                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
-                                    # 函数体结束
-                                    break
-                            handle_data_lines.append(final_lines[j])
-                            j += 1
+                            result_lines.append('    ' + func_line)
                         else:
+                            result_lines.append(func_line)
+                continue
+            
+            # 处理handle_data函数
+            if line.strip() == 'def handle_data(context, data):':
+                result_lines.append(line)
+                i += 1
+                # 复制原函数体
+                indent_level = None
+                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
+                    current_line = final_lines[i]
+                    # 计算缩进级别
+                    if current_line.strip() != '':
+                        if indent_level is None:
+                            indent_level = len(current_line) - len(current_line.lstrip())
+                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
                             # 函数体结束
                             break
-                    
-                    # 添加market_open函数的逻辑（移除函数定义行）
+                    result_lines.append(current_line)
+                    i += 1
+                
+                # 添加market_open函数的逻辑
+                if 'market_open' in timing_functions:
+                    result_lines.append('')
                     for func_line in timing_functions['market_open'][1:]:
-                        # 替换g.为context.
+                        # 替换g.为context.，但避免错误替换log为locontext
                         func_line = func_line.replace('g.', 'context.')
+                        func_line = func_line.replace('locontext.', 'log.')
                         # 替换get_bars为get_price
                         func_line = func_line.replace('get_bars', 'get_price')
                         # 添加适当的缩进
                         if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            func_line = '    ' + func_line
-                        handle_data_lines.append(func_line)
-                    
-                    # 继续添加剩余的行
-                    final_lines = handle_data_lines + final_lines[j:]
-                    break
-        
-        # 处理after_trading_end函数
-        if 'after_market_close' in timing_functions:
-            after_trading_lines = []
-            for i, line in enumerate(final_lines):
-                if line.strip() == 'def after_trading_end(context, data):':
-                    after_trading_lines.append(line)
-                    # 跳过原来的函数体直到找到结束位置
-                    j = i + 1
-                    indent_level = None
-                    while j < len(final_lines):
-                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
-                            if final_lines[j].strip() != '':
-                                if indent_level is None:
-                                    # 计算缩进级别
-                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
-                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
-                                    # 函数体结束
-                                    break
-                            after_trading_lines.append(final_lines[j])
-                            j += 1
+                            result_lines.append('    ' + func_line)
                         else:
+                            result_lines.append(func_line)
+                continue
+            
+            # 处理after_trading_end函数
+            if line.strip() == 'def after_trading_end(context, data):':
+                result_lines.append(line)
+                i += 1
+                # 复制原函数体
+                indent_level = None
+                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
+                    current_line = final_lines[i]
+                    # 计算缩进级别
+                    if current_line.strip() != '':
+                        if indent_level is None:
+                            indent_level = len(current_line) - len(current_line.lstrip())
+                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
                             # 函数体结束
                             break
-                    
-                    # 添加after_market_close函数的逻辑（移除函数定义行）
+                    result_lines.append(current_line)
+                    i += 1
+                
+                # 添加after_market_close函数的逻辑
+                if 'after_market_close' in timing_functions:
+                    result_lines.append('')
                     for func_line in timing_functions['after_market_close'][1:]:
-                        # 替换g.为context.
+                        # 替换g.为context.，但避免错误替换log为locontext
                         func_line = func_line.replace('g.', 'context.')
+                        func_line = func_line.replace('locontext.', 'log.')
                         # 添加适当的缩进
                         if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            func_line = '    ' + func_line
-                        after_trading_lines.append(func_line)
-                    
-                    # 继续添加剩余的行
-                    final_lines = after_trading_lines + final_lines[j:]
-                    break
-        
-        # 移除原始的定时任务函数定义
-        result_lines = []
-        skip_function = False
-        for line in final_lines:
-            if line.startswith('def before_market_open(') or line.startswith('def market_open(') or line.startswith('def after_market_close('):
-                skip_function = True
+                            result_lines.append('    ' + func_line)
+                        else:
+                            result_lines.append(func_line)
                 continue
-            elif skip_function and line.strip() != '' and not line.startswith(' ') and not line.startswith('\t') and not line.startswith('#'):
-                skip_function = False
-                result_lines.append(line)
-            elif not skip_function:
-                result_lines.append(line)
+            
+            result_lines.append(line)
+            i += 1
         
         return '\n'.join(result_lines)
 
