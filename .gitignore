@@ -1,4 +1,4 @@
-﻿﻿﻿﻿# Python
+﻿﻿﻿﻿﻿﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -254,3 +254,8 @@ PLAN.md
 scripts/
 markdown/
 QMT-MCP/
+
+# 忽略code_converter目录中的API文档文件
+code_converter/*.pdf
+code_converter/*.html
+code_converter/*.docx
