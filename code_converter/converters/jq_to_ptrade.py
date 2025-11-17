@@ -110,7 +110,7 @@ class JQToPtradeConverter:
             # 清理重复内容
             ptrade_code = self._clean_duplicate_content(ptrade_code)
             
-            # 移除聚宽的定时任务函数，将它们的逻辑整合到Ptrade的标准函数中
+            # 整合定时任务函数逻辑到Ptrade标准函数中
             ptrade_code = self._integrate_timing_functions(ptrade_code)
             
             return ptrade_code
@@ -163,7 +163,7 @@ class JQToPtradeConverter:
             code = '# 自动生成的Ptrade策略代码\n# 原始代码来自聚宽策略\n\n' + code.split('\n\n', 2)[-1]
         
         # 确保有正确的函数结构
-        required_functions = ['initialize', 'before_trading_start', 'handle_data']
+        required_functions = ['initialize', 'before_trading_start', 'handle_data', 'after_trading_end']
         existing_functions = []
         
         # 检查已存在的函数
@@ -203,7 +203,11 @@ class JQToPtradeConverter:
                     new_lines.append('    pass')
                     new_lines.append('')
                     inserted = True
-            code = '\n'.join(new_lines)
+            if inserted:
+                code = '\n'.join(new_lines)
+            else:
+                # 如果没有找到合适的位置，添加到代码末尾
+                code = code.rstrip() + '\n\ndef before_trading_start(context, data):\n    # 盘前处理\n    pass\n'
         
         if 'handle_data' not in existing_functions:
             # 在代码末尾添加handle_data函数
@@ -214,7 +218,6 @@ def handle_data(context, data):
 '''
             code = code.rstrip() + handle_func
         
-        # 确保有after_trading_end函数
         if 'after_trading_end' not in existing_functions:
             # 在代码末尾添加after_trading_end函数
             after_func = '''
@@ -305,95 +308,141 @@ def after_trading_end(context, data):
         # market_open -> handle_data
         # after_market_close -> after_trading_end
         
+        # 处理initialize函数 - 移除run_daily调用
+        final_lines = []
+        for line in new_lines:
+            if 'run_daily(' in line:
+                # 跳过run_daily调用行
+                continue
+            final_lines.append(line)
+        
         # 处理before_trading_start函数
         if 'before_market_open' in timing_functions:
             before_trading_lines = []
-            for i, line in enumerate(new_lines):
+            for i, line in enumerate(final_lines):
                 if line.strip() == 'def before_trading_start(context, data):':
                     before_trading_lines.append(line)
-                    # 跳过原来的函数体
+                    # 跳过原来的函数体直到找到结束位置
                     j = i + 1
-                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
-                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                    indent_level = None
+                    while j < len(final_lines):
+                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
+                            if final_lines[j].strip() != '':
+                                if indent_level is None:
+                                    # 计算缩进级别
+                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
+                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
+                                    # 函数体结束
+                                    break
+                            before_trading_lines.append(final_lines[j])
+                            j += 1
+                        else:
+                            # 函数体结束
                             break
-                        before_trading_lines.append(new_lines[j])
-                        j += 1
                     
                     # 添加before_market_open函数的逻辑（移除函数定义行）
                     for func_line in timing_functions['before_market_open'][1:]:
-                        # 替换参数 (context, data) -> (context)
-                        if 'context, data' in func_line:
-                            func_line = func_line.replace('context, data', 'context')
+                        # 替换g.为context.
+                        func_line = func_line.replace('g.', 'context.')
+                        # 添加适当的缩进
+                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
+                            func_line = '    ' + func_line
                         before_trading_lines.append(func_line)
                     
                     # 继续添加剩余的行
-                    new_lines = before_trading_lines + new_lines[j:]
+                    final_lines = before_trading_lines + final_lines[j:]
                     break
         
         # 处理handle_data函数
         if 'market_open' in timing_functions:
             handle_data_lines = []
-            for i, line in enumerate(new_lines):
+            for i, line in enumerate(final_lines):
                 if line.strip() == 'def handle_data(context, data):':
                     handle_data_lines.append(line)
-                    # 跳过原来的函数体
+                    # 跳过原来的函数体直到找到结束位置
                     j = i + 1
-                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
-                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                    indent_level = None
+                    while j < len(final_lines):
+                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
+                            if final_lines[j].strip() != '':
+                                if indent_level is None:
+                                    # 计算缩进级别
+                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
+                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
+                                    # 函数体结束
+                                    break
+                            handle_data_lines.append(final_lines[j])
+                            j += 1
+                        else:
+                            # 函数体结束
                             break
-                        handle_data_lines.append(new_lines[j])
-                        j += 1
                     
                     # 添加market_open函数的逻辑（移除函数定义行）
                     for func_line in timing_functions['market_open'][1:]:
-                        # 替换参数 (context, data) -> (context)
-                        if 'context, data' in func_line:
-                            func_line = func_line.replace('context, data', 'context')
+                        # 替换g.为context.
+                        func_line = func_line.replace('g.', 'context.')
+                        # 替换get_bars为get_price
+                        func_line = func_line.replace('get_bars', 'get_price')
+                        # 添加适当的缩进
+                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
+                            func_line = '    ' + func_line
                         handle_data_lines.append(func_line)
                     
                     # 继续添加剩余的行
-                    new_lines = handle_data_lines + new_lines[j:]
+                    final_lines = handle_data_lines + final_lines[j:]
                     break
         
         # 处理after_trading_end函数
         if 'after_market_close' in timing_functions:
             after_trading_lines = []
-            for i, line in enumerate(new_lines):
+            for i, line in enumerate(final_lines):
                 if line.strip() == 'def after_trading_end(context, data):':
                     after_trading_lines.append(line)
-                    # 跳过原来的函数体
+                    # 跳过原来的函数体直到找到结束位置
                     j = i + 1
-                    while j < len(new_lines) and (new_lines[j].strip() == '' or new_lines[j].startswith(' ') or new_lines[j].startswith('\t')):
-                        if 'pass' in new_lines[j] and '#' not in new_lines[j]:
+                    indent_level = None
+                    while j < len(final_lines):
+                        if final_lines[j].strip() == '' or final_lines[j].startswith(' ') or final_lines[j].startswith('\t'):
+                            if final_lines[j].strip() != '':
+                                if indent_level is None:
+                                    # 计算缩进级别
+                                    indent_level = len(final_lines[j]) - len(final_lines[j].lstrip())
+                                elif len(final_lines[j]) - len(final_lines[j].lstrip()) < indent_level and not final_lines[j].strip().startswith('#'):
+                                    # 函数体结束
+                                    break
+                            after_trading_lines.append(final_lines[j])
+                            j += 1
+                        else:
+                            # 函数体结束
                             break
-                        after_trading_lines.append(new_lines[j])
-                        j += 1
                     
                     # 添加after_market_close函数的逻辑（移除函数定义行）
                     for func_line in timing_functions['after_market_close'][1:]:
-                        # 替换参数 (context, data) -> (context)
-                        if 'context, data' in func_line:
-                            func_line = func_line.replace('context, data', 'context')
+                        # 替换g.为context.
+                        func_line = func_line.replace('g.', 'context.')
+                        # 添加适当的缩进
+                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
+                            func_line = '    ' + func_line
                         after_trading_lines.append(func_line)
                     
                     # 继续添加剩余的行
-                    new_lines = after_trading_lines + new_lines[j:]
+                    final_lines = after_trading_lines + final_lines[j:]
                     break
         
         # 移除原始的定时任务函数定义
-        final_lines = []
+        result_lines = []
         skip_function = False
-        for line in new_lines:
+        for line in final_lines:
             if line.startswith('def before_market_open(') or line.startswith('def market_open(') or line.startswith('def after_market_close('):
                 skip_function = True
                 continue
-            elif skip_function and line.strip() != '' and not line.startswith(' ') and not line.startswith('\t'):
+            elif skip_function and line.strip() != '' and not line.startswith(' ') and not line.startswith('\t') and not line.startswith('#'):
                 skip_function = False
-                final_lines.append(line)
+                result_lines.append(line)
             elif not skip_function:
-                final_lines.append(line)
+                result_lines.append(line)
         
-        return '\n'.join(final_lines)
+        return '\n'.join(result_lines)
 
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""
