@@ -1,0 +1,44 @@
+[build-system]
+requires = ["flit_core >=3.2,<4"]
+build-backend = "flit_core.buildapi"
+
+[project]
+name = "miniqmt-extended"
+version = "1.0.0"
+description = "MiniQMT扩展 - 基于迅投QMT的量化交易扩展工具包"
+readme = "README.md"
+authors = [{ name = "CodeBuddy", email = "noreply@example.com" }]
+license = { text = "MIT" }
+requires-python = ">=3.8"
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: Microsoft :: Windows",
+  "Topic :: Office/Business :: Financial :: Investment"
+]
+dependencies = [
+  "pandas>=1.3.0",
+  "numpy>=1.21.0",
+  "matplotlib>=3.5.0",
+  "requests>=2.25.0",
+  "psutil>=5.9.0",
+  "qstock>=1.0.0",
+  "akshare>=1.9.0",
+  "fastapi>=0.103.0",
+  "uvicorn>=0.23.0",
+  "pydantic>=1.10.0",
+  "PyQt5>=5.15.0",
+  "pillow>=8.0.0",
+  "backtrader>=1.9.78"
+]
+
+[project.urls]
+Homepage = "https://github.com/quant-king299/EasyXT"
+Source = "https://github.com/quant-king299/EasyXT"
+
+[project.scripts]
+# 如需 CLI，可在相应模块内实现 main()
+# miniqmt-cli = "miniqmt_extended.cli:main"
+
+[tool.flit.module]
+name = "easy_xt"

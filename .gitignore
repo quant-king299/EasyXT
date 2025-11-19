@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿# Python
+﻿﻿# Python
 __pycache__/
 *.py[cod]
 *$py.class
@@ -262,3 +262,11 @@ code_converter/*.docx
 code_converter/api_docs/*.pdf
 code_converter/api_docs/*.html
 code_converter/api_docs/*.docx
+
+# 忽略bilibili_videos目录中的视频相关文件
+bilibili_videos/
+bilibili_videos/*.html
+bilibili_videos/*.md
+bilibili_videos/*.mp4
+bilibili_videos/*.avi
+bilibili_videos/*.mov
