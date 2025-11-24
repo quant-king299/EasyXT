@@ -258,15 +258,16 @@ class AdvancedTradeAPI:
         code = StockCodeUtils.normalize_code(code)
         
         # 价格类型映射
+        # 为了与xt_trader保持一致，市价单使用LATEST_PRICE
         price_type_map = {
-            'market': xt_const.MARKET_PEER_PRICE_FIRST,
-            'limit': xt_const.FIX_PRICE,
-            '市价': xt_const.MARKET_PEER_PRICE_FIRST,
-            '限价': xt_const.FIX_PRICE
+            'market': xt_const.LATEST_PRICE if xt_const else 5,  # 市价单使用最新价
+            'limit': xt_const.FIX_PRICE if xt_const else 11,      # 限价单使用指定价
+            '市价': xt_const.LATEST_PRICE if xt_const else 5,
+            '限价': xt_const.FIX_PRICE if xt_const else 11
         }
         
-        xt_price_type = price_type_map.get(price_type, xt_const.FIX_PRICE)
-        xt_order_type = xt_const.STOCK_BUY if order_type == 'buy' else xt_const.STOCK_SELL
+        xt_price_type = price_type_map.get(price_type, xt_const.LATEST_PRICE if xt_const else 5)
+        xt_order_type = xt_const.STOCK_BUY if xt_const and order_type == 'buy' else xt_const.STOCK_SELL if xt_const else 24
         
         try:
             order_id = self.trader.order_stock(

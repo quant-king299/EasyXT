@@ -4,6 +4,11 @@
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![QMT](https://img.shields.io/badge/QMT-Compatible-orange.svg)](https://www.gtja.com/)
 [![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
+[![知识星球](https://img.shields.io/badge/知识星球-quant--king299-brightgreen)](https://www.zhihu.com/club/12345678901234567890)
+
+> 量化为王，策略致胜，我是只聊干货的王者 quant！
+>
+> 欢迎加入[知识星球](https://www.zhihu.com/club/12345678901234567890)，获取更多量化交易干货和一对一答疑服务！
 
 一个基于迅投QMT的量化交易扩展工具包，提供简化的API接口和丰富的学习实例。
 
@@ -56,7 +61,7 @@ miniqmt扩展/
 - 已安装并登录的 QMT 客户端（标准版或迷你版）
 - Windows 系统（QMT 限制）
 
-### 通过 pip 从 GitHub 安装（推荐用标签）
+### 通过 pip 从 GitHub 安装（推荐用于生产环境）
 
 推荐固定到稳定标签 v1.0.0：
 ```powershell
@@ -112,10 +117,38 @@ PY
 
 ### 项目源码方式安装（可选）
 
+#### # 克隆项目到本地
 ```bash
 git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
+```
+
+#### # 安装依赖到Python环境
+
+**方式一：直接安装依赖到系统Python环境**
+```bash
 pip install -r requirements.txt
+```
+
+**方式二：创建虚拟环境安装（推荐）**
+```bash
+# 创建虚拟环境
+python -m venv .venv
+# 激活虚拟环境（Windows）
+.\.venv\Scripts\activate
+# 安装依赖
+pip install -r requirements.txt
+```
+
+**方式三：通过pip从GitHub直接安装（推荐用于生产环境）**
+```bash
+# 可选：创建虚拟环境
+python -m venv .venv
+.\.venv\Scripts\activate
+
+# 更新pip并安装
+python -m pip install -U pip setuptools wheel
+pip install "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
 ```
 ## 🔧 配置
 
@@ -372,3 +405,7 @@ setx XTQUANT_PATH "C:\\xtquant_special"
 - 欢迎加入QQ交流群：492287081（或扫码加入）
 
 <img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="260" />
+
+- 欢迎加入知识星球，获取更多量化交易干货和一对一答疑服务
+
+<img src="docs/assets/知识星球.jpg" alt="知识星球二维码" width="260" />

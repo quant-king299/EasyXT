@@ -5,7 +5,7 @@ from tdxtrader.order import create_order, cancel_order
 from tdxtrader.logger import logger, add_wechat_handler
 from tdxtrader.anis import RED, RESET
 
-def start(account_id, mini_qmt_path, file_path, buy_sign, sell_sign, buy_event, sell_event, interval=1, cancel_after=None, wechat_webhook_url=None):
+def start(account_id, mini_qmt_path, file_path, buy_sign, sell_sign, buy_event, sell_event, interval=1, cancel_after=None, wechat_webhook_url=None, block_files=None):
 
     add_wechat_handler(logger, wechat_webhook_url)
 
@@ -18,7 +18,7 @@ def start(account_id, mini_qmt_path, file_path, buy_sign, sell_sign, buy_event, 
 
     while True:
         try:
-            previous_df = create_order(xt_trader, account, file_path, previous_df, buy_sign, sell_sign, buy_event, sell_event)
+            previous_df = create_order(xt_trader, account, file_path, previous_df, buy_sign, sell_sign, buy_event, sell_event, block_files)
             # 撤单
             cancel_order(xt_trader, account, cancel_after)
 

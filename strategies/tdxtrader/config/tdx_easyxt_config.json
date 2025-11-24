@@ -12,5 +12,9 @@
     "cancel_after": 10,
     "wechat_webhook_url": null,
     "default_volume": 100,
-    "price_type": "市价"
+    "price_type": "市价",
+    "block_files": {
+        "D:/new_tdx/T0002/blocknew/MR.blk": "buy",
+        "D:/new_tdx/T0002/blocknew/MC.blk": "sell"
+    }
 }

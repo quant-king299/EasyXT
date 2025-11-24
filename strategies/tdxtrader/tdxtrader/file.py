@@ -1,6 +1,7 @@
 import pandas as pd
 from tdxtrader.logger import logger
 from tdxtrader.anis import RED, GREEN, YELLOW, BLUE, RESET
+import os
 
 # 定义列名
 COLUMNS = ['code', 'name', 'date', 'time', 'price', 'rate', 'value', 'sign']
@@ -51,7 +52,9 @@ def read_file(file_path):
             with open(file_path, 'r', encoding=encoding, errors='ignore') as file:
                 first_line = file.readline()
                 if not first_line:  # 文件为空
-                    return pd.DataFrame(columns=COLUMNS)
+                    # 创建空的DataFrame
+                    empty_data = {col: pd.Series([], dtype='object') for col in COLUMNS}
+                    return pd.DataFrame(empty_data)
 
             # 逐行读取文件并处理
             rows = []
@@ -62,7 +65,14 @@ def read_file(file_path):
                         rows.append(processed_line)
 
             # 构建 DataFrame
-            df = pd.DataFrame(rows, columns=COLUMNS)
+            if rows:
+                # 使用pandas的构造方式避免类型错误
+                df_data = {col: [row[i] for row in rows] for i, col in enumerate(COLUMNS)}
+                df = pd.DataFrame(df_data)
+            else:
+                # 创建空的DataFrame
+                empty_data = {col: pd.Series([], dtype='object') for col in COLUMNS}
+                df = pd.DataFrame(empty_data)
             # 只有在成功读取且非空时才记录日志，减少冗余信息
             if not df.empty:
                 logger.info(f"读取到 {len(df)} 条新的预警信号")
@@ -87,3 +97,70 @@ def clear_file_content(file_path):
         logger.info(f"【重置文件】内容已清空")
     except Exception as e:
         logger.error(f"清空文件内容时发生错误: {e}")
+
+def read_block_file(block_file_path):
+    """
+    读取通达信自定义板块文件，返回股票代码列表
+    :param block_file_path: 板块文件路径
+    :return: 股票代码列表
+    """
+    stocks = []
+    try:
+        # 检查文件是否存在
+        if not os.path.exists(block_file_path):
+            logger.warning(f"板块文件不存在: {block_file_path}")
+            return stocks
+            
+        # 检查文件是否为空
+        if os.path.getsize(block_file_path) == 0:
+            logger.info(f"板块文件为空: {block_file_path}")
+            return stocks
+            
+        # 通达信板块文件使用GBK编码
+        encodings = ['gbk', 'gb2312', 'utf-8']
+        
+        for encoding in encodings:
+            try:
+                stocks = []
+                with open(block_file_path, 'r', encoding=encoding, errors='ignore') as file:
+                    for line in file:
+                        line = line.strip()
+                        # 跳过空行
+                        if not line:
+                            continue
+                        # 通达信板块文件可能包含多种格式的股票代码
+                        # 处理6位或7位数字股票代码
+                        if line.isdigit() and (len(line) == 6 or len(line) == 7):
+                            # 如果是7位数字，取后6位作为股票代码（例如：1600519 -> 600519）
+                            stock_code = line[-6:] if len(line) == 7 else line
+                            stocks.append(stock_code)
+                        # 处理带市场后缀的代码（如000001.SZ）
+                        elif '.' in line and len(line.split('.')[0]) == 6 and line.split('.')[0].isdigit():
+                            stocks.append(line.split('.')[0])
+                
+                if stocks:
+                    logger.info(f"从板块文件 {os.path.basename(block_file_path)} 读取到 {len(stocks)} 只股票: {stocks}")
+                    return stocks
+                else:
+                    logger.info(f"板块文件 {os.path.basename(block_file_path)} 中未找到有效股票代码")
+                    return stocks
+            except UnicodeError:
+                continue
+            except Exception as e:
+                logger.error(f"使用编码 {encoding} 读取板块文件时发生错误: {e}")
+                continue
+                
+        logger.warning(f"无法使用任何编码读取板块文件: {block_file_path}")
+        return stocks
+    except Exception as e:
+        logger.error(f"读取板块文件时发生错误: {e}")
+        return stocks
+
+def get_stock_name(code):
+    """
+    根据股票代码获取股票名称（简化实现，实际应用中可能需要查询数据库或API）
+    :param code: 股票代码
+    :return: 股票名称
+    """
+    # 这里只是一个简化实现，实际应用中可能需要查询数据库或API
+    return f"股票{code}"
