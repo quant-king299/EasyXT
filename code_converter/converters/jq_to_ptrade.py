@@ -6,6 +6,7 @@ import sys
 import json
 import os
 from typing import Dict, List, Any, Optional
+import statsmodels.api as sm
 
 class JQToPtradeConverter:
     """聚宽到Ptrade代码转换器"""
@@ -20,17 +21,20 @@ class JQToPtradeConverter:
             self.api_mapping = {
                 # 数据获取API
                 'get_price': 'get_price',
-                'get_current_data': 'get_current_data',
+                'get_current_data': 'get_snapshot',  # 聚宽的get_current_data映射到Ptrade的get_snapshot
                 'get_fundamentals': 'get_fundamentals',
                 'get_index_stocks': 'get_index_stocks',
                 'get_industry_stocks': 'get_industry_stocks',
                 'get_concept_stocks': 'get_concept_stocks',
-                'get_all_securities': 'get_all_securities',
-                'get_security_info': 'get_security_info',
-                'attribute_history': 'get_price',  # 聚宽的attribute_history映射到Ptrade的get_price
-                'get_bars': 'get_price',  # 聚宽的get_bars映射到Ptrade的get_price
-                
-                # 交易API
+                'get_all_securities': 'get_Ashares',  # 聚宽的get_all_securities映射到Ptrade的get_Ashares（获取A股代码列表）
+                'get_security_info': 'get_stock_info',  # 聚宽的get_security_info映射到Ptrade的get_stock_info
+                'attribute_history': 'get_history',  # 聚宽的attribute_history映射到Ptrade的get_history
+                'get_bars': 'get_history',  # 聚宽的get_bars映射到Ptrade的get_history
+                'get_snapshot': 'get_snapshot'  # Ptrade支持的get_snapshot
+            }
+            
+            # 交易API
+            self.api_mapping.update({
                 'order': 'order',
                 'order_value': 'order_value',
                 'order_target': 'order_target',
@@ -61,7 +65,7 @@ class JQToPtradeConverter:
                 'run_daily': 'run_daily',
                 'run_weekly': 'run_weekly',
                 'run_monthly': 'run_monthly',
-            }
+            })
         
         # 需要移除的API（Ptrade不支持的API）
         self.removed_apis = {
@@ -69,7 +73,6 @@ class JQToPtradeConverter:
             'set_commission',
             'set_slippage',
             'set_price_limit',
-            'set_benchmark',
             'set_order_cost'
         }
         
@@ -227,6 +230,17 @@ def after_trading_end(context, data):
 '''
             code = code.rstrip() + after_func
         
+        # 修复函数调用中的语法错误
+        lines = code.split('\n')
+        fixed_lines = []
+        for line in lines:
+            # 修复缺少右括号的函数调用
+            if ('run_daily(' in line or 'run_weekly(' in line) and line.count('(') > line.count(')'):
+                # 确保行末有右括号
+                line = line.rstrip() + ')'
+            fixed_lines.append(line)
+        code = '\n'.join(fixed_lines)
+        
         return code
     
     def _clean_duplicate_content(self, code: str) -> str:
@@ -278,169 +292,267 @@ def after_trading_end(context, data):
         Returns:
             str: 整合后的代码
         """
+        # 移除导入语句
+        code_lines = code.split('\n')
+        filtered_lines = []
+        for line in code_lines:
+            if not line.startswith('import ') and not line.startswith('from ') and not 'import' in line.split():
+                filtered_lines.append(line)
+        code = '\n'.join(filtered_lines)
+        
+        # 替换全局变量引用
+        code = code.replace('g.', 'context.')
+        
+        # 修复log替换错误
+        code = code.replace('locontext.', 'log.')
+        
+        # 移除不支持的API调用
+        for api in self.removed_apis:
+            # 移除整行的API调用
+            lines = code.split('\n')
+            filtered_lines = []
+            for line in lines:
+                if not line.strip().startswith(api + '('):
+                    filtered_lines.append(line)
+            code = '\n'.join(filtered_lines)
+        
+        # 修正定时任务函数调用
+        code = self._fix_timing_functions(code)
+        
+        # 修正API参数差异
+        code = self._fix_api_parameters(code)
+        
+        # 修复语法错误
+        code = self._fix_syntax_errors(code)
+        
+        # 修复缩进问题
+        code = self._fix_indentation(code)
+        
+        # 确保正确的函数结构
+        code = self._ensure_structure(code)
+        
+        return code
+    
+    def _fix_timing_functions(self, code: str) -> str:
+        """修正定时任务函数调用"""
+        import re
+        # 修正run_daily和run_weekly调用，移除reference_security参数，并调整参数顺序以适应Ptrade
         lines = code.split('\n')
-        timing_functions = {}
-        current_func = None
-        func_lines = []
+        fixed_lines = []
         
-        # 提取聚宽的定时任务函数
-        for line in lines:
-            if line.startswith('def '):
-                # 保存之前的函数
-                if current_func and current_func in ['before_market_open', 'market_open', 'after_market_close']:
-                    timing_functions[current_func] = func_lines[:]
-                
-                # 开始新函数
-                current_func = line.split('(')[0].replace('def ', '').strip()
-                func_lines = [line]
-            elif current_func:
-                func_lines.append(line)
-            # 不再添加else子句，因为我们只关心函数定义内的内容
-        
-        # 保存最后一个函数
-        if current_func and current_func in ['before_market_open', 'market_open', 'after_market_close']:
-            timing_functions[current_func] = func_lines[:]
-        
-        # 重置current_func
-        current_func = None
-        
-        # 将定时任务函数的逻辑整合到Ptrade标准函数中
-        # before_market_open -> before_trading_start
-        # market_open -> handle_data
-        # after_market_close -> after_trading_end
-        
-        # 处理initialize函数 - 移除run_daily调用
-        final_lines = []
         for line in lines:
             if 'run_daily(' in line:
-                # 跳过run_daily调用行
-                continue
-            final_lines.append(line)
+                # 移除reference_security参数
+                line = re.sub(r',\\s*reference_security=[^,)]+', '', line)
+                line = re.sub(r'reference_security=[^,)]+,\\s*', '', line)
+                line = re.sub(r'reference_security=[^,)]+', '', line)
+                # 调整run_daily参数顺序以适应Ptrade (需要context作为第一个参数)
+                if 'run_daily(' in line and 'context' not in line.split('(')[1].split(',')[0]:
+                    # 在函数名后添加context参数
+                    line = line.replace('run_daily(', 'run_daily(context, ')
+            elif 'run_weekly(' in line:
+                # Ptrade不支持run_weekly，需要转换为run_daily或run_interval
+                # 先移除reference_security参数
+                line = re.sub(r',\\s*reference_security=[^,)]+', '', line)
+                line = re.sub(r'reference_security=[^,)]+,\\s*', '', line)
+                line = re.sub(r'reference_security=[^,)]+', '', line)
+                # 将run_weekly转换为run_daily（作为简化处理）
+                # 注意：weekday参数在Ptrade中被忽略
+                line = line.replace('run_weekly(', 'run_daily(context, ')
+            elif 'run_monthly(' in line:
+                # Ptrade不支持run_monthly，需要转换为run_daily或run_interval
+                line = re.sub(r',\\s*reference_security=[^,)]+', '', line)
+                line = re.sub(r'reference_security=[^,)]+,\\s*', '', line)
+                line = re.sub(r'reference_security=[^,)]+', '', line)
+                # 将run_monthly转换为run_daily（作为简化处理）
+                # 注意：monthday参数在Ptrade中被忽略
+                line = line.replace('run_monthly(', 'run_daily(context, ')
+            fixed_lines.append(line)
         
-        # 处理各个标准函数
-        result_lines = []
-        i = 0
-        while i < len(final_lines):
-            line = final_lines[i]
-            
-            # 跳过原始的定时任务函数定义
-            if line.startswith('def before_market_open(') or line.startswith('def market_open(') or line.startswith('def after_market_close('):
-                # 跳过整个函数定义
-                i += 1
-                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
-                    i += 1
-                continue
-            
-            # 处理before_trading_start函数
-            if line.strip() == 'def before_trading_start(context, data):':
-                result_lines.append(line)
-                i += 1
-                # 复制原函数体
-                indent_level = None
-                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
-                    current_line = final_lines[i]
-                    # 计算缩进级别
-                    if current_line.strip() != '':
-                        if indent_level is None:
-                            indent_level = len(current_line) - len(current_line.lstrip())
-                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
-                            # 函数体结束
-                            break
-                    result_lines.append(current_line)
-                    i += 1
-                
-                # 添加before_market_open函数的逻辑
-                if 'before_market_open' in timing_functions:
-                    result_lines.append('')
-                    for func_line in timing_functions['before_market_open'][1:]:
-                        # 替换g.为context.，但避免错误替换log为locontext
-                        func_line = func_line.replace('g.', 'context.')
-                        func_line = func_line.replace('locontext.', 'log.')
-                        # 添加适当的缩进
-                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            result_lines.append('    ' + func_line)
-                        else:
-                            result_lines.append(func_line)
-                continue
-            
-            # 处理handle_data函数
-            if line.strip() == 'def handle_data(context, data):':
-                result_lines.append(line)
-                i += 1
-                # 复制原函数体
-                indent_level = None
-                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
-                    current_line = final_lines[i]
-                    # 计算缩进级别
-                    if current_line.strip() != '':
-                        if indent_level is None:
-                            indent_level = len(current_line) - len(current_line.lstrip())
-                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
-                            # 函数体结束
-                            break
-                    result_lines.append(current_line)
-                    i += 1
-                
-                # 添加market_open函数的逻辑
-                if 'market_open' in timing_functions:
-                    result_lines.append('')
-                    for func_line in timing_functions['market_open'][1:]:
-                        # 替换g.为context.，但避免错误替换log为locontext
-                        func_line = func_line.replace('g.', 'context.')
-                        func_line = func_line.replace('locontext.', 'log.')
-                        # 替换get_bars为get_price，并修正参数
-                        func_line = func_line.replace("get_bars(security, count=5, unit='1d', fields=['close'])", 
-                                                    "get_price(security, count=5, fields=['close'])")
-                        # 修正get_price参数，移除unit参数
-                        func_line = func_line.replace("get_price(security, count=5, unit='1d', fields=['close'])", 
-                                                    "get_price(security, count=5, fields=['close'])")
-                        # 修正Portfolio属性访问，将available_cash替换为cash
-                        func_line = func_line.replace('context.portfolio.available_cash', 'context.portfolio.cash')
-                        # 修正StockPosition属性访问，将closeable_amount替换为amount
-                        func_line = func_line.replace('.closeable_amount', '.amount')
-                        # 添加适当的缩进
-                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            result_lines.append('    ' + func_line)
-                        else:
-                            result_lines.append(func_line)
-                continue
-            
-            # 处理after_trading_end函数
-            if line.strip() == 'def after_trading_end(context, data):':
-                result_lines.append(line)
-                i += 1
-                # 复制原函数体
-                indent_level = None
-                while i < len(final_lines) and (final_lines[i].startswith(' ') or final_lines[i].startswith('\t') or final_lines[i].strip() == ''):
-                    current_line = final_lines[i]
-                    # 计算缩进级别
-                    if current_line.strip() != '':
-                        if indent_level is None:
-                            indent_level = len(current_line) - len(current_line.lstrip())
-                        elif len(current_line) - len(current_line.lstrip()) < indent_level and not current_line.strip().startswith('#'):
-                            # 函数体结束
-                            break
-                    result_lines.append(current_line)
-                    i += 1
-                
-                # 添加after_market_close函数的逻辑
-                if 'after_market_close' in timing_functions:
-                    result_lines.append('')
-                    for func_line in timing_functions['after_market_close'][1:]:
-                        # 替换g.为context.，但避免错误替换log为locontext
-                        func_line = func_line.replace('g.', 'context.')
-                        func_line = func_line.replace('locontext.', 'log.')
-                        # 添加适当的缩进
-                        if func_line.strip() != '' and not func_line.startswith(' ') and not func_line.startswith('\t'):
-                            result_lines.append('    ' + func_line)
-                        else:
-                            result_lines.append(func_line)
-                continue
-            
-            result_lines.append(line)
-            i += 1
+        return '\n'.join(fixed_lines)
+    
+    def _fix_api_parameters(self, code: str) -> str:
+        """修正API参数差异"""
+        import re
+        lines = code.split('\n')
+        fixed_lines = []
         
-        return '\n'.join(result_lines)
+        for line in lines:
+            # 移除get_price中的frequency参数
+            if 'get_price(' in line and 'frequency' in line:
+                # Ptrade不使用frequency参数
+                line = re.sub(r',\\s*frequency=[^,)]+', '', line)
+                line = re.sub(r'frequency=[^,)]+,\\s*', '', line)
+                line = re.sub(r'frequency=[^,)]+', '', line)
+            
+            # 移除多余的逗号（修复语法错误）
+            line = re.sub(r'(get_price\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_history\([^)]*?),\s*,', r'\1,', line)
+            
+            # 移除skip_paused参数
+            if 'skip_paused' in line:
+                line = re.sub(r',\\s*skip_paused=[^,)]+', '', line)
+                line = re.sub(r'skip_paused=[^,)]+,\\s*', '', line)
+                line = re.sub(r'skip_paused=[^,)]+', '', line)
+            
+            # 移除panel参数
+            if 'panel' in line and 'panel=' in line:
+                line = re.sub(r',\\s*panel=[^,)]+', '', line)
+                line = re.sub(r'panel=[^,)]+,\\s*', '', line)
+                line = re.sub(r'panel=[^,)]+', '', line)
+            
+            # 修正get_all_securities为get_Ashares
+            if 'get_all_securities(' in line:
+                line = line.replace('get_all_securities(', 'get_Ashares(')
+            
+            # 修正get_security_info为get_stock_info
+            if 'get_security_info(' in line:
+                line = line.replace('get_security_info(', 'get_stock_info(')
+            
+            # 修正get_current_data为get_snapshot
+            if 'get_current_data(' in line:
+                line = line.replace('get_current_data(', 'get_snapshot(')
+            
+            # 修正portfolio属性
+            if 'portfolio.available_cash' in line:
+                line = line.replace('portfolio.available_cash', 'portfolio.cash')
+            
+            if 'portfolio.portfolio_value' in line:
+                line = line.replace('portfolio.portfolio_value', 'portfolio.total_value')
+            
+            # 修正持仓属性
+            if 'closeable_amount' in line:
+                line = line.replace('closeable_amount', 'amount')
+            
+            # 标准化证券代码后缀
+            line = self._standardize_security_code(line)
+            
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _standardize_security_code(self, line: str) -> str:
+        """标准化证券代码后缀"""
+        import re
+        # 将 .XSHG 替换为 .SS
+        line = re.sub(r'\.XSHG(?![a-zA-Z0-9])', '.SS', line)
+        # 将 .XSHE 替换为 .SZ
+        line = re.sub(r'\.XSHE(?![a-zA-Z0-9])', '.SZ', line)
+        return line
+    
+    def _fix_syntax_errors(self, code: str) -> str:
+        """修复语法错误"""
+        import re
+        lines = code.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # 修复多余的逗号
+            line = re.sub(r'(get_price\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_history\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_Ashares\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_index_stocks\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_industry_stocks\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_concept_stocks\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_fundamentals\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_stock_info\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(get_snapshot\([^)]*?),\s*,', r'\1,', line)
+            # 修复定时任务函数的多余逗号
+            line = re.sub(r'(run_daily\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(run_weekly\([^)]*?),\s*,', r'\1,', line)
+            line = re.sub(r'(run_monthly\([^)]*?),\s*,', r'\1,', line)
+            # 修复末尾多余的逗号
+            line = re.sub(r'(get_price\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_history\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_Ashares\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_index_stocks\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_industry_stocks\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_concept_stocks\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_fundamentals\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_stock_info\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(get_snapshot\([^)]*?),\s*\)', r'\1)', line)
+            # 修复定时任务函数末尾的多余逗号
+            line = re.sub(r'(run_daily\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(run_weekly\([^)]*?),\s*\)', r'\1)', line)
+            line = re.sub(r'(run_monthly\([^)]*?),\s*\)', r'\1)', line)
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _fix_indentation(self, code: str) -> str:
+        """修复缩进问题"""
+        lines = code.split('\n')
+        fixed_lines = []
+        
+        for line in lines:
+            # 修复不正确的缩进
+            stripped_line = line.lstrip()
+            if stripped_line:
+                # 计算当前缩进
+                current_indent = len(line) - len(stripped_line)
+                
+                # 如果是2个或3个空格的缩进，调整为4个空格的倍数
+                if current_indent in [2, 3, 6, 7]:
+                    # 调整为最接近的4的倍数
+                    new_indent = ((current_indent // 4) + 1) * 4
+                    line = ' ' * new_indent + stripped_line
+                elif current_indent == 1:
+                    # 调整为4个空格
+                    line = '    ' + stripped_line
+                elif current_indent % 4 != 0:
+                    # 其他不规则缩进调整为4的倍数
+                    new_indent = (current_indent // 4) * 4
+                    line = ' ' * new_indent + stripped_line
+            
+            fixed_lines.append(line)
+        
+        return '\n'.join(fixed_lines)
+    
+    def _ensure_structure(self, code: str) -> str:
+        """确保正确的函数结构"""
+        # 确保有initialize函数
+        if 'def initialize(' not in code:
+            init_func = '''def initialize(context):
+    pass
+
+'''
+            code = init_func + code
+        
+        # 确保有before_trading_start函数
+        if 'def before_trading_start(' not in code:
+            # 在initialize函数后添加
+            lines = code.split('\n')
+            new_lines = []
+            inserted = False
+            for line in lines:
+                new_lines.append(line)
+                if line.strip() == 'def initialize(context):' and not inserted:
+                    # 跳过initialize函数体
+                    i = len(new_lines)
+                    while i < len(lines) and (lines[i].strip() == '' or lines[i].startswith(' ') or lines[i].startswith('\t')):
+                        new_lines.append(lines[i])
+                        i += 1
+                    # 添加before_trading_start函数
+                    new_lines.append('')
+                    new_lines.append('def before_trading_start(context, data):')
+                    new_lines.append('    pass')
+                    new_lines.append('')
+                    inserted = True
+            if not inserted:
+                # 如果没有找到合适的位置，添加到代码末尾
+                code = code.rstrip() + '\n\ndef before_trading_start(context, data):\n    pass\n'
+            else:
+                code = '\n'.join(new_lines)
+        
+        # 确保有handle_data函数
+        if 'def handle_data(' not in code:
+            code = code.rstrip() + '\n\ndef handle_data(context, data):\n    pass\n'
+        
+        # 确保有after_trading_end函数
+        if 'def after_trading_end(' not in code:
+            code = code.rstrip() + '\n\ndef after_trading_end(context, data):\n    pass\n'
+        
+        return code
 
 class JQToPtradeTransformer(ast.NodeTransformer):
     """聚宽到Ptrade AST转换器"""

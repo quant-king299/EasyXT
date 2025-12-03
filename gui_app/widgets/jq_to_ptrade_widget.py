@@ -30,10 +30,20 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'code_conver
 # 尝试导入转换器
 try:
     from code_converter.converters.jq_to_ptrade import JQToPtradeConverter
+    from code_converter.converters.jq_to_ptrade_monthly import JQToPtradeMonthlyConverter as JQToPtradeBacktestConverter
+    from code_converter.converters.jq_to_ptrade_live import JQToPtradeLiveConverter
+    from code_converter.converters.jq_to_ptrade_factors import JQToPtradeFactorsConverter
+    from code_converter.converters.jq_to_ptrade_current_data import JQToPtradeCurrentDataConverter
+    from code_converter.converters.jq_to_ptrade_enhanced import JQToPtradeEnhancedConverter
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
     JQToPtradeConverter = None
+    JQToPtradeBacktestConverter = None
+    JQToPtradeLiveConverter = None
+    JQToPtradeFactorsConverter = None
+    JQToPtradeCurrentDataConverter = None
+    JQToPtradeEnhancedConverter = None
     print("⚠️ 代码转换器不可用")
 
 
@@ -75,19 +85,38 @@ class CodeConversionWorker(QThread):
     conversion_finished = pyqtSignal(bool, str, str)  # success, input_code, output_code
     progress_updated = pyqtSignal(int, str)  # progress, message
     
-    def __init__(self, input_code: str, mapping_file: Optional[str] = None):
+    def __init__(self, input_code: str, mapping_file: Optional[str] = None, converter_type: str = "default"):
         super().__init__()
         self.input_code = input_code
         self.mapping_file = mapping_file
+        self.converter_type = converter_type
         
     def run(self):
         try:
             self.progress_updated.emit(10, "初始化转换器...")
             
             # 创建转换器
-            if CONVERTER_AVAILABLE and JQToPtradeConverter:
-                converter = JQToPtradeConverter(self.mapping_file)
-                self.progress_updated.emit(50, "正在转换代码...")
+            if CONVERTER_AVAILABLE:
+                if self.converter_type == "backtest" and JQToPtradeBacktestConverter:
+                    converter = JQToPtradeBacktestConverter()
+                    self.progress_updated.emit(50, "正在转换为回测版本...")
+                elif self.converter_type == "enhanced" and JQToPtradeEnhancedConverter:
+                    converter = JQToPtradeEnhancedConverter()
+                    self.progress_updated.emit(50, "正在转换为增强回测版本...")
+                elif self.converter_type == "live" and JQToPtradeLiveConverter:
+                    converter = JQToPtradeLiveConverter()
+                    self.progress_updated.emit(50, "正在转换为实盘版本...")
+                elif self.converter_type == "factors" and JQToPtradeFactorsConverter:
+                    converter = JQToPtradeFactorsConverter()
+                    self.progress_updated.emit(50, "正在转换因子调用...")
+                elif self.converter_type == "current_data" and JQToPtradeCurrentDataConverter:
+                    converter = JQToPtradeCurrentDataConverter()
+                    self.progress_updated.emit(50, "正在转换实时数据调用...")
+                elif JQToPtradeConverter:
+                    converter = JQToPtradeConverter(self.mapping_file)
+                    self.progress_updated.emit(50, "正在转换代码...")
+                else:
+                    raise ImportError("代码转换器不可用")
                 
                 # 执行转换
                 output_code = converter.convert(self.input_code)
@@ -109,6 +138,7 @@ class JQToPtradeWidget(QWidget):
         self.current_input_file = ""
         self.current_output_file = ""
         self.conversion_thread = None
+        self.converter_type = "default"  # default, backtest, live
         self.init_ui()
     
     def init_ui(self):
@@ -122,6 +152,20 @@ class JQToPtradeWidget(QWidget):
         title_label.setFont(title_font)
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title_label)
+        
+        # 版本说明标签
+        self.version_info_label = QLabel("标准版本：通用转换版本，适用于大多数场景。")
+        self.version_info_label.setWordWrap(True)
+        self.version_info_label.setStyleSheet("""
+            QLabel {
+                background-color: #e3f2fd;
+                border: 1px solid #2196F3;
+                border-radius: 4px;
+                padding: 8px;
+                font-size: 12px;
+            }
+        """)
+        layout.addWidget(self.version_info_label)
         
         # 主要功能区域
         main_splitter = QSplitter(Qt.Orientation.Horizontal)
@@ -175,6 +219,22 @@ class JQToPtradeWidget(QWidget):
         # 转换控制组
         control_group = QGroupBox("转换控制")
         control_layout_main = QVBoxLayout(control_group)
+        
+        # 转换器类型选择
+        converter_type_layout = QHBoxLayout()
+        converter_type_label = QLabel("转换版本:")
+        self.converter_type_combo = QComboBox()
+        self.converter_type_combo.addItem("标准版本", "default")
+        self.converter_type_combo.addItem("回测版本", "backtest")
+        self.converter_type_combo.addItem("增强回测版本", "enhanced")
+        self.converter_type_combo.addItem("实盘版本", "live")
+        self.converter_type_combo.addItem("因子转换", "factors")
+        self.converter_type_combo.addItem("实时数据转换", "current_data")
+        self.converter_type_combo.setCurrentIndex(0)
+        self.converter_type_combo.currentIndexChanged.connect(self.on_converter_type_changed)
+        converter_type_layout.addWidget(converter_type_label)
+        converter_type_layout.addWidget(self.converter_type_combo)
+        control_layout_main.addLayout(converter_type_layout)
         
         # 转换按钮
         self.convert_button = QPushButton("开始转换")
@@ -370,6 +430,12 @@ class JQToPtradeWidget(QWidget):
             QMessageBox.warning(self, "警告", "指定的映射文件不存在，将使用默认映射")
             mapping_file = None
         
+        # 获取转换器类型
+        converter_type = self.converter_type_combo.currentData()
+        
+        # 获取转换器类型
+        converter_type = self.converter_type_combo.currentData()
+        
         # 禁用界面
         self.convert_button.setEnabled(False)
         self.progress_bar.setVisible(True)
@@ -377,7 +443,7 @@ class JQToPtradeWidget(QWidget):
         self.status_label.setText("正在转换...")
         
         # 启动转换线程
-        self.conversion_thread = CodeConversionWorker(input_code, mapping_file)
+        self.conversion_thread = CodeConversionWorker(input_code, mapping_file, converter_type)
         self.conversion_thread.conversion_finished.connect(self.on_conversion_finished)
         self.conversion_thread.progress_updated.connect(self.on_progress_updated)
         self.conversion_thread.start()
@@ -430,6 +496,28 @@ class JQToPtradeWidget(QWidget):
         self.current_input_file = ""
         self.current_output_file = ""
         self.save_output_button.setEnabled(False)
+    
+    def on_converter_type_changed(self, index):
+        """转换器类型改变"""
+        converter_type = self.converter_type_combo.currentData()
+        self.converter_type = converter_type
+        
+        # 更新版本说明
+        info_text = ""
+        if converter_type == "backtest":
+            info_text = "回测版本：针对Ptrade回测环境优化，删除所有实盘专用API调用（如get_snapshot、set_option等），提供备选实现方案，确保代码能在回测环境中完整运行。"
+        elif converter_type == "enhanced":
+            info_text = "增强回测版本：修复了所有已知问题的回测版本，包括函数重复定义、缺少导入库等问题，确保生成的代码能在Ptrade回测环境中正常运行。"
+        elif converter_type == "live":
+            info_text = "实盘版本：充分利用Ptrade实盘环境的实时数据API，保留所有实盘专用功能（如get_snapshot、实时行情检查等），提供最佳的实盘交易体验。"
+        elif converter_type == "factors":
+            info_text = "因子转换：专门处理聚宽因子库调用转换，将MACD、RSI等因子调用转换为Ptrade自定义计算函数，自动生成必要的因子计算实现。"
+        elif converter_type == "current_data":
+            info_text = "实时数据转换：处理聚宽get_current_data()调用转换，自动生成Ptrade版本的实时数据获取函数，替代聚宽的实时数据API。"
+        else:
+            info_text = "标准版本：通用转换版本，适用于大多数场景。"
+        
+        self.version_info_label.setText(info_text)
     
     def update_ui_state(self):
         """更新UI状态"""

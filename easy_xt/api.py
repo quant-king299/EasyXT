@@ -36,7 +36,7 @@ class EasyXT:
             print("数据服务初始化失败")
         return self._data_connected
     
-    def init_trade(self, userdata_path: str, session_id: str = None) -> bool:
+    def init_trade(self, userdata_path: str, session_id: Optional[str] = None) -> bool:
         """
         初始化交易服务
         
@@ -47,7 +47,7 @@ class EasyXT:
         Returns:
             bool: 是否成功
         """
-        self._trade_connected = self.trade.connect(userdata_path, session_id)
+        self._trade_connected = self.trade.connect(userdata_path, session_id if session_id else "")
         if self._trade_connected:
             print("交易服务初始化成功")
         else:
@@ -74,11 +74,11 @@ class EasyXT:
     
     def get_price(self, 
                   codes: Union[str, List[str]], 
-                  start: str = None, 
-                  end: str = None, 
+                  start: Optional[str] = None, 
+                  end: Optional[str] = None, 
                   period: str = '1d',
-                  count: int = None,
-                  fields: List[str] = None,
+                  count: Optional[int] = None,
+                  fields: Optional[List[str]] = None,
                   adjust: str = 'front') -> pd.DataFrame:
         """
         获取股票价格数据
@@ -111,9 +111,9 @@ class EasyXT:
     
     def get_financial_data(self, 
                           codes: Union[str, List[str]], 
-                          tables: List[str] = None,
-                          start: str = None, 
-                          end: str = None,
+                          tables: Optional[List[str]] = None,
+                          start: Optional[str] = None, 
+                          end: Optional[str] = None,
                           report_type: str = 'report_time') -> Dict[str, Dict[str, pd.DataFrame]]:
         """
         获取财务数据
@@ -130,7 +130,7 @@ class EasyXT:
         """
         return self.data.get_financial_data(codes, tables, start, end, report_type)
     
-    def get_stock_list(self, sector: str = None) -> List[str]:
+    def get_stock_list(self, sector: Optional[str] = None) -> List[str]:
         """
         获取股票列表
         
@@ -144,8 +144,8 @@ class EasyXT:
     
     def get_trading_dates(self, 
                          market: str = 'SH', 
-                         start: str = None, 
-                         end: str = None,
+                         start: Optional[str] = None, 
+                         end: Optional[str] = None,
                          count: int = -1) -> List[str]:
         """
         获取交易日列表
@@ -164,8 +164,8 @@ class EasyXT:
     def download_data(self, 
                      codes: Union[str, List[str]], 
                      period: str = '1d',
-                     start: str = None, 
-                     end: str = None) -> bool:
+                     start: Optional[str] = None, 
+                     end: Optional[str] = None) -> bool:
         """
         下载历史数据到本地
         
@@ -179,6 +179,25 @@ class EasyXT:
             bool: 是否成功
         """
         return self.data.download_data(codes, period, start, end)
+    
+    def download_history_data_batch(self, 
+                                  stock_list: Union[str, List[str]], 
+                                  period: str = '1d',
+                                  start_time: str = '',
+                                  end_time: str = '') -> Dict[str, bool]:
+        """
+        批量下载历史数据（使用xtdata.download_history_data2）
+        
+        Args:
+            stock_list: 股票代码列表
+            period: 数据周期，如'1d', '1m', '5m'等
+            start_time: 开始时间，格式YYYYMMDD
+            end_time: 结束时间，格式YYYYMMDD
+            
+        Returns:
+            Dict[str, bool]: 每只股票的下载结果 {股票代码: 是否成功}
+        """
+        return self.data.download_history_data_batch(stock_list, period, start_time, end_time)
     
     # ==================== 交易接口 ====================
     
@@ -261,7 +280,7 @@ class EasyXT:
             return None
         return self.trade.get_account_asset(account_id)
     
-    def get_positions(self, account_id: str, code: str = None) -> pd.DataFrame:
+    def get_positions(self, account_id: str, code: Optional[str] = None) -> pd.DataFrame:
         """
         获取持仓信息
         
@@ -275,7 +294,7 @@ class EasyXT:
         if not self._trade_connected:
             ErrorHandler.log_error("交易服务未初始化")
             return pd.DataFrame()
-        return self.trade.get_positions(account_id, code)
+        return self.trade.get_positions(account_id, code if code else "")
     
     def get_orders(self, account_id: str, cancelable_only: bool = False) -> pd.DataFrame:
         """
@@ -337,123 +356,3 @@ class EasyXT:
         else:
             print("成交数量: 0")
             return pd.DataFrame()
-    
-    # ==================== 便捷方法 ====================
-    
-    def quick_buy(self, account_id: str, code: str, amount: float, price_type: str = 'market') -> Optional[int]:
-        """
-        按金额买入股票
-        
-        Args:
-            account_id: 资金账号
-            code: 股票代码
-            amount: 买入金额
-            price_type: 价格类型
-            
-        Returns:
-            Optional[int]: 委托编号
-        """
-        # 获取当前价格
-        current_price_df = self.get_current_price(code)
-        if current_price_df.empty:
-            ErrorHandler.log_error("无法获取当前价格")
-            return None
-        
-        current_price = current_price_df.iloc[0]['price']
-        if current_price <= 0:
-            ErrorHandler.log_error("当前价格无效")
-            return None
-        
-        # 计算买入数量（向下取整到100的倍数）
-        volume = int(amount / current_price / 100) * 100
-        if volume < 100:
-            ErrorHandler.log_error("买入金额不足100股")
-            return None
-        
-        return self.buy(account_id, code, volume, current_price if price_type == 'limit' else 0, price_type)
-    
-    def sell_all(self, account_id: str, code: str, price_type: str = 'market') -> Optional[int]:
-        """
-        卖出持仓的全部股票
-        
-        Args:
-            account_id: 资金账号
-            code: 股票代码
-            price_type: 价格类型
-            
-        Returns:
-            Optional[int]: 委托编号
-        """
-        # 获取持仓
-        positions = self.get_positions(account_id, code)
-        if positions.empty:
-            ErrorHandler.log_error("没有持仓")
-            return None
-        
-        volume = int(positions.iloc[0]['can_use_volume'])
-        if volume <= 0:
-            ErrorHandler.log_error("可用持仓为0")
-            return None
-        
-        # 获取当前价格
-        current_price = 0
-        if price_type == 'limit':
-            current_price_df = self.get_current_price(code)
-            if not current_price_df.empty:
-                current_price = current_price_df.iloc[0]['price']
-        
-        return self.sell(account_id, code, volume, current_price, price_type)
-    
-    def get_portfolio_value(self, account_id: str) -> Dict[str, float]:
-        """
-        获取投资组合价值
-        
-        Args:
-            account_id: 资金账号
-            
-        Returns:
-            Dict: 投资组合价值信息
-        """
-        asset = self.get_account_asset(account_id)
-        if not asset:
-            return {}
-        
-        return {
-            'cash': asset['cash'],
-            'market_value': asset['market_value'],
-            'total_value': asset['total_asset'],
-            'frozen_cash': asset['frozen_cash']
-        }
-    
-    # ==================== 配置方法 ====================
-    
-    def set_config(self, key: str, value: Any) -> None:
-        """
-        设置配置
-        
-        Args:
-            key: 配置键
-            value: 配置值
-        """
-        config.set(key, value)
-    
-    def get_config(self, key: str, default: Any = None) -> Any:
-        """
-        获取配置
-        
-        Args:
-            key: 配置键
-            default: 默认值
-            
-        Returns:
-            Any: 配置值
-        """
-        return config.get(key, default)
-    
-    def disconnect(self):
-        """断开所有连接"""
-        if self._trade_connected:
-            self.trade.disconnect()
-            self._trade_connected = False
-        
-        print("EasyXT已断开连接")

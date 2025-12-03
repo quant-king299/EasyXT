@@ -263,6 +263,9 @@ code_converter/api_docs/*.pdf
 code_converter/api_docs/*.html
 code_converter/api_docs/*.docx
 
+# 忽略Ptrade API PDF文档目录
+code_converter/api_docs/ptrade api/
+
 # 忽略bilibili_videos目录中的视频相关文件
 bilibili_videos/
 bilibili_videos/*.html

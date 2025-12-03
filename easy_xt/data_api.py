@@ -162,7 +162,7 @@ class DataAPI:
         Raises:
             ConnectionError: 连接失败
             DataError: 数据获取失败
-            ValueError: 不支持的周期类型
+            ValueError: 不支持的周期类型或股票代码无效
         """
         # 验证周期类型
         if not validate_period(period):
@@ -181,6 +181,7 @@ class DataAPI:
         codes = StockCodeUtils.normalize_codes(codes)
         
         # 处理时间参数
+        from datetime import datetime
         if count:
             end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
             start_date = ''
@@ -212,14 +213,14 @@ class DataAPI:
                 # 对于分钟数据，限制时间范围避免数据量过大
                 if period in ['1m', '5m', '15m', '30m']:
                     # 分钟数据只下载最近几天
-                    from datetime import datetime as dt, timedelta
-                    end_dt = dt.now()
+                    from datetime import timedelta
+                    end_dt = datetime.now()
                     start_dt = end_dt - timedelta(days=3)  # 只下载最近3天
                     download_start = start_dt.strftime('%Y%m%d')
                     download_end = end_dt.strftime('%Y%m%d')
                 else:
-                    download_start = start_date if start_date else '20240101'
-                    download_end = end_date if end_date else '20241231'
+                    download_start = start_date if start_date else '20200101'
+                    download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
                 
                 self.xt.download_history_data2(
                     stock_list=codes,
@@ -244,8 +245,8 @@ class DataAPI:
                 field_list=fields,
                 stock_list=codes,
                 period=period,
-                start_time=start_date if start_date else '20240101',
-                end_time=end_date if end_date else '20241231',
+                start_time=start_date if start_date else '20200101',
+                end_time=end_date if end_date else datetime.now().strftime('%Y%m%d'),
                 count=actual_count,
                 dividend_type=dividend_type,
                 fill_data=config.get('data.fill_data', True)
@@ -373,7 +374,9 @@ class DataAPI:
                             final_df['time'] = pd.to_datetime(final_df['time'], errors='coerce')
                         
                         # 如果转换失败，尝试其他格式
-                        if final_df['time'].isna().all():
+                        notna_values = final_df['time'].notna()
+                        notna_count = notna_values.sum()
+                        if notna_count == 0:
                             print("警告: 时间格式转换失败")
                     except Exception as e:
                         print(f"时间格式处理警告: {e}")
@@ -632,6 +635,100 @@ class DataAPI:
             ErrorHandler.log_error(f"下载数据失败: {str(e)}")
             raise DataError(f"下载数据失败: {str(e)}")
     
+    def download_history_data_batch(self, 
+                                  stock_list: Union[str, List[str]], 
+                                  period: str = '1d',
+                                  start_time: str = '',
+                                  end_time: str = '') -> Dict[str, bool]:
+        """
+        批量下载历史数据（使用xtdata.download_history_data2）
+        
+        Args:
+            stock_list: 股票代码列表
+            period: 数据周期，如'1d', '1m', '5m'等
+            start_time: 开始时间，格式YYYYMMDD
+            end_time: 结束时间，格式YYYYMMDD
+            
+        Returns:
+            Dict[str, bool]: 每只股票的下载结果 {股票代码: 是否成功}
+        """
+        if not self.xt:
+            raise ConnectionError("xtquant未正确导入，无法下载数据")
+        
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
+        
+        # 标准化股票代码
+        if isinstance(stock_list, str):
+            stock_list = [stock_list]
+        stock_list = StockCodeUtils.normalize_codes(stock_list)
+        
+        # 结果字典
+        results = {}
+        
+        # 批量下载数据
+        try:
+            self.xt.download_history_data2(
+                stock_list=stock_list,
+                period=period,
+                start_time=start_time,
+                end_time=end_time
+            )
+            # 下载完成后，验证每只股票的数据是否真正下载成功
+            for stock in stock_list:
+                try:
+                    # 尝试获取少量数据来验证下载是否成功
+                    test_data = self.xt.get_local_data(
+                        field_list=['open', 'close', 'volume'],
+                        stock_list=[stock],
+                        period=period,
+                        start_time=start_time,
+                        end_time=end_time,
+                        count=1
+                    )
+                    # 如果能获取到数据且不为空，则认为下载成功
+                    if stock in test_data and test_data[stock] is not None and len(test_data[stock]) > 0:
+                        results[stock] = True
+                    else:
+                        results[stock] = False
+                except Exception:
+                    results[stock] = False
+        except Exception as e:
+            # 如果出现异常，尝试逐个下载
+            print(f"批量下载失败，尝试逐个下载: {e}")
+            for stock in stock_list:
+                try:
+                    self.xt.download_history_data2(
+                        stock_list=[stock],
+                        period=period,
+                        start_time=start_time,
+                        end_time=end_time
+                    )
+                    # 验证数据是否真正下载成功
+                    try:
+                        test_data = self.xt.get_local_data(
+                            field_list=['open', 'close', 'volume'],
+                            stock_list=[stock],
+                            period=period,
+                            start_time=start_time,
+                            end_time=end_time,
+                            count=1
+                        )
+                        if stock in test_data and test_data[stock] is not None and len(test_data[stock]) > 0:
+                            results[stock] = True
+                            print(f"{stock} 历史数据下载完成并验证成功")
+                        else:
+                            results[stock] = False
+                            print(f"{stock} 历史数据下载完成但验证失败")
+                    except Exception:
+                        results[stock] = False
+                        print(f"{stock} 历史数据下载完成但验证失败")
+                except Exception as stock_error:
+                    results[stock] = False
+                    print(f"{stock} 历史数据下载失败: {stock_error}")
+        
+        return results
+    
     @ErrorHandler.handle_api_error
     def get_price_robust(self, 
                         codes: Union[str, List[str]], 
@@ -694,7 +791,7 @@ class DataAPI:
                 # 如果没有指定时间范围，使用智能默认值
                 start_date, end_date = auto_time_range(10)
             else:
-                start_date = TimeUtils.normalize_date(start) if start else '20240101'
+                start_date = TimeUtils.normalize_date(start) if start else '20200101'
                 end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
             count = -1
         
@@ -726,8 +823,8 @@ class DataAPI:
                         # 分钟数据只下载最近几天
                         download_start, download_end = auto_time_range(3)
                     else:
-                        download_start = start_date if start_date else '20240101'
-                        download_end = end_date if end_date else '20241231'
+                        download_start = start_date if start_date else '20200101'
+                        download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
                     
                     self.xt.download_history_data2(
                         stock_list=codes,
@@ -752,8 +849,8 @@ class DataAPI:
                     field_list=fields,
                     stock_list=codes,
                     period=period,
-                    start_time=start_date if start_date else '20240101',
-                    end_time=end_date if end_date else '20241231',
+                    start_time=start_date if start_date else '20200101',
+                    end_time=end_date if end_date else datetime.now().strftime('%Y%m%d'),
                     count=actual_count,
                     dividend_type=dividend_type,
                     fill_data=config.get('data.fill_data', True)
@@ -850,7 +947,10 @@ class DataAPI:
                                 final_df['time'] = pd.to_datetime(final_df['time'], errors='coerce')
                             
                             # 如果转换失败，尝试其他格式
-                            if final_df['time'].isna().all():
+                            # 检查是否所有时间值都是NaT
+                            notna_values = final_df['time'].notna()
+                            notna_count = notna_values.sum()
+                            if notna_count == 0:
                                 print("警告: 时间格式转换失败")
                         except Exception as e:
                             print(f"时间格式处理警告: {e}")

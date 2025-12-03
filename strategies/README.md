@@ -28,6 +28,10 @@ strategies/
 │   ├── src/                         # JQ2QMT源代码
 │   ├── README.md                    # JQ2QMT项目说明
 │   └── ...                          # 其他JQ2QMT文件
+├── tdxtrader/                       # 通达信预警交易系统
+│   ├── README.md                    # tdxtrader项目说明
+│   ├── BLOCK_TRADING_FEATURES.md    # 板块交易功能详解
+│   └── ...                          # 其他tdxtrader文件
 ├── jq2qmt_analysis_report.md        # JQ2QMT项目深度分析报告
 └── JQ2QMT_Integration_Guide.md      # JQ2QMT集成指南
 ```
@@ -92,6 +96,13 @@ config = {
 - **止损止盈**: 自动止损止盈策略
 - **追踪止损**: 动态调整的追踪止损
 - **时间条件单**: 基于时间条件的交易
+
+#### 通达信预警交易策略 (`tdxtrader/`)
+- **预警文件触发**: 基于通达信技术指标预警的自动化交易
+- **板块文件触发**: 基于通达信自定义板块的实时交易触发
+- **双重保险机制**: EasyXT与xt_trader双通道下单保障
+
+查看详细文档：[tdxtrader板块交易功能详解](tdxtrader/BLOCK_TRADING_FEATURES.md)
 
 ### 3. 外部系统集成
 
