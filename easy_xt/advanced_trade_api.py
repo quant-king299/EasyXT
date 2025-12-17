@@ -294,45 +294,46 @@ class AdvancedTradeAPI:
     
     def async_order(self, account_id: str, code: str, order_type: str, volume: int,
                     price: float = 0, price_type: str = 'market',
-                    strategy_name: str = 'EasyXT', order_remark: str = '') -> Optional[int]:
-        """异步下单"""
-        # 生成序列号
-        self.order_sequence += 1
-        seq = self.order_sequence
+                    strategy_name: str = 'EasyXT', order_remark: str = '') -> bool:
+        """异步下单 - 真正的异步方式，不等待结果，通过回调处理"""
+        if not self.trader or account_id not in self.accounts:
+            ErrorHandler.log_error("高级交易服务未连接或账户未添加")
+            return False
+            
+        account = self.accounts[account_id]
+        code = StockCodeUtils.normalize_code(code)
         
-        # 异步执行下单
-        def async_order_worker():
-            try:
-                order_id = self.sync_order(
-                    account_id, code, order_type, volume, 
-                    price, price_type, strategy_name, order_remark
-                )
-                self.async_orders[seq] = {
-                    'order_id': order_id,
-                    'status': 'completed' if order_id else 'failed',
-                    'timestamp': datetime.datetime.now()
-                }
-            except Exception as e:
-                self.async_orders[seq] = {
-                    'order_id': None,
-                    'status': 'error',
-                    'error': str(e),
-                    'timestamp': datetime.datetime.now()
-                }
-        
-        # 启动异步线程
-        thread = Thread(target=async_order_worker)
-        thread.daemon = True
-        thread.start()
-        
-        # 记录异步订单
-        self.async_orders[seq] = {
-            'order_id': None,
-            'status': 'pending',
-            'timestamp': datetime.datetime.now()
+        # 价格类型映射
+        price_type_map = {
+            'market': xt_const.LATEST_PRICE if xt_const else 5,
+            'limit': xt_const.FIX_PRICE if xt_const else 11,
+            '市价': xt_const.LATEST_PRICE if xt_const else 5,
+            '限价': xt_const.FIX_PRICE if xt_const else 11
         }
         
-        return seq
+        xt_price_type = price_type_map.get(price_type, xt_const.LATEST_PRICE if xt_const else 5)
+        xt_order_type = xt_const.STOCK_BUY if xt_const and order_type == 'buy' else xt_const.STOCK_SELL if xt_const else 24
+        
+        try:
+            # 发送下单请求后立即返回，不等待结果
+            order_id = self.trader.order_stock(
+                account=account,
+                stock_code=code,
+                order_type=xt_order_type,
+                order_volume=volume,
+                price_type=xt_price_type,
+                price=price,
+                strategy_name=strategy_name,
+                order_remark=order_remark or f'{order_type}_{code}'
+            )
+            
+            # 立即返回True表示请求已发送（不表示执行成功）
+            print(f"异步下单请求已发送: {code}, 数量: {volume}, 序列号: {order_id}")
+            return True
+            
+        except Exception as e:
+            ErrorHandler.log_error(f"异步下单请求失败: {str(e)}")
+            return False
     
     def batch_order(self, account_id: str, orders: list) -> list:
         """批量下单"""
@@ -349,6 +350,24 @@ class AdvancedTradeAPI:
                 order.get('order_remark', '')
             )
             results.append(order_id)
+            time.sleep(0.1)  # 避免过快下单
+        return results
+    
+    def batch_order_async(self, account_id: str, orders: list) -> list:
+        """异步批量下单"""
+        results = []
+        for order in orders:
+            success = self.async_order(
+                account_id, 
+                order['code'], 
+                order['order_type'], 
+                order['volume'], 
+                order.get('price', 0), 
+                order.get('price_type', 'market'),
+                order.get('strategy_name', 'EasyXT'),
+                order.get('order_remark', '')
+            )
+            results.append(success)
             time.sleep(0.1)  # 避免过快下单
         return results
     
