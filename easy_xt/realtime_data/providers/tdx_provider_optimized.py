@@ -109,11 +109,11 @@ class TdxDataProviderOptimized(BaseDataProvider):
                 try:
                     if future.result():
                         available_servers.append(server)
-                        print(f"  ✓ {server['name']} ({server['host']}:{server['port']})")
+                        print(f"  [OK] {server['name']} ({server['host']}:{server['port']})")
                     else:
-                        print(f"  ✗ {server['name']} ({server['host']}:{server['port']})")
+                        print(f"  [ERROR] {server['name']} ({server['host']}:{server['port']})")
                 except Exception as e:
-                    print(f"  ✗ {server['name']} 测试异常: {e}")
+                    print(f"  [ERROR] {server['name']} 测试异常: {e}")
         
         # 按优先级排序返回
         return sorted(available_servers, key=lambda x: x['priority'])
@@ -130,7 +130,7 @@ class TdxDataProviderOptimized(BaseDataProvider):
         available_servers = self.get_available_servers()
         
         if not available_servers:
-            print("✗ 未发现可用服务器")
+            print("[ERROR] 未发现可用服务器")
             return False
         
         print(f"发现 {len(available_servers)} 个可用服务器，开始尝试连接...")
@@ -156,7 +156,7 @@ class TdxDataProviderOptimized(BaseDataProvider):
                         count = self.api.get_security_count(0)  # 获取深圳市场股票数量
                         if count and count > 0:
                             self.current_server = server
-                            print(f"✓ 连接成功: {server['name']} ({server['host']}:{server['port']})")
+                            print(f"[OK] 连接成功: {server['name']} ({server['host']}:{server['port']})")
                             return True
                     except Exception as e:
                         print(f"  连接验证失败: {e}")
@@ -169,7 +169,7 @@ class TdxDataProviderOptimized(BaseDataProvider):
                 print(f"  连接异常: {e}")
                 continue
         
-        print("✗ 所有服务器连接失败")
+        print("[ERROR] 所有服务器连接失败")
         return False
     
     def disconnect(self):
@@ -177,7 +177,7 @@ class TdxDataProviderOptimized(BaseDataProvider):
         if hasattr(self, 'api') and self.api:
             try:
                 self.api.disconnect()
-                print("✓ 已断开连接")
+                print("[OK] 已断开连接")
             except:
                 pass
         self.current_server = None
@@ -192,7 +192,7 @@ class TdxDataProviderOptimized(BaseDataProvider):
             List[Dict]: 行情数据列表
         """
         if not self.api or not self.current_server:
-            print("✗ 未连接到服务器")
+            print("[ERROR] 未连接到服务器")
             return []
         
         quotes = []

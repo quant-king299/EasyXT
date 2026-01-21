@@ -181,6 +181,7 @@ xtquant/config/user/
 最终*.py
 启动*.py
 启动*.bat
+claude-start.bat
 mock_*.py
 qmt_*.py
 example*.py
@@ -189,6 +190,11 @@ verify_*.py
 check_*.py
 compare_*.py
 comprehensive_*.py
+
+# ==================== 例外规则：保留重要文件 ====================
+# Alpha分析平台的核心文件
+!easy_xt/alpha_analysis/test_alpha_analysis.py
+!easy_xt/alpha_analysis/example_usage.py
 
 # 文档和总结文件
 *总结.md
@@ -273,3 +279,8 @@ bilibili_videos/*.md
 bilibili_videos/*.mp4
 bilibili_videos/*.avi
 bilibili_videos/*.mov
+101因子/101因子分析平台/workflows/test.json
+101因子/101因子分析平台/workflows/TEST2.json
+.claude/settings.local.json
+code_converter/转换后的ptrade代码.py
+code_converter/full_converted_strategy.py

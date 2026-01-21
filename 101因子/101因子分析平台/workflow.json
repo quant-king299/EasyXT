@@ -1,0 +1,75 @@
+{
+  "nodes": {
+    "ede81db3-6a3d-4a8a-996d-c643558196aa": {
+      "id": "ede81db3-6a3d-4a8a-996d-c643558196aa",
+      "node_type": "data_loader",
+      "position": {
+        "x": 676.0,
+        "y": 163.0
+      },
+      "params": {
+        "symbols": "000001.SZ,000002.SZ",
+        "start_date": "2023-01-01",
+        "end_date": "2023-12-31",
+        "fields": ["open", "high", "low", "close", "volume"]
+      },
+      "inputs": [],
+      "outputs": []
+    },
+    "2fc9a2c0-7e1c-46ee-80fc-2f0348b6c735": {
+      "id": "2fc9a2c0-7e1c-46ee-80fc-2f0348b6c735",
+      "node_type": "factor_calculator",
+      "position": {
+        "x": 454.0,
+        "y": 117.0
+      },
+      "params": {
+        "factor_name": "alpha001"
+      },
+      "inputs": [],
+      "outputs": []
+    },
+    "c11f2de1-2732-406e-81a1-b95c7d422476": {
+      "id": "c11f2de1-2732-406e-81a1-b95c7d422476",
+      "node_type": "ic_analyzer",
+      "position": {
+        "x": 125.0,
+        "y": 204.0
+      },
+      "params": {
+        "periods": 1
+      },
+      "inputs": [],
+      "outputs": []
+    },
+    "de85f121-9c8c-4a57-837f-3207d95cfd6a": {
+      "id": "de85f121-9c8c-4a57-837f-3207d95cfd6a",
+      "node_type": "backtester",
+      "position": {
+        "x": 174.0,
+        "y": 407.0
+      },
+      "params": {
+        "top_quantile": 0.2,
+        "bottom_quantile": 0.2,
+        "transaction_cost": 0.001
+      },
+      "inputs": [],
+      "outputs": []
+    },
+    "2ea53d5d-ac2f-4452-8952-14fdacbfd060": {
+      "id": "2ea53d5d-ac2f-4452-8952-14fdacbfd060",
+      "node_type": "factor_calculator",
+      "position": {
+        "x": 421.0,
+        "y": 129.0
+      },
+      "params": {
+        "factor_name": "alpha001"
+      },
+      "inputs": [],
+      "outputs": []
+    }
+  },
+  "connections": []
+}

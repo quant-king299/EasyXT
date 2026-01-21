@@ -137,7 +137,7 @@ class MonitorServiceManager:
             # 启动监控服务
             await self.monitoring_service.start()
             
-            logger.info("✅ 监控告警系统启动成功")
+            logger.info("[OK] 监控告警系统启动成功")
             logger.info("监控功能:")
             logger.info("  - 系统性能监控 (CPU、内存、磁盘、网络)")
             logger.info("  - 数据源状态监控 (通达信、东方财富等)")
@@ -159,7 +159,7 @@ class MonitorServiceManager:
         if self.monitoring_service:
             logger.info("正在停止监控服务...")
             await self.monitoring_service.stop()
-            logger.info("✅ 监控服务已停止")
+            logger.info("[OK] 监控服务已停止")
     
     def create_default_alert_rules(self) -> list:
         """创建默认告警规则"""

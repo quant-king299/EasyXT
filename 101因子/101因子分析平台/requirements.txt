@@ -1,0 +1,13 @@
+# 101因子分析平台依赖包
+pandas>=1.5.0
+numpy>=1.21.0
+scipy>=1.7.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+scikit-learn>=1.0.0
+statsmodels>=0.13.0
+tqdm>=4.62.0
+pyyaml>=6.0
+requests>=2.25.0
+openpyxl>=3.0.0  # Excel导出支持
+streamlit>=1.28.0  # Web界面

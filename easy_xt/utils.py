@@ -55,11 +55,33 @@ class StockCodeUtils:
     
     @staticmethod
     def normalize_codes(codes: Union[str, List[str]]) -> List[str]:
-        """批量标准化股票代码"""
+        """批量标准化股票代码
+
+        Args:
+            codes: 股票代码，支持以下格式：
+                   - 单个字符串: "000001.SZ"
+                   - 逗号分隔的字符串: "000001.SZ,000002.SZ"
+                   - 列表: ["000001.SZ", "000002.SZ"]
+
+        Returns:
+            List[str]: 标准化后的股票代码列表
+        """
+        print(f"[DEBUG] normalize_codes 输入: type={type(codes)}, value={codes}")
+
+        # 处理字符串输入
         if isinstance(codes, str):
-            codes = [codes]
-        
-        return [StockCodeUtils.normalize_code(code) for code in codes]
+            # 如果是逗号分隔的字符串，先拆分成列表
+            codes = [c.strip() for c in codes.split(',') if c.strip()]
+            print(f"[DEBUG] normalize_codes 字符串拆分后: {codes}")
+        elif not isinstance(codes, list):
+            # 其他类型（如None）转成列表
+            codes = [codes] if codes is not None else []
+            print(f"[DEBUG] normalize_codes 非字符串非列表转列表: {codes}")
+
+        # 标准化每个代码
+        result = [StockCodeUtils.normalize_code(code) for code in codes if code]
+        print(f"[DEBUG] normalize_codes 输出: {result}")
+        return result
     
     @staticmethod
     def get_market(code: str) -> str:

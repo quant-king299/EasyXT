@@ -6,6 +6,8 @@
 [![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
 [![知识星球](https://img.shields.io/badge/知识星球-quant--king299-brightgreen)](https://www.zhihu.com/club/12345678901234567890)
 
+> **注意**：本项目使用的是miniQMT环境。QMT有两个版本：完整版QMT（包含GUI界面）和miniQMT（轻量级API版本）。两者在API使用上基本一致，但在环境配置和部署方式上有显著区别。详细区别请参阅 [QMT版本说明](qmt_versions_explanation.md)。
+
 > 量化为王，策略致胜，我是只聊干货的王者 quant！
 >
 > 欢迎加入[知识星球](https://www.zhihu.com/club/12345678901234567890)，获取更多量化交易干货和一对一答疑服务！

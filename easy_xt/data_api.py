@@ -18,9 +18,9 @@ if xtquant_path not in sys.path:
 
 try:
     import xtquant.xtdata as xt
-    print("✓ xtquant.xtdata 导入成功")
+    print("[OK] xtquant.xtdata imported successfully")
 except ImportError as e:
-    print(f"✗ xtquant.xtdata 导入失败: {e}")
+    print(f"[ERROR] xtquant.xtdata import failed: {e}")
     xt = None
 
 from .utils import StockCodeUtils, TimeUtils, DataUtils, ErrorHandler
@@ -125,10 +125,10 @@ class DataAPI:
             self._connected = client.is_connected() if client else False
             
             if self._connected:
-                print("✓ 数据服务连接成功")
+                print("[OK] Data service connected successfully")
             else:
-                print("✗ 无法连接到迅投客户端")
-                print("💡 请确保迅投客户端已启动并登录")
+                print("[ERROR] Cannot connect to Xt client")
+                print("[TIPS] Please ensure Xt client is running and logged in")
             
             return self._connected
         except Exception as e:
@@ -176,10 +176,10 @@ class DataAPI:
             raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
         
         # 标准化股票代码
-        if isinstance(codes, str):
-            codes = [codes]
+        # normalize_codes 已经能够正确处理字符串（包括逗号分隔的字符串）和列表
         codes = StockCodeUtils.normalize_codes(codes)
-        
+        print(f"[DEBUG] data_api.py get_price: codes类型={type(codes)}, 值={codes}")
+
         # 处理时间参数
         from datetime import datetime
         if count:
@@ -193,6 +193,11 @@ class DataAPI:
         # 处理字段
         if not fields:
             fields = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        # 确保 fields 是列表类型
+        elif isinstance(fields, str):
+            fields = [fields]
+        elif not isinstance(fields, list):
+            fields = list(fields)
         
         # 处理复权类型
         dividend_map = {
@@ -778,8 +783,7 @@ class DataAPI:
             raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
         
         # 标准化股票代码
-        if isinstance(codes, str):
-            codes = [codes]
+        # normalize_codes 已经能够正确处理字符串（包括逗号分隔的字符串）和列表
         codes = StockCodeUtils.normalize_codes(codes)
         
         # 智能时间范围处理
@@ -798,6 +802,11 @@ class DataAPI:
         # 处理字段
         if not fields:
             fields = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        # 确保 fields 是列表类型
+        elif isinstance(fields, str):
+            fields = [fields]
+        elif not isinstance(fields, list):
+            fields = list(fields)
         
         # 处理复权类型
         dividend_map = {

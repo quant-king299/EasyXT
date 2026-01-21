@@ -31,12 +31,12 @@ def load_unified_config() -> Optional[Dict[str, Any]]:
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                print(f"✅ 成功加载统一配置文件: {config_path}")
+                print(f"[OK] Successfully loaded unified config: {config_path}")
                 return config_data
             except Exception as e:
-                print(f"⚠️ 配置文件加载失败 {config_path}: {e}")
-    
-    print("❌ 未找到统一配置文件")
+                print(f"[WARNING] Config file loading failed {config_path}: {e}")
+
+    print("[ERROR] Unified config file not found")
     return None
 
 def update_config_with_unified_settings(config_instance) -> bool:

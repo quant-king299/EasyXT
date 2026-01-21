@@ -53,11 +53,11 @@ class Config:
                     if any(keyword in path for keyword in QMT_SIMULATED_KEYWORDS):
                         self.settings['qmt']['detected_path'] = path
                         self.settings['trade']['userdata_path'] = userdata_path
-                        print(f"✓ 自动检测到模拟盘QMT路径: {path}")
+                        print(f"[OK] 自动检测到模拟盘QMT路径: {path}")
                         return path
         
         # 如果没有找到模拟盘路径，显示提示信息
-        print("❌ 未能自动检测到模拟盘QMT路径")
+        print("[ERROR] 未能自动检测到模拟盘QMT路径")
         print("💡 提示：当前只检测模拟盘路径，如需使用实盘路径请手动设置")
         return None
     
@@ -72,12 +72,12 @@ class Config:
     def set_qmt_path(self, path: str) -> bool:
         """手动设置QMT路径"""
         if not os.path.exists(path):
-            print(f"❌ QMT路径不存在: {path}")
+            print(f"[ERROR] QMT路径不存在: {path}")
             return False
         
         userdata_path = os.path.join(path, self.settings['qmt']['userdata_subpath'])
         if not os.path.exists(userdata_path):
-            print(f"❌ 未找到userdata_mini目录: {userdata_path}")
+            print(f"[ERROR] 未找到userdata_mini目录: {userdata_path}")
             return False
         
         self.settings['qmt']['detected_path'] = path
@@ -88,7 +88,7 @@ class Config:
         if path not in possible_paths:
             possible_paths.insert(0, path)
         
-        print(f"✓ QMT路径设置成功: {path}")
+        print(f"[OK] QMT路径设置成功: {path}")
         return True
     
     def validate_qmt_setup(self) -> tuple[bool, str]:
@@ -145,16 +145,16 @@ class Config:
         userdata_path = self.get_userdata_path()
         
         if qmt_path:
-            print(f"✓ QMT安装路径: {qmt_path}")
-            print(f"✓ 用户数据路径: {userdata_path}")
+            print(f"[OK] QMT安装路径: {qmt_path}")
+            print(f"[OK] 用户数据路径: {userdata_path}")
             
             is_valid, msg = self.validate_qmt_setup()
             if is_valid:
-                print(f"✓ 配置状态: {msg}")
+                print(f"[OK] 配置状态: {msg}")
             else:
-                print(f"❌ 配置状态: {msg}")
+                print(f"[ERROR] 配置状态: {msg}")
         else:
-            print("❌ 未检测到QMT安装路径")
+            print("[ERROR] 未检测到QMT安装路径")
             print("\n可能的解决方案:")
             print("1. 确保QMT已正确安装")
             print("2. 手动设置QMT路径:")

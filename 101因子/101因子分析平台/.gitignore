@@ -1,0 +1,224 @@
+# 101因子分析平台 - Git忽略文件配置
+
+# ====================
+# 归档文件（已清理的临时文件）
+# ====================
+archive/
+tests_archive/
+
+# ====================
+# 调试和测试脚本
+# ====================
+debug_*.py
+debug_*.bat
+test_*.py
+test_*.bat
+verify_*.py
+diagnose_*.py
+
+# ====================
+# 一次性修复/更新脚本
+# ====================
+add_*.py
+add_*.bat
+fix_*.py
+fix_*.bat
+update_*.py
+update_*.bat
+rebuild_*.py
+regenerate_*.py
+complete_*.py
+simple_*.py
+final_*.py
+
+# ====================
+# 提取和检查脚本
+# ====================
+extract_*.py
+extract_*.bat
+check_*.py
+analyze_*.py
+factor_status_*.py
+
+# ====================
+# 集成脚本
+# ====================
+import_*.py
+integrate_*.py
+missing_*.py
+
+# ====================
+# 临时数据文件
+# ====================
+extracted_*.json
+missing_*.json
+missing_*.py
+*_data.json
+*_alphas.json
+
+# ====================
+# 临时报告和说明文档
+# ====================
+# 中文报告文档
+*修复总结.md
+*集成完成*.md
+*说明文档.md
+*功能说明.md
+EXTRACTION_SUMMARY.md
+FACTOR_EXPANSION_SUMMARY.md
+FACTOR_WINDOW_REQUIREMENTS.md
+analysis_report.md
+factor_expansion_report.md
+
+# 其他临时文档
+公众号文章.md
+资源分析与集成建议.md
+因子回测逻辑.txt
+
+# ====================
+# Python相关
+# ====================
+# 字节码文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 分发 / 打包
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyInstaller
+*.manifest
+*.spec
+
+# 单元测试 / 覆盖率报告
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+
+# 虚拟环境
+venv/
+ENV/
+env/
+.venv
+.env
+
+# ====================
+# 数据目录
+# ====================
+# 原始数据
+data/raw/
+data/processed/
+
+# 缓存数据
+data/cache/
+data/temp/
+*.csv
+*.h5
+*.hdf5
+*.pkl
+*.pickle
+
+# ====================
+# IDE和编辑器
+# ====================
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+*.iml
+*.iws
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Vim
+[._]*.s[a-v][a-z]
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+Session.vim
+Sessionx.vim
+.netrwhist
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+
+# ====================
+# 操作系统
+# ====================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+nul
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Linux
+*~
+.directory
+
+# ====================
+# 日志和临时文件
+# ====================
+*.log
+*.log.*
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# ====================
+# Streamlit相关
+# ====================
+.streamlit/

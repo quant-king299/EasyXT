@@ -95,9 +95,9 @@ class TdxDataProviderEnhanced(BaseDataProvider):
         for server in self.servers:
             if self._test_server_connectivity(server['host'], server['port'], self.connection_test_timeout):
                 available_servers.append(server)
-                self.logger.info(f"✓ {server['name']} ({server['host']}:{server['port']}) 可连通")
+                self.logger.info(f"[OK] {server['name']} ({server['host']}:{server['port']}) 可连通")
             else:
-                self.logger.debug(f"✗ {server['name']} ({server['host']}:{server['port']}) 不可连通")
+                self.logger.debug(f"[ERROR] {server['name']} ({server['host']}:{server['port']}) 不可连通")
         
         if available_servers:
             self.logger.info(f"发现 {len(available_servers)} 个可用服务器")
@@ -136,7 +136,7 @@ class TdxDataProviderEnhanced(BaseDataProvider):
                         if test_result is not None:
                             self.connected = True
                             self.current_server = server
-                            self.logger.info(f"✓ 连接成功: {server['name']} ({server['host']}:{server['port']})")
+                            self.logger.info(f"[OK] 连接成功: {server['name']} ({server['host']}:{server['port']})")
                             return True
                         else:
                             self.logger.warning(f"连接测试失败: {server['name']}")
