@@ -195,6 +195,9 @@ comprehensive_*.py
 # Alpha分析平台的核心文件
 !easy_xt/alpha_analysis/test_alpha_analysis.py
 !easy_xt/alpha_analysis/example_usage.py
+# JQ2QMT策略的核心文件
+!strategies/jq2qmt/qmt_signal_client.py
+!strategies/jq2qmt/qmt_client_mini.py
 
 # 文档和总结文件
 *总结.md
