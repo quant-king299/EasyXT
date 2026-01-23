@@ -18,6 +18,10 @@ from ic_ir_analysis import ICIRAnalyzer
 from factor_correlation import FactorCorrelationAnalyzer
 from layered_backtest import LayeredBacktester
 
+# 配置报告输出目录
+REPORT_DIR = r'C:\Users\Administrator\Desktop\miniqmt扩展\101因子\101因子分析平台\reports'
+os.makedirs(REPORT_DIR, exist_ok=True)
+
 
 def print_banner():
     """打印平台横幅"""
@@ -140,9 +144,9 @@ def ic_ir_analysis(price_data, factor_dict):
             # 保存结果
             save = input(f"\n是否保存{factor_name}的分析结果？(y/n): ").strip().lower()
             if save == 'y':
-                analyzer.save_ic_series(f'{factor_name}_ic_series.csv')
-                analyzer.save_report(f'{factor_name}_ic_report.csv')
-                print(f"[OK] 结果已保存\n")
+                analyzer.save_ic_series(os.path.join(REPORT_DIR, f'{factor_name}_ic_series.csv'))
+                analyzer.save_report(os.path.join(REPORT_DIR, f'{factor_name}_ic_report.csv'))
+                print(f"[OK] 结果已保存到 {REPORT_DIR}\n")
 
         except Exception as e:
             print(f"[X] 分析失败：{str(e)}\n")
@@ -183,9 +187,9 @@ def factor_correlation_analysis(price_data, factor_dict):
         # 保存结果
         save = input("\n是否保存分析结果？(y/n): ").strip().lower()
         if save == 'y':
-            analyzer.save_correlation_matrix('factor_correlation_matrix.csv')
-            analyzer.save_report('factor_correlation_report.csv', threshold=threshold)
-            print("[OK] 结果已保存\n")
+            analyzer.save_correlation_matrix(os.path.join(REPORT_DIR, 'factor_correlation_matrix.csv'))
+            analyzer.save_report(os.path.join(REPORT_DIR, 'factor_correlation_report.csv'), threshold=threshold)
+            print(f"[OK] 结果已保存到 {REPORT_DIR}\n")
 
     except Exception as e:
         print(f"[X] 分析失败：{str(e)}\n")
@@ -240,9 +244,9 @@ def layered_backtest(price_data, factor_dict):
             # 保存结果
             save = input(f"\n是否保存{factor_name}的回测结果？(y/n): ").strip().lower()
             if save == 'y':
-                backtester.save_returns(f'{factor_name}_long_short_returns.csv')
-                backtester.save_report(f'{factor_name}_backtest_report.csv')
-                print(f"[OK] 结果已保存\n")
+                backtester.save_returns(os.path.join(REPORT_DIR, f'{factor_name}_long_short_returns.csv'))
+                backtester.save_report(os.path.join(REPORT_DIR, f'{factor_name}_backtest_report.csv'))
+                print(f"[OK] 结果已保存到 {REPORT_DIR}\n")
 
         except Exception as e:
             print(f"[X] 回测失败：{str(e)}\n")
@@ -306,8 +310,9 @@ def complete_analysis(price_data, factor_dict):
     # 保存综合报告
     save = input("\n是否保存综合分析报告？(y/n): ").strip().lower()
     if save == 'y':
-        results_df.to_csv('factor_comparison_report.csv', encoding='utf-8-sig')
-        print("\n[OK] 综合报告已保存到: factor_comparison_report.csv\n")
+        report_path = os.path.join(REPORT_DIR, 'factor_comparison_report.csv')
+        results_df.to_csv(report_path, encoding='utf-8-sig')
+        print(f"\n[OK] 综合报告已保存到: {report_path}\n")
 
 
 def run_example():

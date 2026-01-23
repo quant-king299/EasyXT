@@ -13,9 +13,14 @@
 
 import numpy as np
 import pandas as pd
+import os
 from ic_ir_analysis import ICIRAnalyzer
 from factor_correlation import FactorCorrelationAnalyzer
 from layered_backtest import LayeredBacktester
+
+# 配置报告输出目录
+REPORT_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'reports')
+os.makedirs(REPORT_DIR, exist_ok=True)
 
 
 def generate_sample_data():
@@ -99,8 +104,8 @@ def example_ic_ir_analysis(price_data, factor_data, factor_name='alpha001'):
     analyzer.print_report()
 
     # 保存结果
-    analyzer.save_ic_series(f'{factor_name}_ic_series.csv')
-    analyzer.save_report(f'{factor_name}_ic_report.csv')
+    analyzer.save_ic_series(os.path.join(REPORT_DIR, f'{factor_name}_ic_series.csv'))
+    analyzer.save_report(os.path.join(REPORT_DIR, f'{factor_name}_ic_report.csv'))
 
     # 获取IC统计指标
     ic_stats = analyzer.calculate_ic_stats()
@@ -126,10 +131,10 @@ def example_factor_correlation_analysis(factor_dict):
     analyzer.print_report(threshold=0.7)
 
     # 保存相关系数矩阵
-    analyzer.save_correlation_matrix('factor_correlation_matrix.csv')
+    analyzer.save_correlation_matrix(os.path.join(REPORT_DIR, 'factor_correlation_matrix.csv'))
 
     # 保存分析报告
-    analyzer.save_report('factor_correlation_report.csv', threshold=0.7)
+    analyzer.save_report(os.path.join(REPORT_DIR, 'factor_correlation_report.csv'), threshold=0.7)
 
     # 获取去重建议
     suggestions = analyzer.generate_removal_suggestions(threshold=0.7)
@@ -181,8 +186,8 @@ def example_layered_backtest(price_data, factor_data, factor_name='alpha001'):
     backtester.print_report()
 
     # 保存结果
-    backtester.save_returns(f'{factor_name}_long_short_returns.csv')
-    backtester.save_report(f'{factor_name}_backtest_report.csv')
+    backtester.save_returns(os.path.join(REPORT_DIR, f'{factor_name}_long_short_returns.csv'))
+    backtester.save_report(os.path.join(REPORT_DIR, f'{factor_name}_backtest_report.csv'))
 
     return backtester
 
@@ -244,8 +249,9 @@ def example_complete_analysis(price_data, factor_dict):
     print(results_df)
 
     # 保存综合报告
-    results_df.to_csv('factor_comparison_report.csv', encoding='utf-8-sig')
-    print("\n综合报告已保存到: factor_comparison_report.csv")
+    report_path = os.path.join(REPORT_DIR, 'factor_comparison_report.csv')
+    results_df.to_csv(report_path, encoding='utf-8-sig')
+    print(f"\n综合报告已保存到: {report_path}")
 
     return results_df
 

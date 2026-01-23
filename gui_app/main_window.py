@@ -51,12 +51,21 @@ except ImportError:
 # 添加项目路径
 project_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, project_path)
-import easy_xt
+
+# 尝试导入easy_xt
+try:
+    import easy_xt
+    EASYXT_AVAILABLE = True
+except ImportError:
+    EASYXT_AVAILABLE = False
+    print("警告: easy_xt未安装，部分功能将不可用")
 
 # 导入各个功能组件
 from gui_app.widgets.backtest_widget import BacktestWidget
 from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
 from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
+from gui_app.widgets.grid_trading_widget import GridTradingWidget
+from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
 
 
 class MainWindow(QMainWindow):
@@ -105,13 +114,27 @@ class MainWindow(QMainWindow):
         self.backtest_widget = BacktestWidget()
         backtest_layout.addWidget(self.backtest_widget)
         self.tab_widget.addTab(backtest_tab, "回测分析")
-        
+
         # 聚宽到Ptrade转换标签页
         jq_to_ptrade_tab = QWidget()
         jq_to_ptrade_layout = QVBoxLayout(jq_to_ptrade_tab)
         self.jq_to_ptrade_widget = JQToPtradeWidget()
         jq_to_ptrade_layout.addWidget(self.jq_to_ptrade_widget)
         self.tab_widget.addTab(jq_to_ptrade_tab, "JQ转Ptrade")
+
+        # 网格交易标签页
+        grid_trading_tab = QWidget()
+        grid_trading_layout = QVBoxLayout(grid_trading_tab)
+        self.grid_trading_widget = GridTradingWidget()
+        grid_trading_layout.addWidget(self.grid_trading_widget)
+        self.tab_widget.addTab(grid_trading_tab, "网格交易")
+
+        # 条件单标签页
+        conditional_order_tab = QWidget()
+        conditional_order_layout = QVBoxLayout(conditional_order_tab)
+        self.conditional_order_widget = ConditionalOrderWidget()
+        conditional_order_layout.addWidget(self.conditional_order_widget)
+        self.tab_widget.addTab(conditional_order_tab, "条件单")
         
     def create_status_bar(self):
         """创建状态栏"""
@@ -119,7 +142,7 @@ class MainWindow(QMainWindow):
         self.setStatusBar(self.status_bar)
         
         # 添加连接状态指示器
-        self.connection_status = QLabel("MiniQMT未连接")
+        self.connection_status = QLabel("🔴 MiniQMT未连接")
         self.connection_status.setStyleSheet("""
             QLabel {
                 background-color: #ff4444;
@@ -128,13 +151,164 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 font-weight: bold;
             }
+            QLabel:hover {
+                background-color: #ff6666;
+                cursor: pointer;
+            }
         """)
+        # 添加提示文本
+        self.connection_status.setToolTip("点击刷新连接状态")
+        # 连接鼠标点击事件
+        self.connection_status.mousePressEvent = self.on_connection_status_clicked
         
         self.status_bar.addPermanentWidget(self.connection_status)
         self.status_bar.showMessage("就绪")
-        
+
+        # 检查MiniQMT连接状态（启动时延迟1秒检查）
+        QTimer.singleShot(1000, self.check_connection_status)
+
+        # 定期检查连接状态（每30秒检查一次）
+        self.connection_check_timer = QTimer()
+        self.connection_check_timer.timeout.connect(self.check_connection_status)
+        self.connection_check_timer.start(30000)  # 30秒
+
+    def on_connection_status_clicked(self, event):
+        """连接状态标签被点击事件"""
+        print("手动刷新连接状态...")
+        self.check_connection_status()
+
+    def check_connection_status(self):
+        """检查MiniQMT连接状态"""
+        print("\n" + "="*60)
+        print("开始检查MiniQMT连接状态...")
+        print("="*60)
+
+        try:
+            # 检查easy_xt是否可用
+            if not EASYXT_AVAILABLE:
+                print("❌ EasyXT不可用")
+                self.update_connection_status(False)
+                return
+
+            print("✓ EasyXT可用")
+
+            try:
+                api = easy_xt.get_api()
+                print("✓ 成功获取API实例")
+            except Exception as e:
+                print(f"❌ 获取API失败: {str(e)}")
+                self.update_connection_status(False)
+                return
+
+            # 检查data服务
+            if not hasattr(api, 'data'):
+                print("❌ API没有data属性")
+                self.update_connection_status(False)
+                return
+
+            print("✓ API有data属性")
+
+            # 尝试初始化数据服务
+            print("\n尝试初始化数据服务...")
+            try:
+                if hasattr(api, 'init_data'):
+                    init_result = api.init_data()
+                    print(f"  init_data() 返回: {init_result}")
+
+                    if init_result:
+                        print("✓ 数据服务初始化成功")
+                    else:
+                        print("⚠ 数据服务初始化返回False，但继续尝试获取数据...")
+                else:
+                    print("⚠ API没有init_data方法，直接尝试获取数据")
+            except Exception as e:
+                print(f"⚠ 初始化数据服务时出现异常: {str(e)}")
+                print("  继续尝试获取数据...")
+
+            # 尝试获取行情数据来验证连接
+            test_codes = ['511090.SH', '000001.SZ']
+            connected = False
+
+            for code in test_codes:
+                try:
+                    print(f"\n尝试获取 {code} 的行情数据...")
+                    price_df = api.data.get_current_price([code])
+
+                    print(f"  返回类型: {type(price_df)}")
+                    print(f"  是否为None: {price_df is None}")
+
+                    if price_df is not None:
+                        print(f"  是否为空: {price_df.empty if hasattr(price_df, 'empty') else 'N/A'}")
+                        print(f"  长度: {len(price_df) if hasattr(price_df, '__len__') else 'N/A'}")
+
+                        if hasattr(price_df, 'empty') and not price_df.empty:
+                            connected = True
+                            print(f"✓ 连接验证成功：通过{code}获取到行情数据")
+                            print(f"  数据预览:\n{price_df.head()}")
+                            break
+                        else:
+                            print(f"  返回为空DataFrame")
+                    else:
+                        print(f"  返回为None")
+
+                except Exception as e:
+                    print(f"  ❌ 获取{code}行情异常: {str(e)}")
+                    import traceback
+                    print(f"  详细错误: {traceback.format_exc()}")
+                    continue
+
+            print("\n" + "="*60)
+            if connected:
+                print("✅ 最终结果: MiniQMT已连接")
+            else:
+                print("❌ 最终结果: MiniQMT未连接")
+            print("="*60 + "\n")
+
+            self.update_connection_status(connected)
+
+        except Exception as e:
+            print(f"\n❌ 检查连接状态异常: {str(e)}")
+            import traceback
+            print(f"详细错误堆栈:\n{traceback.format_exc()}")
+            print("="*60 + "\n")
+            self.update_connection_status(False)
+
+    def update_connection_status(self, connected: bool):
+        """更新连接状态显示
+
+        Args:
+            connected: 是否已连接
+        """
+        if connected:
+            self.connection_status.setText("🟢 MiniQMT已连接")
+            self.connection_status.setStyleSheet("""
+                QLabel {
+                    background-color: #00cc00;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
+            self.status_bar.showMessage("MiniQMT已连接")
+        else:
+            self.connection_status.setText("🔴 MiniQMT未连接")
+            self.connection_status.setStyleSheet("""
+                QLabel {
+                    background-color: #ff4444;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
+            self.status_bar.showMessage("MiniQMT未连接，请检查QMT客户端是否启动")
+
     def closeEvent(self, a0):
         """关闭事件"""
+        # 停止连接检查定时器
+        if hasattr(self, 'connection_check_timer'):
+            self.connection_check_timer.stop()
         a0.accept()
 
 
