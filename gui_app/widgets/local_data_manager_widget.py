@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QGroupBox, QLabel, QLineEdit, QPushButton, QTextEdit,
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
     QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
-    QProgressBar, QSplitter, QFrame, QMessageBox,
+    QProgressBar, QSplitter, QFrame, QMessageBox, QDialog,
     QFileDialog, QFormLayout, QScrollArea, QSizePolicy,
     QToolButton, QMenu, QAction, QDateEdit, QTreeWidgetItem,
     QTreeWidget, QComboBox, QInputDialog
@@ -337,17 +337,17 @@ class SingleStockDownloadThread(QThread):
         """运行下载任务"""
         manager = None
         try:
-            # 导入本地数据管理器
+            # 导入支持复权的本地数据管理器
             factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
             if str(factor_platform_path) not in sys.path:
                 sys.path.insert(0, str(factor_platform_path))
 
-            from data_manager import LocalDataManager
+            from data_manager.local_data_manager_with_adjustment import LocalDataManager
 
             manager = LocalDataManager()
-            self.log_signal.emit(f"✅ 数据管理器初始化成功")
+            self.log_signal.emit(f"[OK] 数据管理器初始化成功")
 
-            self.log_signal.emit(f"📊 正在下载 {self.stock_code}...")
+            self.log_signal.emit(f"[INFO] 正在下载 {self.stock_code}...")
             self.log_signal.emit(f"   数据周期: {self.period}")
             self.log_signal.emit(f"   日期范围: {self.start_date} ~ {self.end_date}")
 
@@ -439,14 +439,10 @@ class SingleStockDownloadThread(QThread):
             }
             data_type = data_type_map.get(self.period, 'daily')
 
-            # 保存数据
-            self.log_signal.emit(f"💾 正在保存数据...")
-            success, file_size = manager.storage.save_data(df, self.stock_code, data_type)
-
-            if not success:
-                manager.close()
-                self.error_signal.emit(f"❌ 保存 {self.stock_code} 数据失败")
-                return
+            # 保存数据（不复权原始数据）
+            self.log_signal.emit(f"[INFO] 正在保存【不复权】原始数据...")
+            manager.save_data(df, self.stock_code, data_type)
+            self.log_signal.emit(f"[INFO] 原始数据已保存，查看时可选择复权类型")
 
             # 判断标的类型
             if self.stock_code.endswith('.SH') or self.stock_code.endswith('.SZ'):
@@ -457,15 +453,12 @@ class SingleStockDownloadThread(QThread):
             else:
                 symbol_type = 'stock'  # 默认
 
-            # 更新元数据
-            manager.metadata.update_data_version(
-                symbol=self.stock_code,
-                symbol_type=symbol_type,
-                start_date=str(df.index.min().date()),
-                end_date=str(df.index.max().date()),
-                record_count=record_count,
-                file_size=file_size
-            )
+            # 获取文件大小
+            try:
+                file_info = manager.storage.get_data_info(self.stock_code, data_type)
+                file_size = file_info.get('size_mb', 0) if file_info else 0
+            except:
+                file_size = 0
 
             manager.close()
 
@@ -477,11 +470,11 @@ class SingleStockDownloadThread(QThread):
             }
 
             self.finished_signal.emit(result)
-            self.log_signal.emit(f"✅ {self.stock_code} 下载完成!")
+            self.log_signal.emit(f"[OK] {self.stock_code} 下载完成!")
 
         except Exception as e:
             import traceback
-            error_msg = f"❌ 下载失败: {str(e)}\n{traceback.format_exc()}"
+            error_msg = f"[ERROR] 下载失败: {str(e)}\n{traceback.format_exc()}"
             self.log_signal.emit(error_msg)
             self.error_signal.emit(error_msg)
         finally:
@@ -1121,6 +1114,63 @@ class LocalDataManagerWidget(QWidget):
 
         list_layout.addLayout(search_layout)
 
+        # 查看数据选项
+        view_layout = QHBoxLayout()
+
+        # 复权类型选择
+        view_layout.addWidget(QLabel("查看时复权:"))
+        self.view_adjust_combo = QComboBox()
+        self.view_adjust_combo.addItems(["不复权", "前复权", "后复权"])
+        self.view_adjust_combo.setCurrentIndex(0)
+        self.view_adjust_combo.setToolTip(
+            "选择查看数据时的复权类型：\n"
+            "不复权：查看原始价格\n"
+            "前复权：当前价真实，适合短期分析\n"
+            "后复权：历史价真实，适合长期分析"
+        )
+        view_layout.addWidget(self.view_adjust_combo)
+
+        # 复权说明按钮
+        self.view_adjust_help_btn = QPushButton("❓")
+        self.view_adjust_help_btn.setFixedWidth(30)
+        self.view_adjust_help_btn.setToolTip("查看复权说明")
+        self.view_adjust_help_btn.clicked.connect(self.show_adjustment_info)
+        self.view_adjust_help_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9E9E9E;
+                color: white;
+                border: none;
+                padding: 2px 5px;
+                border-radius: 3px;
+                font-size: 10px;
+            }
+            QPushButton:hover {
+                background-color: #757575;
+            }
+        """)
+        view_layout.addWidget(self.view_adjust_help_btn)
+
+        # 查看数据按钮
+        self.view_data_btn = QPushButton("👁️ 查看选中数据")
+        self.view_data_btn.clicked.connect(self.view_selected_data)
+        self.view_data_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #0b7dda;
+            }
+        """)
+        view_layout.addWidget(self.view_data_btn)
+
+        view_layout.addStretch()
+        list_layout.addLayout(view_layout)
+
         # 数据表格
         self.data_table = QTableWidget()
         self.data_table.setColumnCount(6)
@@ -1335,11 +1385,12 @@ class LocalDataManagerWidget(QWidget):
         self.log(f"🎯 开始下载单个标的: {stock_code}")
         self.log(f"   数据类型: {data_type_text}")
         self.log(f"   日期范围: {start_date} ~ {end_date}")
+        self.log(f"   说明: 下载数据为【不复权】的原始数据，查看时可选择复权类型")
 
         # 禁用按钮
         self.manual_download_btn.setEnabled(False)
 
-        # 创建下载线程
+        # 创建下载线程（不传递复权参数，只下载原始数据）
         self.download_thread = SingleStockDownloadThread(
             stock_code=stock_code,
             start_date=start_date,
@@ -1377,6 +1428,95 @@ class LocalDataManagerWidget(QWidget):
         """单个标的下载出错"""
         self.manual_download_btn.setEnabled(True)
         QMessageBox.critical(self, "下载失败", error_msg)
+
+    def show_adjustment_info(self):
+        """显示复权说明对话框"""
+        info_text = """
+<div style='font-family: Microsoft YaHei, SimHei; font-size: 11pt;'>
+
+<h3 style='color: #2196F3;'>📊 复权类型说明</h3>
+
+<table border='1' cellpadding='8' cellspacing='0' style='border-collapse: collapse; width: 100%; margin-top: 10px;'>
+<tr style='background-color: #f0f0f0;'>
+<th style='width: 15%;'>类型</th>
+<th style='width: 25%;'>定义</th>
+<th style='width: 30%;'>适用场景</th>
+<th style='width: 30%;'>优缺点</th>
+</tr>
+<tr>
+<td><b>不复权</b></td>
+<td>原始价格<br>不做任何调整</td>
+<td>✓ 日内交易<br>✓ 实时交易<br>✓ 短期分析</td>
+<td>✓ 价格真实<br>✗ 分红除权时价格会跳跃</td>
+</tr>
+<tr>
+<td><b>前复权</b></td>
+<td>当前价真实<br>调整历史价格</td>
+<td>✓ 短期回测<br>✓ 技术分析（1年内）</td>
+<td>✓ 当前价真实<br>✗ 历史价可能失真</td>
+</tr>
+<tr>
+<td><b>后复权</b></td>
+<td>历史价真实<br>调整当前价格</td>
+<td>✓ 长期回测<br>✓ 因子分析（3年以上）</td>
+<td>✓ 历史价真实<br>✗ 当前价不真实</td>
+</tr>
+</table>
+
+<h4 style='color: #FF9800; margin-top: 20px;'>💡 使用建议</h4>
+<ul style='line-height: 1.8;'>
+<li><b>短期交易者</b>（日内、周内）→ 使用 <b style='color: #2196F3;'>不复权</b></li>
+<li><b>短期回测</b>（1年内）→ 使用 <b style='color: #4CAF50;'>前复权</b></li>
+<li><b>长期回测</b>（3年以上）→ 使用 <b style='color: #F44336;'>后复权</b></li>
+<li><b>因子分析</b>、选股 → 使用 <b style='color: #F44336;'>后复权</b></li>
+</ul>
+
+<h4 style='color: #9C27B0; margin-top: 15px;'>📌 注意事项</h4>
+<ul style='line-height: 1.8;'>
+<li>复权计算需要分红数据，首次使用可能需要下载</li>
+<li>前复权和后复权的价格不同，但收益率相同</li>
+<li>实时交易请使用"不复权"，确保价格准确</li>
+</ul>
+
+</div>
+        """
+
+        msg = QMessageBox(self)
+        msg.setWindowTitle("复权类型说明")
+        msg.setTextFormat(Qt.RichText)
+        msg.setText(info_text)
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.setMinimumWidth(600)
+        msg.exec_()
+
+    def view_selected_data(self):
+        """查看选中数据（应用复权）"""
+        # 获取选中的行
+        selected_items = self.data_table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "提示", "请先在列表中选择一只股票")
+            return
+
+        # 获取股票代码
+        row = self.data_table.currentRow()
+        code_item = self.data_table.item(row, 0)
+        if not code_item:
+            return
+
+        stock_code = code_item.text()
+
+        # 获取复权类型
+        adjust_text = self.view_adjust_combo.currentText()
+        adjust_map = {
+            "不复权": "none",
+            "前复权": "qfq",
+            "后复权": "hfq"
+        }
+        adjust = adjust_map.get(adjust_text, "none")
+
+        # 显示数据查看对话框
+        self.log(f"[INFO] 查看 {stock_code} 数据（{adjust_text}）")
+        DataViewerDialog(stock_code, adjust, self).exec_()
 
     def download_stocks(self):
         """下载A股数据"""
@@ -1688,6 +1828,186 @@ class LocalDataManagerWidget(QWidget):
             QMessageBox.information(self, "验证完成", msg)
         else:
             QMessageBox.warning(self, "验证完成", msg + "\n⚠️ 该股票没有本地数据，请先下载")
+
+
+class DataViewerDialog(QDialog):
+    """数据查看对话框 - 支持复权"""
+
+    def __init__(self, stock_code: str, adjust: str, parent=None):
+        super().__init__(parent)
+        self.stock_code = stock_code
+        self.adjust = adjust
+        self.setWindowTitle(f"查看数据 - {stock_code} ({adjust})")
+        self.setMinimumSize(900, 600)
+        self.init_ui()
+        self.load_data()
+
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+
+        # 顶部信息
+        info_layout = QHBoxLayout()
+
+        # 股票代码
+        code_label = QLabel(f"股票代码: <b>{self.stock_code}</b>")
+        code_label.setStyleSheet("font-size: 12pt;")
+        info_layout.addWidget(code_label)
+
+        # 复权类型
+        adjust_names = {"none": "不复权", "qfq": "前复权", "hfq": "后复权"}
+        adjust_label = QLabel(f"复权类型: <b>{adjust_names.get(self.adjust, self.adjust)}</b>")
+        adjust_label.setStyleSheet("font-size: 12pt;")
+        info_layout.addWidget(adjust_label)
+
+        info_layout.addStretch()
+
+        # 导出按钮
+        export_btn = QPushButton("📊 导出CSV")
+        export_btn.clicked.connect(self.export_csv)
+        export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        info_layout.addWidget(export_btn)
+
+        # 关闭按钮
+        close_btn = QPushButton("✖ 关闭")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+        """)
+        info_layout.addWidget(close_btn)
+
+        layout.addLayout(info_layout)
+
+        # 数据表格
+        self.data_table = QTableWidget()
+        self.data_table.setAlternatingRowColors(True)
+        self.data_table.setSortingEnabled(True)
+        layout.addWidget(self.data_table)
+
+        # 统计信息
+        self.stats_label = QLabel()
+        self.stats_label.setStyleSheet("font-size: 10pt; color: #666;")
+        layout.addWidget(self.stats_label)
+
+    def load_data(self):
+        """加载数据"""
+        try:
+            # 导入数据管理器
+            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
+            if str(factor_platform_path) not in sys.path:
+                sys.path.insert(0, str(factor_platform_path))
+
+            from data_manager.local_data_manager_with_adjustment import LocalDataManager
+
+            manager = LocalDataManager()
+
+            # 加载数据（支持复权）
+            df = manager.load_data(self.stock_code, 'daily', adjust=self.adjust)
+
+            if df.empty:
+                QMessageBox.warning(self, "提示", f"没有找到 {self.stock_code} 的数据")
+                self.reject()
+                return
+
+            # 显示数据
+            self._display_data(df)
+
+            manager.close()
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def _display_data(self, df):
+        """显示数据到表格"""
+        # 设置列
+        df = df.reset_index()
+        columns = df.columns.tolist()
+
+        self.data_table.setColumnCount(len(columns))
+        self.data_table.setHorizontalHeaderLabels(columns)
+
+        # 设置行
+        self.data_table.setRowCount(len(df))
+
+        # 填充数据（只显示前1000条，避免太慢）
+        display_df = df.head(1000)
+
+        for row_idx in range(len(display_df)):
+            for col_idx, col in enumerate(columns):
+                value = display_df.iloc[row_idx, col_idx]
+                item = QTableWidgetItem(str(value))
+                self.data_table.setItem(row_idx, col_idx, item)
+
+        # 调整列宽
+        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # 更新统计信息
+        stats = f"总记录数: {len(df):,} 条"
+        if len(df) > 1000:
+            stats += f" (显示前1000条)"
+
+        if not df.empty:
+            latest_price = df['close'].iloc[-1]
+            stats += f" | 最新价: {latest_price:.2f}"
+
+            if len(df) >= 2:
+                start_price = df['close'].iloc[0]
+                total_return = (latest_price / start_price - 1) * 100
+                stats += f" | 区间涨跌: {total_return:+.2f}%"
+
+        self.stats_label.setText(stats)
+
+    def export_csv(self):
+        """导出为CSV"""
+        try:
+            # 导入数据管理器
+            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
+            if str(factor_platform_path) not in sys.path:
+                sys.path.insert(0, str(factor_platform_path))
+
+            from data_manager.local_data_manager_with_adjustment import LocalDataManager
+
+            manager = LocalDataManager()
+            df = manager.load_data(self.stock_code, 'daily', adjust=self.adjust)
+            manager.close()
+
+            # 选择保存路径
+            default_name = f"{self.stock_code}_{self.adjust}_data.csv"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "导出CSV",
+                default_name,
+                "CSV文件 (*.csv)"
+            )
+
+            if file_path:
+                df.to_csv(file_path, encoding='utf-8-sig')
+                QMessageBox.information(self, "成功", f"数据已导出到:\n{file_path}")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
 
 
 if __name__ == '__main__':

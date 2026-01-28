@@ -60,9 +60,9 @@ class DataManager:
 
                 from data_manager import LocalDataManager
                 self.local_data_manager = LocalDataManager()
-                print("✅ 本地数据缓存已启用")
+                print("[OK] 本地数据缓存已启用")
             except Exception as e:
-                print(f"⚠️ 本地数据缓存初始化失败: {e}")
+                print(f"[WARNING] 本地数据缓存初始化失败: {e}")
                 self.local_data_manager = None
 
         # 检查各数据源可用性
@@ -135,7 +135,7 @@ class DataManager:
             check_thread = threading.Thread(target=quick_check)
             check_thread.daemon = True
             check_thread.start()
-            check_thread.join(timeout=2.0)
+            check_thread.join(timeout=5.0)  # 增加超时时间到5秒
             
             return {
                 'available': True,
@@ -233,32 +233,33 @@ class DataManager:
             priority.extend(other_sources)
             return priority
         else:
-            # 默认优先级：LOCAL → QMT → QStock → AKShare → 模拟数据
+            # 默认优先级：QMT → LOCAL → QStock → AKShare → 模拟数据
+            # QMT优先，因为它提供实时数据
             priority = [DataSource.QMT, DataSource.QSTOCK, DataSource.AKSHARE, DataSource.MOCK]
-            # 如果本地缓存可用，将其放在首位
+            # 如果本地缓存可用，将其放在QMT之后（作为备选）
             if (self.local_data_manager is not None and
                 self.source_status[DataSource.LOCAL]['connected']):
-                priority.insert(0, DataSource.LOCAL)
+                priority.insert(1, DataSource.LOCAL)  # 插入到第2位
             return priority
     
     def _print_initialization_status(self):
         """打印初始化状态"""
-        print("📊 多数据源管理器初始化完成")
+        print("[DATA] 多数据源管理器初始化完成")
         print("=" * 50)
         
         for source in DataSource:
             status = self.source_status[source]
             if status['available']:
                 if status['connected']:
-                    icon = "✅"
+                    icon = "[OK]"
                     color_status = "已连接"
                 else:
-                    icon = "⚠️"
+                    icon = "[WARNING]"
                     color_status = "未连接"
             else:
-                icon = "❌"
+                icon = "[ERROR]"
                 color_status = "不可用"
-            
+
             print(f"   {icon} {source.value.upper():<8}: {color_status} - {status['message']}")
         
         print("=" * 50)
@@ -268,9 +269,9 @@ class DataManager:
                            if self.source_status[s]['available'] and self.source_status[s]['connected']]
         
         if available_sources:
-            print(f"🎯 可用数据源: {' → '.join(available_sources)}")
+            print(f"[TARGET] 可用数据源: {' → '.join(available_sources)}")
         else:
-            print("🎲 仅模拟数据可用")
+            print("[INFO] 仅模拟数据可用")
         
         print("=" * 50)
     
@@ -299,23 +300,23 @@ class DataManager:
     def _get_status_message(self, active_source: DataSource) -> str:
         """获取状态消息"""
         if active_source == DataSource.QMT:
-            return "✅ 已连接到QMT，使用真实市场数据"
+            return "[OK] 已连接到QMT，使用真实市场数据"
         elif active_source == DataSource.QSTOCK:
-            return "✅ 已连接到QStock，使用真实市场数据"
+            return "[OK] 已连接到QStock，使用真实市场数据"
         elif active_source == DataSource.AKSHARE:
-            return "✅ 已连接到AKShare，使用真实市场数据"
+            return "[OK] 已连接到AKShare，使用真实市场数据"
         else:
-            return "🎲 使用模拟数据"
+            return "[INFO] 使用模拟数据"
     
     def set_preferred_source(self, source: DataSource):
         """设置首选数据源"""
         self.preferred_source = source
         self.source_priority = self._get_source_priority()
-        print(f"🎯 首选数据源已设置为: {source.value.upper()}")
+        print(f"[INFO] 首选数据源已设置为: {source.value.upper()}")
     
     def refresh_source_status(self):
         """刷新所有数据源状态"""
-        print("🔄 刷新数据源状态...")
+        print("[RELOAD] 刷新数据源状态...")
         self.source_status = self._check_all_sources()
         self._print_initialization_status()
     
@@ -324,9 +325,10 @@ class DataManager:
                       start_date: str,
                       end_date: str,
                       period: str = '1d',
-                      force_source: Optional[DataSource] = None) -> pd.DataFrame:
+                      force_source: Optional[DataSource] = None,
+                      adjust: str = 'none') -> pd.DataFrame:
         """
-        获取股票历史数据（支持多数据源）
+        获取股票历史数据（支持多数据源 + 复权）
 
         Args:
             stock_code: 股票代码 (如 '000001.SZ')
@@ -334,16 +336,19 @@ class DataManager:
             end_date: 结束日期 ('YYYY-MM-DD')
             period: 数据周期 ('1d', '1h', '5m' 等)
             force_source: 强制使用指定数据源
+            adjust: 复权类型 ('none'=不复权, 'front'=前复权, 'back'=后复权)
 
         Returns:
-            包含OHLCV数据的DataFrame
+            包含OHLCV数据的DataFrame（已应用复权）
         """
-        print(f"📊 获取股票数据: {stock_code} ({start_date} ~ {end_date})")
+        adjust_types = {'none': '不复权', 'front': '前复权', 'back': '后复权'}
+        print(f"[DATA] 获取股票数据: {stock_code} ({start_date} ~ {end_date})")
+        print(f"   复权类型: {adjust_types.get(adjust, adjust)}")
 
         # 如果强制指定数据源
         if force_source:
-            print(f"🎯 强制使用数据源: {force_source.value.upper()}")
-            return self._get_data_from_source(force_source, stock_code, start_date, end_date, period)
+            print(f"[TARGET] 强制使用数据源: {force_source.value.upper()}")
+            return self._get_data_from_source(force_source, stock_code, start_date, end_date, period, adjust)
 
         # 按优先级尝试各个数据源
         downloaded_from = None  # 记录从哪个数据源下载
@@ -352,12 +357,12 @@ class DataManager:
             if (self.source_status[source]['available'] and
                 self.source_status[source]['connected']):
 
-                print(f"🔗 尝试数据源: {source.value.upper()}")
+                print(f"[LINK] 尝试数据源: {source.value.upper()}")
 
                 try:
-                    data = self._get_data_from_source(source, stock_code, start_date, end_date, period)
+                    data = self._get_data_from_source(source, stock_code, start_date, end_date, period, adjust)
                     if not data.empty:
-                        print(f"✅ 成功从 {source.value.upper()} 获取数据")
+                        print(f"[OK] 成功从 {source.value.upper()} 获取数据")
 
                         # 如果不是从本地缓存获取，且启用了本地缓存，则保存到本地
                         if source != DataSource.LOCAL and self.local_data_manager is not None:
@@ -366,15 +371,15 @@ class DataManager:
 
                         return data
                     else:
-                        print(f"⚠️ {source.value.upper()} 返回空数据，尝试下一个数据源")
+                        print(f"[WARNING] {source.value.upper()} 返回空数据，尝试下一个数据源")
 
                 except Exception as e:
-                    print(f"⚠️ {source.value.upper()} 获取数据失败: {e}，尝试下一个数据源")
+                    print(f"[WARNING] {source.value.upper()} 获取数据失败: {e}，尝试下一个数据源")
                     continue
 
         # 如果所有数据源都失败，使用模拟数据
-        print("🎲 所有数据源失败，使用模拟数据")
-        return self._get_data_from_source(DataSource.MOCK, stock_code, start_date, end_date, period)
+        print("[INFO] 所有数据源失败，使用模拟数据")
+        return self._get_data_from_source(DataSource.MOCK, stock_code, start_date, end_date, period, adjust)
 
     def _save_to_local_cache(self, stock_code: str, data: pd.DataFrame):
         """保存数据到本地缓存"""
@@ -400,17 +405,17 @@ class DataManager:
                     record_count=len(data),
                     file_size=file_size
                 )
-                print(f"💾 数据已缓存到本地")
+                print(f"[SAVE] 数据已缓存到本地")
         except Exception as e:
-            print(f"⚠️ 保存到本地缓存失败: {e}")
+            print(f"[WARNING] 保存到本地缓存失败: {e}")
     
     def _get_data_from_source(self, source: DataSource, stock_code: str,
-                            start_date: str, end_date: str, period: str) -> pd.DataFrame:
-        """从指定数据源获取数据"""
+                            start_date: str, end_date: str, period: str, adjust: str = 'none') -> pd.DataFrame:
+        """从指定数据源获取数据（支持复权）"""
         if source == DataSource.LOCAL:
-            return self._get_local_data(stock_code, start_date, end_date)
+            return self._get_local_data(stock_code, start_date, end_date, adjust)
         elif source == DataSource.QMT:
-            return self._get_qmt_data(stock_code, start_date, end_date, period)
+            return self._get_qmt_data(stock_code, start_date, end_date, period, adjust)
         elif source == DataSource.QSTOCK:
             return self._get_qstock_data(stock_code, start_date, end_date, period)
         elif source == DataSource.AKSHARE:
@@ -418,34 +423,48 @@ class DataManager:
         else:  # DataSource.MOCK
             return self._generate_mock_data(stock_code, start_date, end_date)
 
-    def _get_local_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
-        """从本地缓存获取数据"""
+    def _get_local_data(self, stock_code: str, start_date: str, end_date: str, adjust: str = 'none') -> pd.DataFrame:
+        """从本地缓存获取数据（支持复权）"""
         try:
             if self.local_data_manager is None:
                 return pd.DataFrame()
 
-            # 从本地加载
-            local_results = self.local_data_manager.storage.load_batch(
-                [stock_code], 'daily', start_date, end_date
-            )
+            # 尝试使用支持复权的数据管理器
+            try:
+                from data_manager.local_data_manager_with_adjustment import LocalDataManager as LocalDataManagerWithAdjustment
+                manager_adjust = LocalDataManagerWithAdjustment()
+                df = manager_adjust.load_data(stock_code, 'daily', adjust=adjust)
+                manager_adjust.close()
 
-            if stock_code in local_results:
-                df = local_results[stock_code]
-                # 标准化列名
-                df = self._standardize_columns(df)
-                # 数据清洗
-                df = self._clean_data(df)
-                print(f"✅ 本地缓存获取 {len(df)} 条数据")
-                return df
+                if not df.empty:
+                    df = self._standardize_columns(df)
+                    df = self._clean_data(df)
+                    print(f"[OK] 本地缓存获取 {len(df)} 条数据（复权类型: {adjust}）")
+                    return df
+                else:
+                    return pd.DataFrame()
+
+            except Exception:
+                # 回退到原始方法
+                local_results = self.local_data_manager.storage.load_batch(
+                    [stock_code], 'daily', start_date, end_date
+                )
+
+                if stock_code in local_results:
+                    df = local_results[stock_code]
+                    df = self._standardize_columns(df)
+                    df = self._clean_data(df)
+                    print(f"[OK] 本地缓存获取 {len(df)} 条数据（无复权）")
+                    return df
 
             return pd.DataFrame()
 
         except Exception as e:
-            print(f"⚠️ 本地缓存获取失败: {e}")
+            print(f"[WARNING] 本地缓存获取失败: {e}")
             return pd.DataFrame()
-    
-    def _get_qmt_data(self, stock_code: str, start_date: str, end_date: str, period: str) -> pd.DataFrame:
-        """通过QMT获取真实数据"""
+
+    def _get_qmt_data(self, stock_code: str, start_date: str, end_date: str, period: str, adjust: str = 'none') -> pd.DataFrame:
+        """通过QMT获取真实数据（支持复权）"""
         try:
             import xtquant.xtdata as xt_data
             
@@ -453,12 +472,21 @@ class DataManager:
             start_time = datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d')
             end_time = datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d')
             
-            # 获取历史数据
+            # 映射复权类型
+            dividend_map = {
+                'none': 'none',
+                'front': 'front',
+                'back': 'back'
+            }
+            dividend_type = dividend_map.get(adjust, 'none')
+
+            # 获取历史数据（支持复权）
             data = xt_data.get_market_data_ex(
                 stock_list=[stock_code],
                 period=period,
                 start_time=start_time,
                 end_time=end_time,
+                dividend_type=dividend_type,  # ← 添加复权参数
                 fill_data=True
             )
             
@@ -471,13 +499,13 @@ class DataManager:
                 # 数据清洗
                 df = self._clean_data(df)
                 
-                print(f"✅ QMT获取 {len(df)} 条数据")
+                print(f"[OK] QMT获取 {len(df)} 条数据")
                 return df
             else:
                 return pd.DataFrame()
                 
         except Exception as e:
-            print(f"⚠️ QMT获取数据失败: {e}")
+            print(f"[WARNING] QMT获取数据失败: {e}")
             return pd.DataFrame()
     
     def _get_qstock_data(self, stock_code: str, start_date: str, end_date: str, period: str) -> pd.DataFrame:
@@ -501,13 +529,13 @@ class DataManager:
                 # 数据清洗
                 df = self._clean_data(df)
                 
-                print(f"✅ QStock获取 {len(df)} 条数据")
+                print(f"[OK] QStock获取 {len(df)} 条数据")
                 return df
             else:
                 return pd.DataFrame()
                 
         except Exception as e:
-            print(f"⚠️ QStock获取数据失败: {e}")
+            print(f"[WARNING] QStock获取数据失败: {e}")
             return pd.DataFrame()
     
     def _get_akshare_data(self, stock_code: str, start_date: str, end_date: str, period: str) -> pd.DataFrame:
@@ -528,7 +556,7 @@ class DataManager:
             else:
                 symbol = code
             
-            print(f"🔄 尝试通过AKShare获取 {stock_code} 数据...")
+            print(f"[RELOAD] 尝试通过AKShare获取 {stock_code} 数据...")
             
             # 重试机制：最多尝试3次
             max_retries = 3
@@ -574,13 +602,13 @@ class DataManager:
                         # 数据清洗
                         df = self._clean_data(df)
                         
-                        print(f"✅ AKShare获取 {len(df)} 条数据 (尝试 {attempt + 1}/{max_retries})")
+                        print(f"[OK] AKShare获取 {len(df)} 条数据 (尝试 {attempt + 1}/{max_retries})")
                         return df
                     else:
-                        print(f"⚠️ AKShare返回空数据 (尝试 {attempt + 1}/{max_retries})")
+                        print(f"[WARNING] AKShare返回空数据 (尝试 {attempt + 1}/{max_retries})")
                         
                 except Exception as retry_e:
-                    print(f"⚠️ AKShare获取失败 (尝试 {attempt + 1}/{max_retries}): {str(retry_e)}")
+                    print(f"[WARNING] AKShare获取失败 (尝试 {attempt + 1}/{max_retries}): {str(retry_e)}")
                     
                     # 如果不是最后一次尝试，等待后重试
                     if attempt < max_retries - 1:
@@ -600,19 +628,19 @@ class DataManager:
                             print(f"💡 提示：AKShare数据获取失败，错误详情：{error_msg}")
             
             # 所有重试都失败了
-            print(f"❌ AKShare获取 {stock_code} 数据失败，已尝试 {max_retries} 次")
+            print(f"[ERROR] AKShare获取 {stock_code} 数据失败，已尝试 {max_retries} 次")
             return pd.DataFrame()
                 
         except ImportError:
-            print("⚠️ akshare模块未安装，请运行: pip install akshare")
+            print("[WARNING] akshare模块未安装，请运行: pip install akshare")
             return pd.DataFrame()
         except Exception as e:
-            print(f"❌ AKShare模块加载失败: {str(e)}")
+            print(f"[ERROR] AKShare模块加载失败: {str(e)}")
             return pd.DataFrame()
     
     def _generate_mock_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
         """生成模拟数据"""
-        print(f"🎲 生成模拟数据: {stock_code}")
+        print(f"[INFO] 生成模拟数据: {stock_code}")
         
         # 创建日期范围
         dates = pd.date_range(start=start_date, end=end_date, freq='D')
@@ -660,7 +688,7 @@ class DataManager:
             'volume': volumes
         }, index=dates)
         
-        print(f"✅ 生成 {len(df)} 条模拟数据")
+        print(f"[OK] 生成 {len(df)} 条模拟数据")
         return df
     
     def _standardize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -691,7 +719,7 @@ class DataManager:
     
     def _clean_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """数据清洗"""
-        print("🧹 开始数据清洗...")
+        print("[WIZARD] 开始数据清洗...")
         
         original_length = len(df)
         
@@ -727,7 +755,7 @@ class DataManager:
         removed_count = original_length - cleaned_length
         
         if removed_count > 0:
-            print(f"🧹 数据清洗完成，删除 {removed_count} 条异常数据")
+            print(f"[WIZARD] 数据清洗完成，删除 {removed_count} 条异常数据")
         
         return df
     
@@ -746,7 +774,7 @@ class DataManager:
         Returns:
             股票代码到DataFrame的字典
         """
-        print(f"📊 批量获取 {len(stock_codes)} 只股票数据...")
+        print(f"[DATA] 批量获取 {len(stock_codes)} 只股票数据...")
         
         results = {}
         for stock_code in stock_codes:
@@ -755,11 +783,11 @@ class DataManager:
                 if not data.empty:
                     results[stock_code] = data
                 else:
-                    print(f"⚠️ {stock_code} 数据为空")
+                    print(f"[WARNING] {stock_code} 数据为空")
             except Exception as e:
-                print(f"⚠️ 获取 {stock_code} 数据失败: {e}")
+                print(f"[WARNING] 获取 {stock_code} 数据失败: {e}")
         
-        print(f"✅ 成功获取 {len(results)} 只股票数据")
+        print(f"[OK] 成功获取 {len(results)} 只股票数据")
         return results
     
     def validate_data_quality(self, df: pd.DataFrame) -> Dict[str, any]:
@@ -849,7 +877,7 @@ class DataManager:
         # 删除空值行
         resampled = resampled.dropna()
         
-        print(f"📊 数据重采样完成: {len(df)} -> {len(resampled)} 条记录 (频率: {freq})")
+        print(f"[DATA] 数据重采样完成: {len(df)} -> {len(resampled)} 条记录 (频率: {freq})")
         
         return resampled
     
@@ -869,7 +897,7 @@ class DataManager:
             else:
                 return pd.to_datetime(date_obj).strftime('%Y-%m-%d')
         except Exception as e:
-            print(f"⚠️ 日期格式化失败: {e}")
+            print(f"[WARNING] 日期格式化失败: {e}")
             return None
 
     # ========== 本地缓存管理方法 ==========
@@ -883,12 +911,12 @@ class DataManager:
             days_back: 向前回溯天数
         """
         if self.local_data_manager is None:
-            print("⚠️ 本地缓存未启用")
+            print("[WARNING] 本地缓存未启用")
             return
 
-        print("🔄 更新本地缓存...")
+        print("[RELOAD] 更新本地缓存...")
         self.local_data_manager.update_data(symbols=symbols)
-        print("✅ 更新完成")
+        print("[OK] 更新完成")
 
         # 刷新本地缓存状态
         self.source_status[DataSource.LOCAL] = self._check_local_status()
@@ -910,7 +938,7 @@ class DataManager:
     def print_local_cache_status(self):
         """打印本地缓存状态"""
         if self.local_data_manager is None:
-            print("⚠️ 本地缓存未启用")
+            print("[WARNING] 本地缓存未启用")
             return
 
         print("\n" + "=" * 50)
@@ -927,11 +955,11 @@ class DataManager:
             symbol: 要清除的股票代码，None表示全部清除
         """
         if self.local_data_manager is None:
-            print("⚠️ 本地缓存未启用")
+            print("[WARNING] 本地缓存未启用")
             return
 
         # TODO: 实现清除功能
-        print(f"⚠️ 清除本地缓存功能待实现")
+        print(f"[WARNING] 清除本地缓存功能待实现")
 
     def preload_data(self, symbols: List[str], start_date: str, end_date: str):
         """
@@ -943,7 +971,7 @@ class DataManager:
             end_date: 结束日期
         """
         if self.local_data_manager is None:
-            print("⚠️ 本地缓存未启用")
+            print("[WARNING] 本地缓存未启用")
             return
 
         print(f"📦 预加载 {len(symbols)} 只股票数据...")
@@ -954,9 +982,9 @@ class DataManager:
                 data = self.get_stock_data(symbol, start_date, end_date, force_source=None)
                 # get_stock_data会自动缓存到本地
             except Exception as e:
-                print(f"⚠️ 预加载 {symbol} 失败: {e}")
+                print(f"[WARNING] 预加载 {symbol} 失败: {e}")
 
-        print("✅ 预加载完成")
+        print("[OK] 预加载完成")
 
 
 if __name__ == "__main__":
@@ -965,13 +993,13 @@ if __name__ == "__main__":
     
     # 测试单只股票数据获取
     data = dm.get_stock_data('000001.SZ', '2023-01-01', '2023-12-31')
-    print(f"📊 获取数据形状: {data.shape}")
-    print(f"📊 数据列: {list(data.columns)}")
+    print(f"[DATA] 获取数据形状: {data.shape}")
+    print(f"[DATA] 数据列: {list(data.columns)}")
     
     # 测试数据质量验证
     quality_report = dm.validate_data_quality(data)
-    print(f"📊 数据质量报告: {quality_report}")
+    print(f"[DATA] 数据质量报告: {quality_report}")
     
     # 测试数据重采样
     weekly_data = dm.resample_data(data, '1W')
-    print(f"📊 周线数据形状: {weekly_data.shape}")
+    print(f"[DATA] 周线数据形状: {weekly_data.shape}")

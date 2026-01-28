@@ -30,20 +30,20 @@ try:
     MATPLOTLIB_AVAILABLE = True
 except ImportError:
     MATPLOTLIB_AVAILABLE = False
-    print("⚠️ matplotlib未安装，净值曲线将显示为占位符")
+    print("[WARNING] matplotlib未安装，净值曲线将显示为占位符")
 
 # 导入回测模块
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 try:
     # 优先使用修复版引擎
     from backtest.engine import AdvancedBacktestEngine, DualMovingAverageStrategy
-    print("✅ 使用修复版回测引擎")
+    print("[OK] 使用修复版回测引擎")
 except ImportError:
     try:
         from backtest.engine import AdvancedBacktestEngine, DualMovingAverageStrategy
-        print("⚠️ 使用原版回测引擎")
+        print("[WARNING] 使用原版回测引擎")
     except ImportError:
-        print("❌ 回测引擎导入失败")
+        print("[ERROR] 回测引擎导入失败")
         AdvancedBacktestEngine = None
         DualMovingAverageStrategy = None
 
@@ -84,13 +84,14 @@ class BacktestWorker(QThread):
             
             self.status_updated.emit("📊 获取历史数据...")
             self.progress_updated.emit(30)
-            
-            # 获取数据
+
+            # 获取数据（支持复权）
             data_manager = DataManager()
             stock_data = data_manager.get_stock_data(
                 stock_code=self.backtest_params['stock_code'],
                 start_date=self.backtest_params['start_date'],
-                end_date=self.backtest_params['end_date']
+                end_date=self.backtest_params['end_date'],
+                adjust=self.backtest_params.get('adjust', 'none')  # ← 添加复权参数
             )
             
             if stock_data.empty:
@@ -359,30 +360,47 @@ class BacktestWidget(QWidget):
         self.commission_spin.setDecimals(4)
         self.commission_spin.setSuffix("%")
         layout.addWidget(self.commission_spin, 4, 1)
-        
-        # 数据源选择
+
+        # 复权类型选择（第4行第2列）
+        layout.addWidget(QLabel("复权类型:"), 4, 2)
+        self.adjust_combo = QComboBox()
+        self.adjust_combo.addItems([
+            "不复权 (原始价格)",
+            "前复权 (短期回测)",
+            "后复权 (长期回测)"
+        ])
+        self.adjust_combo.setCurrentIndex(0)
+        self.adjust_combo.setToolTip(
+            "不复权：实时交易\n"
+            "前复权：当前价真实，适合短期回测（1年内）\n"
+            "后复权：历史价真实，适合长期回测（3年以上）"
+        )
+        layout.addWidget(self.adjust_combo, 4, 3)
+
+        # 数据源选择（第5行）
         layout.addWidget(QLabel("数据源选择:"), 5, 0)
         self.data_source_combo = QComboBox()
         self.data_source_combo.addItems([
             "自动选择 (QMT→QStock→AKShare→模拟)",
             "强制QMT",
-            "强制QStock", 
+            "强制QStock",
             "强制AKShare",
             "强制模拟数据"
         ])
         self.data_source_combo.currentTextChanged.connect(self.on_data_source_changed)
         layout.addWidget(self.data_source_combo, 5, 1)
-        
-        # 数据源状态
-        layout.addWidget(QLabel("数据源状态:"), 6, 0)
+
+        # 数据源状态（第5行第2列）
+        layout.addWidget(QLabel("数据源状态:"), 5, 2)
         self.data_source_label = QLabel("检测中...")
         self.data_source_label.setStyleSheet("color: orange; font-weight: bold;")
-        layout.addWidget(self.data_source_label, 6, 1)
-        
-        # 刷新连接按钮
-        self.refresh_connection_btn = QPushButton("🔄 刷新连接")
+        layout.addWidget(self.data_source_label, 5, 3)
+
+        # 刷新连接按钮（第5行第3列）
+        self.refresh_connection_btn = QPushButton("🔄 刷新")
         self.refresh_connection_btn.clicked.connect(self.refresh_connection_status)
-        layout.addWidget(self.refresh_connection_btn, 7, 0, 1, 2)
+        self.refresh_connection_btn.setToolTip("检查各数据源连接状态")
+        layout.addWidget(self.refresh_connection_btn, 5, 4)
         
         return group
     
@@ -746,12 +764,13 @@ class BacktestWidget(QWidget):
             
             # 获取参数
             params = self.get_backtest_parameters()
-            
+
             # 显示回测参数信息
             print(f"📊 开始回测:")
             print(f"  股票代码: {params['stock_code']}")
             print(f"  时间范围: {params['start_date']} ~ {params['end_date']}")
             print(f"  初始资金: {params['initial_cash']:,.0f} 元")
+            print(f"  复权类型: {params['adjust']}")  # ← 添加复权信息
             
             # 更新UI状态
             self.start_button.setEnabled(False)
@@ -805,7 +824,16 @@ class BacktestWidget(QWidget):
         return True
     
     def get_backtest_parameters(self) -> Dict[str, Any]:
-        """获取回测参数"""
+        """获取回测参数（包含复权类型）"""
+        # 获取复权类型
+        adjust_map = {
+            "不复权 (原始价格)": "none",
+            "前复权 (短期回测)": "front",
+            "后复权 (长期回测)": "back"
+        }
+        adjust_text = self.adjust_combo.currentText()
+        adjust = adjust_map.get(adjust_text, "none")
+
         return {
             'stock_code': self.stock_code_edit.text().strip(),
             'start_date': self.start_date_edit.date().toPyDate().strftime('%Y-%m-%d'),
@@ -815,6 +843,7 @@ class BacktestWidget(QWidget):
             'short_period': self.short_period_spin.value(),
             'long_period': self.long_period_spin.value(),
             'rsi_period': self.rsi_period_spin.value(),
+            'adjust': adjust,  # ← 添加复权参数
             'optimize_enabled': self.optimize_checkbox.isChecked(),
             'benchmark_enabled': self.benchmark_checkbox.isChecked(),
             'risk_analysis_enabled': self.risk_analysis_checkbox.isChecked()

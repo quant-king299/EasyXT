@@ -10,6 +10,7 @@ import os
 from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Dict, Any, Optional
+import pandas as pd
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
@@ -20,17 +21,31 @@ class BaseStrategy(ABC):
     """
     策略基类
     所有策略都应该继承这个类
+
+    支持复权参数：
+    - adjust='none': 不复权（原始价格，适合实时交易）
+    - adjust='front': 前复权（当前价真实，适合短期回测）
+    - adjust='back': 后复权（历史价真实，适合长期回测）
     """
-    
+
     def __init__(self, params: Dict[str, Any] = None):
         """
         初始化策略
-        
+
         Args:
-            params: 策略参数字典
+            params: 策略参数字典，可包含：
+                - adjust: 复权类型 ('none', 'front', 'back')
+                - 其他策略参数...
         """
         self.params = params or {}
         self.api = easy_xt.get_api()
+
+        # 复权参数
+        self.adjust = self.params.get('adjust', 'none')  # 默认不复权
+        valid_adjusts = ['none', 'front', 'back']
+        if self.adjust not in valid_adjusts:
+            raise ValueError(f"无效的复权类型 '{self.adjust}'，必须是: {valid_adjusts}")
+
         self.positions = {}
         self.orders = []
         self.is_running = False
@@ -147,13 +162,46 @@ class BaseStrategy(ABC):
     def log(self, message: str):
         """
         记录日志
-        
+
         Args:
             message: 日志消息
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"[{timestamp}] {message}")
-        
+
+    def get_historical_data(self,
+                           stock_code: str,
+                           start_date: str = None,
+                           end_date: str = None,
+                           period: str = '1d',
+                           count: int = None) -> pd.DataFrame:
+        """
+        获取历史数据（支持复权）
+
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期 (格式: '2023-01-01')
+            end_date: 结束日期 (格式: '2024-12-31')
+            period: 数据周期 ('1d', '1m', '5m', '15m', '30m', '1h')
+            count: 数据条数（如果指定，忽略start_date）
+
+        Returns:
+            DataFrame: 价格数据（使用策略的复权设置）
+        """
+        try:
+            df = self.api.data.get_price(
+                codes=stock_code,
+                start=start_date,
+                end=end_date,
+                period=period,
+                count=count,
+                adjust=self.adjust  # 使用策略的复权设置
+            )
+            return df
+        except Exception as e:
+            self.log(f"获取历史数据失败: {str(e)}")
+            return pd.DataFrame()
+
     def start(self):
         """
         启动策略
