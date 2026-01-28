@@ -14,6 +14,7 @@ from enum import Enum
 
 class DataSource(Enum):
     """数据源枚举"""
+    LOCAL = "local"  # 本地缓存（最高优先级）
     QMT = "qmt"
     QSTOCK = "qstock"
     AKSHARE = "akshare"
@@ -31,45 +32,88 @@ class DataManager:
     5. 数据源状态监控
     """
     
-    def __init__(self, preferred_source: Optional[DataSource] = None):
+    def __init__(self, preferred_source: Optional[DataSource] = None,
+                 use_local_cache: bool = True):
         """
         初始化数据管理器
-        
+
         Args:
             preferred_source: 首选数据源，None表示自动选择
+            use_local_cache: 是否使用本地缓存
         """
         self.preferred_source = preferred_source
-        
+        self.use_local_cache = use_local_cache
+
+        # 初始化本地数据管理器
+        self.local_data_manager = None
+        if use_local_cache:
+            try:
+                # 尝试导入本地数据管理器
+                import sys
+                from pathlib import Path
+                # 添加101因子平台路径
+                # __file__ = gui_app/backtest/data_manager.py
+                # parents[0] = backtest, parents[1] = gui_app, parents[2] = miniqmt扩展
+                factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
+                if str(factor_platform_path) not in sys.path:
+                    sys.path.insert(0, str(factor_platform_path))
+
+                from data_manager import LocalDataManager
+                self.local_data_manager = LocalDataManager()
+                print("✅ 本地数据缓存已启用")
+            except Exception as e:
+                print(f"⚠️ 本地数据缓存初始化失败: {e}")
+                self.local_data_manager = None
+
         # 检查各数据源可用性
         self.source_status = self._check_all_sources()
-        
+
         # 确定数据源优先级
         self.source_priority = self._get_source_priority()
-        
+
         # 显示初始化状态
         self._print_initialization_status()
         
     def _check_all_sources(self) -> Dict[DataSource, Dict[str, any]]:
         """检查所有数据源的可用性"""
         status = {}
-        
+
+        # 检查本地缓存
+        status[DataSource.LOCAL] = self._check_local_status()
+
         # 检查QMT
         status[DataSource.QMT] = self._check_qmt_status()
-        
+
         # 检查QStock
         status[DataSource.QSTOCK] = self._check_qstock_status()
-        
+
         # 检查AKShare
         status[DataSource.AKSHARE] = self._check_akshare_status()
-        
+
         # 模拟数据总是可用
         status[DataSource.MOCK] = {
             'available': True,
             'connected': True,
             'message': '模拟数据生成器'
         }
-        
+
         return status
+
+    def _check_local_status(self) -> Dict[str, any]:
+        """检查本地缓存状态"""
+        if self.local_data_manager is not None:
+            stats = self.local_data_manager.get_statistics()
+            total_symbols = stats.get('total_symbols', 0)
+            return {
+                'available': True,
+                'connected': total_symbols > 0,
+                'message': f'本地缓存 ({total_symbols}个标的)'
+            }
+        return {
+            'available': False,
+            'connected': False,
+            'message': '本地缓存未启用'
+        }
         
     def _check_qmt_status(self) -> Dict[str, any]:
         """检查QMT状态"""
@@ -189,8 +233,13 @@ class DataManager:
             priority.extend(other_sources)
             return priority
         else:
-            # 默认优先级：QMT → QStock → AKShare → 模拟数据
-            return [DataSource.QMT, DataSource.QSTOCK, DataSource.AKSHARE, DataSource.MOCK]
+            # 默认优先级：LOCAL → QMT → QStock → AKShare → 模拟数据
+            priority = [DataSource.QMT, DataSource.QSTOCK, DataSource.AKSHARE, DataSource.MOCK]
+            # 如果本地缓存可用，将其放在首位
+            if (self.local_data_manager is not None and
+                self.source_status[DataSource.LOCAL]['connected']):
+                priority.insert(0, DataSource.LOCAL)
+            return priority
     
     def _print_initialization_status(self):
         """打印初始化状态"""
@@ -270,59 +319,97 @@ class DataManager:
         self.source_status = self._check_all_sources()
         self._print_initialization_status()
     
-    def get_stock_data(self, 
-                      stock_code: str, 
-                      start_date: str, 
+    def get_stock_data(self,
+                      stock_code: str,
+                      start_date: str,
                       end_date: str,
                       period: str = '1d',
                       force_source: Optional[DataSource] = None) -> pd.DataFrame:
         """
         获取股票历史数据（支持多数据源）
-        
+
         Args:
             stock_code: 股票代码 (如 '000001.SZ')
             start_date: 开始日期 ('YYYY-MM-DD')
             end_date: 结束日期 ('YYYY-MM-DD')
             period: 数据周期 ('1d', '1h', '5m' 等)
             force_source: 强制使用指定数据源
-            
+
         Returns:
             包含OHLCV数据的DataFrame
         """
         print(f"📊 获取股票数据: {stock_code} ({start_date} ~ {end_date})")
-        
+
         # 如果强制指定数据源
         if force_source:
             print(f"🎯 强制使用数据源: {force_source.value.upper()}")
             return self._get_data_from_source(force_source, stock_code, start_date, end_date, period)
-        
+
         # 按优先级尝试各个数据源
+        downloaded_from = None  # 记录从哪个数据源下载
+
         for source in self.source_priority:
-            if (self.source_status[source]['available'] and 
+            if (self.source_status[source]['available'] and
                 self.source_status[source]['connected']):
-                
+
                 print(f"🔗 尝试数据源: {source.value.upper()}")
-                
+
                 try:
                     data = self._get_data_from_source(source, stock_code, start_date, end_date, period)
                     if not data.empty:
                         print(f"✅ 成功从 {source.value.upper()} 获取数据")
+
+                        # 如果不是从本地缓存获取，且启用了本地缓存，则保存到本地
+                        if source != DataSource.LOCAL and self.local_data_manager is not None:
+                            self._save_to_local_cache(stock_code, data)
+                            downloaded_from = source.value
+
                         return data
                     else:
                         print(f"⚠️ {source.value.upper()} 返回空数据，尝试下一个数据源")
-                        
+
                 except Exception as e:
                     print(f"⚠️ {source.value.upper()} 获取数据失败: {e}，尝试下一个数据源")
                     continue
-        
+
         # 如果所有数据源都失败，使用模拟数据
         print("🎲 所有数据源失败，使用模拟数据")
         return self._get_data_from_source(DataSource.MOCK, stock_code, start_date, end_date, period)
+
+    def _save_to_local_cache(self, stock_code: str, data: pd.DataFrame):
+        """保存数据到本地缓存"""
+        try:
+            # 确保日期索引
+            if not isinstance(data.index, pd.DatetimeIndex):
+                if 'date' in data.columns:
+                    data = data.set_index('date')
+                data.index = pd.to_datetime(data.index)
+
+            # 保存到本地
+            success, file_size = self.local_data_manager.storage.save_data(
+                data, stock_code, 'daily'
+            )
+
+            if success:
+                # 更新元数据
+                self.local_data_manager.metadata.update_data_version(
+                    symbol=stock_code,
+                    symbol_type='stock',
+                    start_date=str(data.index.min().date()),
+                    end_date=str(data.index.max().date()),
+                    record_count=len(data),
+                    file_size=file_size
+                )
+                print(f"💾 数据已缓存到本地")
+        except Exception as e:
+            print(f"⚠️ 保存到本地缓存失败: {e}")
     
-    def _get_data_from_source(self, source: DataSource, stock_code: str, 
+    def _get_data_from_source(self, source: DataSource, stock_code: str,
                             start_date: str, end_date: str, period: str) -> pd.DataFrame:
         """从指定数据源获取数据"""
-        if source == DataSource.QMT:
+        if source == DataSource.LOCAL:
+            return self._get_local_data(stock_code, start_date, end_date)
+        elif source == DataSource.QMT:
             return self._get_qmt_data(stock_code, start_date, end_date, period)
         elif source == DataSource.QSTOCK:
             return self._get_qstock_data(stock_code, start_date, end_date, period)
@@ -330,6 +417,32 @@ class DataManager:
             return self._get_akshare_data(stock_code, start_date, end_date, period)
         else:  # DataSource.MOCK
             return self._generate_mock_data(stock_code, start_date, end_date)
+
+    def _get_local_data(self, stock_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        """从本地缓存获取数据"""
+        try:
+            if self.local_data_manager is None:
+                return pd.DataFrame()
+
+            # 从本地加载
+            local_results = self.local_data_manager.storage.load_batch(
+                [stock_code], 'daily', start_date, end_date
+            )
+
+            if stock_code in local_results:
+                df = local_results[stock_code]
+                # 标准化列名
+                df = self._standardize_columns(df)
+                # 数据清洗
+                df = self._clean_data(df)
+                print(f"✅ 本地缓存获取 {len(df)} 条数据")
+                return df
+
+            return pd.DataFrame()
+
+        except Exception as e:
+            print(f"⚠️ 本地缓存获取失败: {e}")
+            return pd.DataFrame()
     
     def _get_qmt_data(self, stock_code: str, start_date: str, end_date: str, period: str) -> pd.DataFrame:
         """通过QMT获取真实数据"""
@@ -758,6 +871,92 @@ class DataManager:
         except Exception as e:
             print(f"⚠️ 日期格式化失败: {e}")
             return None
+
+    # ========== 本地缓存管理方法 ==========
+
+    def update_local_cache(self, symbols: List[str] = None, days_back: int = 5):
+        """
+        更新本地缓存数据
+
+        Args:
+            symbols: 要更新的股票列表，None表示全部
+            days_back: 向前回溯天数
+        """
+        if self.local_data_manager is None:
+            print("⚠️ 本地缓存未启用")
+            return
+
+        print("🔄 更新本地缓存...")
+        self.local_data_manager.update_data(symbols=symbols)
+        print("✅ 更新完成")
+
+        # 刷新本地缓存状态
+        self.source_status[DataSource.LOCAL] = self._check_local_status()
+
+    def get_local_cache_status(self) -> Dict[str, any]:
+        """获取本地缓存状态"""
+        if self.local_data_manager is None:
+            return {'enabled': False}
+
+        stats = self.local_data_manager.get_statistics()
+        return {
+            'enabled': True,
+            'total_symbols': stats.get('total_symbols', 0),
+            'total_records': stats.get('total_records', 0),
+            'total_size_mb': stats.get('total_size_mb', 0),
+            'latest_date': stats.get('latest_data_date', 'N/A')
+        }
+
+    def print_local_cache_status(self):
+        """打印本地缓存状态"""
+        if self.local_data_manager is None:
+            print("⚠️ 本地缓存未启用")
+            return
+
+        print("\n" + "=" * 50)
+        print("本地缓存状态")
+        print("=" * 50)
+        self.local_data_manager.print_summary()
+        print("=" * 50 + "\n")
+
+    def clear_local_cache(self, symbol: str = None):
+        """
+        清除本地缓存
+
+        Args:
+            symbol: 要清除的股票代码，None表示全部清除
+        """
+        if self.local_data_manager is None:
+            print("⚠️ 本地缓存未启用")
+            return
+
+        # TODO: 实现清除功能
+        print(f"⚠️ 清除本地缓存功能待实现")
+
+    def preload_data(self, symbols: List[str], start_date: str, end_date: str):
+        """
+        预加载数据到本地缓存
+
+        Args:
+            symbols: 股票列表
+            start_date: 开始日期
+            end_date: 结束日期
+        """
+        if self.local_data_manager is None:
+            print("⚠️ 本地缓存未启用")
+            return
+
+        print(f"📦 预加载 {len(symbols)} 只股票数据...")
+
+        for symbol in symbols:
+            try:
+                # 尝试从其他数据源获取并保存
+                data = self.get_stock_data(symbol, start_date, end_date, force_source=None)
+                # get_stock_data会自动缓存到本地
+            except Exception as e:
+                print(f"⚠️ 预加载 {symbol} 失败: {e}")
+
+        print("✅ 预加载完成")
 
 
 if __name__ == "__main__":

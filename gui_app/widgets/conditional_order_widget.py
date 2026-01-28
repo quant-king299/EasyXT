@@ -42,8 +42,12 @@ class ConditionalOrderWidget(QWidget):
         super().__init__()
         self.orders = []  # 存储所有条件单
         self.order_counter = 0  # 条件单计数器
+        self.monitored_orders = set()  # 已启动监控的条件单ID集合
+        self.trade_api = None  # AdvancedTradeAPI实例
+        self._trade_initialized = False  # 交易API是否已初始化
         self.init_ui()
         self.setup_timer()
+        self.init_trade_connection()  # 自动初始化交易连接
 
     def init_ui(self):
         """初始化用户界面"""
@@ -139,10 +143,10 @@ class ConditionalOrderWidget(QWidget):
 
         self.order_price_spin = QDoubleSpinBox()
         self.order_price_spin.setMinimumWidth(180)  # 设置最小宽度180px
-        self.order_price_spin.setRange(0.01, 9999.99)
-        self.order_price_spin.setValue(100.0)
+        self.order_price_spin.setRange(0, 9999.99)  # 允许输入0表示市价
+        self.order_price_spin.setValue(0)  # 默认市价
         self.order_price_spin.setDecimals(2)
-        self.order_price_spin.setSuffix(" (0=市价)")
+        self.order_price_spin.setSpecialValueText("市价单")  # 0显示为"市价单"
         action_layout.addRow("价格:", self.order_price_spin)
 
         layout.addWidget(action_group)
@@ -460,6 +464,22 @@ class ConditionalOrderWidget(QWidget):
                 QMessageBox.warning(self, "输入错误", "请输入股票代码")
                 return
 
+            # 获取有效期
+            expiry_str = self.valid_time_edit.dateTime().toString("yyyy-MM-dd hh:mm:ss")
+            try:
+                expiry_time = datetime.strptime(expiry_str, "%Y-%m-%d %H:%M:%S")
+                if expiry_time <= datetime.now():
+                    QMessageBox.warning(
+                        self,
+                        "有效期错误",
+                        f"有效期必须晚于当前时间！\n\n当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+                        f"设置的有效期: {expiry_str}\n\n请重新设置有效期。"
+                    )
+                    return
+            except Exception as e:
+                QMessageBox.warning(self, "有效期错误", f"有效期格式错误: {str(e)}")
+                return
+
             # 创建条件单对象
             self.order_counter += 1
             order = {
@@ -470,7 +490,7 @@ class ConditionalOrderWidget(QWidget):
                 'quantity': quantity,
                 'price': price,
                 'condition': self.get_condition_description(),
-                'expiry': self.valid_time_edit.dateTime().toString("yyyy-MM-dd hh:mm:ss"),
+                'expiry': expiry_str,
                 'status': '等待中',
                 'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -649,11 +669,326 @@ ID: {order['id']}
         self.monitor_timer.timeout.connect(self.monitor_orders)
         self.monitor_timer.start(5000)  # 每5秒检查一次
 
+    def init_trade_connection(self):
+        """初始化交易连接"""
+        if not EASYXT_AVAILABLE:
+            self.log("提示: EasyXT不可用，条件单功能受限")
+            return
+
+        try:
+            import easy_xt
+            import json
+            import os
+
+            # 读取统一配置文件
+            config_file = os.path.join(
+                os.path.dirname(__file__), '..', '..', 'config', 'unified_config.json'
+            )
+            if not os.path.exists(config_file):
+                self.log("提示: 未找到统一配置文件 (config/unified_config.json)")
+                return
+
+            with open(config_file, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+
+            # 获取QMT路径和账户ID
+            settings = config.get('settings', {})
+            account_config = settings.get('account', {})
+
+            userdata_path = account_config.get('qmt_path', '')
+            account_id = account_config.get('account_id', '')
+
+            if not userdata_path:
+                self.log("提示: 统一配置文件中未设置QMT路径 (settings.account.qmt_path)")
+                return
+
+            if not account_id:
+                self.log("提示: 统一配置文件中未设置账户ID (settings.account.account_id)")
+                return
+
+            self.log(f"正在初始化交易连接...")
+            self.log(f"  QMT路径: {userdata_path}")
+            self.log(f"  账户ID: {account_id}")
+
+            # 获取扩展API实例
+            self.trade_api = easy_xt.get_extended_api()
+
+            # 初始化交易服务
+            if hasattr(self.trade_api, 'init_trade'):
+                result = self.trade_api.init_trade(userdata_path)
+                if result:
+                    self._trade_initialized = True
+                    self.log("✓ 交易服务连接成功")
+                else:
+                    self.log("✗ 交易服务连接失败")
+                    return
+
+            # 添加账户
+            account_type = 'STOCK'  # 默认使用股票账户
+            if self.trade_api.add_account(account_id, account_type):
+                self.log(f"✓ 已添加账户: {account_id} ({account_type})")
+            else:
+                self.log(f"✗ 添加账户失败: {account_id}")
+
+        except Exception as e:
+            self.log(f"初始化交易连接时出错: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
     def monitor_orders(self):
-        """监控条件单（模拟触发）"""
-        # 这里应该连接到实际的条件单监控系统
-        # 目前只是模拟
-        pass
+        """监控条件单并自动触发"""
+        if not EASYXT_AVAILABLE:
+            return
+
+        try:
+            from xtquant import xtdata
+
+            for order in self.orders:
+                # 跳过已触发、已禁用或已过期的条件单
+                if order['status'] not in ['等待中']:
+                    continue
+
+                # 检查是否过期
+                try:
+                    expiry_time = datetime.strptime(order['expiry'], "%Y-%m-%d %H:%M:%S")
+                    if datetime.now() > expiry_time:
+                        order['status'] = '已过期'
+                        self.log(f"条件单已过期: {order['id']}")
+                        self.update_order_table()
+                        continue
+                except:
+                    pass
+
+                # 根据条件单类型进行监控
+                order_type = order['type']
+                stock_code = order['stock_code']
+
+                # 获取当前价格
+                current_price = self._get_current_price(stock_code)
+                if current_price is None or current_price <= 0:
+                    continue
+
+                # 检查是否触发条件
+                triggered = False
+
+                if "价格条件单" in order_type:
+                    triggered = self._check_price_condition(order, current_price)
+                elif "涨跌幅条件单" in order_type:
+                    triggered = self._check_change_condition(order, current_price)
+                elif "时间条件单" in order_type:
+                    triggered = self._check_time_condition(order)
+                elif "止盈止损单" in order_type:
+                    triggered = self._check_stop_condition(order, current_price)
+
+                # 如果触发条件满足，执行交易
+                if triggered:
+                    self._execute_order(order, current_price)
+
+        except Exception as e:
+            self.log(f"监控条件单时出错: {str(e)}")
+
+    def _get_current_price(self, stock_code: str) -> Optional[float]:
+        """获取股票当前价格"""
+        try:
+            from xtquant import xtdata
+            from easy_xt.utils import StockCodeUtils
+
+            normalized_code = StockCodeUtils.normalize_code(stock_code)
+
+            # 尝试使用get_full_tick获取实时价格
+            tick_data = xtdata.get_full_tick([normalized_code])
+            if tick_data and normalized_code in tick_data:
+                tick_info = tick_data[normalized_code]
+                if tick_info and 'lastPrice' in tick_info:
+                    return float(tick_info['lastPrice'])
+                elif tick_info and 'price' in tick_info:
+                    return float(tick_info['price'])
+
+            # 如果失败，尝试get_market_data
+            current_data = xtdata.get_market_data(
+                stock_list=[normalized_code],
+                period='tick',
+                count=1
+            )
+
+            if current_data and isinstance(current_data, dict) and normalized_code in current_data:
+                data_array = current_data[normalized_code]
+                if hasattr(data_array, '__len__') and len(data_array) > 0:
+                    first_item = data_array[0]
+                    if hasattr(first_item, 'lastPrice'):
+                        return float(first_item['lastPrice'])
+
+            return None
+        except Exception as e:
+            print(f"获取{stock_code}当前价格失败: {str(e)}")
+            return None
+
+    def _check_price_condition(self, order: dict, current_price: float) -> bool:
+        """检查价格条件"""
+        try:
+            condition = order['condition']
+            # 解析条件，例如："价格条件单 - 价格大于等于 5.00元"
+            if "价格大于等于" in condition:
+                import re
+                match = re.search(r'(\d+\.?\d*)元', condition)
+                if match:
+                    target_price = float(match.group(1))
+                    return current_price >= target_price
+
+            elif "价格小于等于" in condition:
+                import re
+                match = re.search(r'(\d+\.?\d*)元', condition)
+                if match:
+                    target_price = float(match.group(1))
+                    return current_price <= target_price
+
+            elif "价格突破" in condition:
+                import re
+                match = re.search(r'(\d+\.?\d*)元', condition)
+                if match:
+                    target_price = float(match.group(1))
+                    # 突破通常指从下向上突破
+                    return current_price > target_price
+
+            return False
+        except Exception as e:
+            print(f"检查价格条件失败: {str(e)}")
+            return False
+
+    def _check_change_condition(self, order: dict, current_price: float) -> bool:
+        """检查涨跌幅条件"""
+        try:
+            condition = order['condition']
+            # 需要获取基准价格
+            # 这里简化处理，假设基准价格已存储
+            # 实际需要根据reference_price_combo获取
+            return False
+        except:
+            return False
+
+    def _check_time_condition(self, order: dict) -> bool:
+        """检查时间条件"""
+        try:
+            condition = order['condition']
+            # 解析触发时间，例如："时间条件单 - 在 2026-01-27 16:30:00 触发"
+            import re
+            match = re.search(r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})', condition)
+            if match:
+                trigger_time = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
+                return datetime.now() >= trigger_time
+            return False
+        except:
+            return False
+
+    def _check_stop_condition(self, order: dict, current_price: float) -> bool:
+        """检查止盈止损条件"""
+        try:
+            condition = order['condition']
+            # 解析止盈止损价格
+            import re
+            has_stop_loss = "止损价" in condition
+            has_stop_profit = "止盈价" in condition
+
+            if has_stop_loss:
+                match = re.search(r'止损价: (\d+\.?\d*)', condition)
+                if match:
+                    stop_loss_price = float(match.group(1))
+                    if current_price <= stop_loss_price:
+                        return True
+
+            if has_stop_profit:
+                match = re.search(r'止盈价: (\d+\.?\d*)', condition)
+                if match:
+                    stop_profit_price = float(match.group(1))
+                    if current_price >= stop_profit_price:
+                        return True
+
+            return False
+        except:
+            return False
+
+    def _execute_order(self, order: dict, current_price: float):
+        """执行订单"""
+        try:
+            # 检查交易API是否已初始化
+            if self.trade_api is None or not self._trade_initialized:
+                self.log(f"提示: 交易API未初始化，请检查配置文件中的QMT路径")
+                self.add_to_history(order, current_price, "交易服务未连接")
+                return
+
+            # 检查trade_api是否存在
+            if not hasattr(self.trade_api, 'trade_api') or self.trade_api.trade_api is None:
+                self.log(f"提示: trade_api未初始化")
+                self.add_to_history(order, current_price, "交易服务未连接")
+                return
+
+            # 检查是否已添加账户
+            if not hasattr(self.trade_api.trade_api, 'accounts') or not self.trade_api.trade_api.accounts:
+                self.log(f"提示: 未添加交易账户，请先在'网格交易'中配置账户")
+                self.add_to_history(order, current_price, "未添加交易账户")
+                return
+
+            account_id = list(self.trade_api.trade_api.accounts.keys())[0]
+
+            # 确定订单类型
+            action = order['action']
+            order_type = 'buy' if action == '买入' else 'sell'
+
+            # 确定下单价格（0表示市价）
+            order_price = order['price'] if order['price'] > 0 else current_price
+            price_type = 'limit' if order['price'] > 0 else 'market'
+
+            # 执行下单
+            if order_type == 'buy':
+                order_id = self.trade_api.trade_api.buy(
+                    account_id=account_id,
+                    code=order['stock_code'],
+                    volume=order['quantity'],
+                    price=order_price,
+                    price_type=price_type
+                )
+            else:
+                order_id = self.trade_api.trade_api.sell(
+                    account_id=account_id,
+                    code=order['stock_code'],
+                    volume=order['quantity'],
+                    price=order_price,
+                    price_type=price_type
+                )
+
+            if order_id:
+                order['status'] = '已触发'
+                self.update_order_table()
+                self.log(f"✓ 条件单触发成功: {order['id']}, 委托号: {order_id}")
+
+                # 添加到触发历史
+                self.add_to_history(order, current_price, f"委托成功: {order_id}")
+            else:
+                self.log(f"✗ 条件单触发失败: {order['id']}, 下单失败")
+                self.add_to_history(order, current_price, "下单失败")
+
+        except Exception as e:
+            self.log(f"✗ 执行条件单失败: {str(e)}")
+            self.add_to_history(order, current_price, f"执行异常: {str(e)}")
+            import traceback
+            traceback.print_exc()
+
+    def add_to_history(self, order: dict, trigger_price: float, result: str):
+        """添加到触发历史"""
+        row = self.history_table.rowCount()
+        self.history_table.insertRow(row)
+
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self.history_table.setItem(row, 0, QTableWidgetItem(timestamp))
+        self.history_table.setItem(row, 1, QTableWidgetItem(order['id']))
+
+        condition = order['condition']
+        if len(condition) > 20:
+            condition = condition[:20] + "..."
+        self.history_table.setItem(row, 2, QTableWidgetItem(condition))
+
+        self.history_table.setItem(row, 3, QTableWidgetItem(f"{trigger_price:.2f}"))
+        self.history_table.setItem(row, 4, QTableWidgetItem(result))
 
     def log(self, message: str):
         """输出日志"""

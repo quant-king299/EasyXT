@@ -259,6 +259,14 @@ deploy/
 demo_config_new/
 PLAN.md
 
+# 历史存档目录
+101因子/101因子分析平台/archive/
+**/archive/
+archive/
+
+# 101因子平台的开发文档（项目根docs已有完整版本）
+101因子/101因子分析平台/docs/
+
 # 根目录下的特定目录
 scripts/
 markdown/

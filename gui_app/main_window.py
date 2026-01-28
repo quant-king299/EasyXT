@@ -66,6 +66,7 @@ from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
 from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
+from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
 
 
 class MainWindow(QMainWindow):
@@ -135,6 +136,13 @@ class MainWindow(QMainWindow):
         self.conditional_order_widget = ConditionalOrderWidget()
         conditional_order_layout.addWidget(self.conditional_order_widget)
         self.tab_widget.addTab(conditional_order_tab, "条件单")
+
+        # 本地数据管理标签页
+        data_manager_tab = QWidget()
+        data_manager_layout = QVBoxLayout(data_manager_tab)
+        self.data_manager_widget = LocalDataManagerWidget()
+        data_manager_layout.addWidget(self.data_manager_widget)
+        self.tab_widget.addTab(data_manager_tab, "📊 数据管理")
         
     def create_status_bar(self):
         """创建状态栏"""

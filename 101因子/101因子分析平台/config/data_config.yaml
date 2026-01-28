@@ -1,0 +1,53 @@
+# 本地数据管理系统配置
+
+# 数据目录配置
+data_paths:
+  root_dir: "D:/StockData"   # 数据存储根目录（已修改为D盘）
+  raw_data: "raw"           # 原始行情数据
+  factors: "factors"        # 因子数据（可选缓存）
+  cache: "cache"            # 临时缓存
+  metadata: "metadata.db"   # SQLite元数据库
+
+# 存储配置
+storage:
+  format: "parquet"         # 存储格式：parquet（推荐）
+  compression: "snappy"     # 压缩算法：snappy/gzip/brotli
+  partition_by: "year"      # 按年份分区：year/month/None
+
+# 数据更新配置
+update:
+  auto_check: true          # 启动时自动检查更新
+  update_time: "18:00"      # 每日更新时间
+  max_retries: 3            # 下载失败重试次数
+  batch_size: 100           # 批量下载大小
+
+# 数据源配置
+data_sources:
+  primary: "qmt"            # 首选数据源：qmt/akshare
+  fallback: "akshare"       # 备用数据源
+  enable_mock: true         # 启用模拟数据（测试用）
+
+# 市场配置
+markets:
+  stocks:
+    enabled: true
+    patterns: ["*.SH", "*.SZ"]  # 上交所、深交所
+  convertible_bonds:
+    enabled: true
+    patterns: ["*.SH", "*.SZ"]
+
+# 缓存配置
+cache:
+  memory_max_mb: 512        # 内存缓存最大512MB
+  enable_factor_cache: false # 是否缓存因子数据（占用空间大）
+
+# 数据质量配置
+quality:
+  min_trading_days: 200     # 最少交易日数
+  check_price_relation: true # 检查价格关系合理性
+  max_change_pct: 20        # 最大单日涨跌幅
+
+# 日志配置
+logging:
+  level: "INFO"             # DEBUG/INFO/WARNING/ERROR
+  file: "logs/data_manager.log"
