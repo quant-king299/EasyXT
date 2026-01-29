@@ -1,13 +1,37 @@
 """
 本地数据管理系统
 轻量级数据存储方案，支持增量更新
+
+支持多种存储后端：
+- SQLite (ParquetStorage)
+- DuckDB (DuckDBStorage) - 推荐，性能更优
 """
 
 from .local_data_manager import LocalDataManager
 from .metadata_db import MetadataDB
 from .parquet_storage import ParquetStorage
 
-__all__ = ['LocalDataManager', 'MetadataDB', 'ParquetStorage']
+# DuckDB支持（需要安装 duckdb）
+try:
+    from .duckdb_storage import DuckDBStorage
+    from .duckdb_data_manager import DuckDBDataManager
+    from .hybrid_data_manager import HybridDataManager
+    DUCKDB_AVAILABLE = True
+except ImportError:
+    DUCKDB_AVAILABLE = False
+    DuckDBStorage = None
+    DuckDBDataManager = None
+    HybridDataManager = None
+
+__all__ = [
+    'LocalDataManager',
+    'MetadataDB',
+    'ParquetStorage',
+    'DuckDBStorage',
+    'DuckDBDataManager',
+    'HybridDataManager',
+    'DUCKDB_AVAILABLE'
+]
 
 
 # 便捷函数

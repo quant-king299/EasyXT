@@ -787,6 +787,7 @@ class LocalDataManagerWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.download_thread = None
+        self.duckdb_storage = None
         self.init_ui()
         self.load_local_data_info()
 
@@ -816,7 +817,7 @@ class LocalDataManagerWidget(QWidget):
         # ========== 左侧面板 ==========
 
         # 统计信息组
-        stats_group = QGroupBox("📊 数据统计")
+        stats_group = QGroupBox("📊 数据统计 (DuckDB)")
         stats_layout = QGridLayout()
         stats_group.setLayout(stats_layout)
         left_layout.addWidget(stats_group)
@@ -827,6 +828,13 @@ class LocalDataManagerWidget(QWidget):
         self.total_records_label = QLabel("总记录数: 0")
         self.total_size_label = QLabel("存储大小: 0 MB")
         self.latest_date_label = QLabel("最新日期: N/A")
+
+        stats_layout.addWidget(self.total_symbols_label, 0, 0)
+        stats_layout.addWidget(self.total_stocks_label, 0, 1)
+        stats_layout.addWidget(self.total_bonds_label, 1, 0)
+        stats_layout.addWidget(self.total_records_label, 1, 1)
+        stats_layout.addWidget(self.total_size_label, 2, 0)
+        stats_layout.addWidget(self.latest_date_label, 2, 1)
 
         stats_layout.addWidget(self.total_symbols_label, 0, 0)
         stats_layout.addWidget(self.total_stocks_label, 0, 1)
@@ -1219,100 +1227,130 @@ class LocalDataManagerWidget(QWidget):
         self.log_text.setTextCursor(cursor)
 
     def load_local_data_info(self):
-        """加载本地数据信息"""
+        """加载DuckDB数据库信息"""
         try:
             factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
             if str(factor_platform_path) not in sys.path:
                 sys.path.insert(0, str(factor_platform_path))
 
-            from data_manager import LocalDataManager
+            from data_manager.duckdb_storage import DuckDBStorage
 
-            manager = LocalDataManager()
+            # 关闭旧连接
+            if self.duckdb_storage is not None:
+                try:
+                    self.duckdb_storage.close()
+                except:
+                    pass
+
+            # DuckDB数据库路径
+            db_path = Path('D:/StockData/stock_data.ddb')
+
+            if not db_path.exists():
+                self.log(f"⚠️ DuckDB数据库不存在: {db_path}")
+                self.log(f"   请先下载数据到DuckDB")
+                return
+
+            # 创建DuckDBStorage实例
+            self.duckdb_storage = DuckDBStorage(str(db_path))
 
             # 获取统计信息
-            stats = manager.get_statistics()
+            stats = self.duckdb_storage.get_statistics()
 
             # 更新统计标签
-            self.total_symbols_label.setText(f"标的总数: {stats.get('total_symbols', 0)}")
-            self.total_stocks_label.setText(f"股票数量: {stats.get('total_stocks', 0)}")
-            self.total_bonds_label.setText(f"可转债数量: {stats.get('total_bonds', 0)}")
-            self.total_records_label.setText(f"总记录数: {stats.get('total_records', 0):,}")
-            self.total_size_label.setText(f"存储大小: {stats.get('total_size_mb', 0):.2f} MB")
-            self.latest_date_label.setText(f"最新日期: {stats.get('latest_data_date', 'N/A')}")
+            total_symbols = stats.get('total_symbols', 0)
+            total_records = stats.get('total_records', 0)
+            db_size_mb = stats.get('db_size_mb', 0)
+            last_date = stats.get('last_date', 'N/A')
+
+            self.total_symbols_label.setText(f"标的总数: {total_symbols:,}")
+            self.total_stocks_label.setText(f"股票数量: {total_symbols:,}")
+            self.total_bonds_label.setText("可转债数量: N/A")
+            self.total_records_label.setText(f"总记录数: {total_records:,}")
+            self.total_size_label.setText(f"存储大小: {db_size_mb:.2f} MB")
+            self.latest_date_label.setText(f"最新日期: {last_date}")
 
             # 加载数据列表
-            self._load_data_table(manager)
+            self._load_duckdb_table()
 
-            manager.close()
-
-            self.log(f"✅ 本地数据信息加载成功")
+            self.log(f"✅ DuckDB数据库信息加载成功")
+            self.log(f"   数据库路径: {db_path}")
+            self.log(f"   总记录数: {total_records:,}")
 
         except Exception as e:
-            self.log(f"⚠️ 加载本地数据信息失败: {str(e)}")
+            self.log(f"⚠️ 加载DuckDB信息失败: {str(e)}")
             import traceback
             self.log(f"详细错误: {traceback.format_exc()}")
 
-    def _load_data_table(self, manager):
-        """加载数据表格"""
+    def _load_duckdb_table(self):
+        """加载DuckDB数据表格"""
         try:
             # 清空表格
             self.data_table.setRowCount(0)
 
-            # 从数据库获取所有数据版本信息
-            cursor = manager.metadata.conn.cursor()
-            cursor.execute("""
-                SELECT symbol, symbol_type, start_date, end_date,
-                       record_count, file_size
-                FROM data_versions
-                ORDER BY symbol
-            """)
+            if self.duckdb_storage is None:
+                return
 
-            rows = cursor.fetchall()
+            # 从DuckDB获取所有股票的统计信息
+            query = """
+                SELECT
+                    stock_code,
+                    symbol_type,
+                    MIN(date) as first_date,
+                    MAX(date) as last_date,
+                    COUNT(*) as record_count
+                FROM stock_daily
+                GROUP BY stock_code, symbol_type
+                ORDER BY stock_code
+            """
 
-            for row_data in rows:
+            result = self.duckdb_storage.con.execute(query).fetchall()
+
+            for row_data in result:
                 row = self.data_table.rowCount()
                 self.data_table.insertRow(row)
 
+                stock_code, symbol_type, first_date, last_date, record_count = row_data
+
                 # 代码
-                code_item = QTableWidgetItem(row_data[0])
+                code_item = QTableWidgetItem(stock_code)
                 self.data_table.setItem(row, 0, code_item)
 
                 # 名称（从QMT获取，暂时显示代码）
                 try:
                     import xtquant.xtdata as xt_data
-                    info = xt_data.get_instrument_detail(row_data[0])
-                    name = info.get('InstrumentName', row_data[0]) if info else row_data[0]
+                    info = xt_data.get_instrument_detail(stock_code)
+                    name = info.get('InstrumentName', stock_code) if info else stock_code
                 except:
-                    name = row_data[0]
+                    name = stock_code
 
                 name_item = QTableWidgetItem(name)
                 self.data_table.setItem(row, 1, name_item)
 
                 # 类型
-                type_str = '股票' if row_data[1] == 'stock' else '可转债'
+                type_map = {'stock': '股票', 'index': '指数', 'etf': 'ETF', 'bond': '可转债'}
+                type_str = type_map.get(symbol_type, symbol_type)
                 type_item = QTableWidgetItem(type_str)
                 self.data_table.setItem(row, 2, type_item)
 
                 # 记录数
-                count_item = QTableWidgetItem(str(row_data[4] or 0))
+                count_item = QTableWidgetItem(f"{record_count:,}")
                 count_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.data_table.setItem(row, 3, count_item)
 
                 # 日期范围
-                date_range = f"{row_data[2] or 'N/A'} ~ {row_data[3] or 'N/A'}"
+                date_range = f"{first_date} ~ {last_date}"
                 date_item = QTableWidgetItem(date_range)
                 self.data_table.setItem(row, 4, date_item)
 
-                # 大小（file_size字段已经是MB单位）
-                size_mb = row_data[5] or 0
-                size_item = QTableWidgetItem(f"{size_mb:.2f} MB")
+                # 大小（DuckDB不单独计算每个文件大小）
+                size_item = QTableWidgetItem("N/A")
                 size_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.data_table.setItem(row, 5, size_item)
 
-            self.log(f"📊 加载了 {len(rows)} 条数据记录")
+            self.log(f"📊 加载了 {len(result)} 条数据记录")
 
         except Exception as e:
-            self.log(f"⚠️ 加载数据表格失败: {str(e)}")
+            self.log(f"⚠️ 加载DuckDB数据表格失败: {str(e)}")
             import traceback
             self.log(f"详细错误: {traceback.format_exc()}")
 
@@ -1837,7 +1875,7 @@ class DataViewerDialog(QDialog):
         super().__init__(parent)
         self.stock_code = stock_code
         self.adjust = adjust
-        self.setWindowTitle(f"查看数据 - {stock_code} ({adjust})")
+        self.setWindowTitle(f"查看数据 - {stock_code} ({adjust}) [DuckDB]")
         self.setMinimumSize(900, 600)
         self.init_ui()
         self.load_data()
@@ -1917,12 +1955,31 @@ class DataViewerDialog(QDialog):
             if str(factor_platform_path) not in sys.path:
                 sys.path.insert(0, str(factor_platform_path))
 
-            from data_manager.local_data_manager_with_adjustment import LocalDataManager
+            from data_manager.duckdb_storage import DuckDBStorage
 
-            manager = LocalDataManager()
+            # DuckDB数据库路径
+            db_path = Path('D:/StockData/stock_data.ddb')
 
-            # 加载数据（支持复权）
-            df = manager.load_data(self.stock_code, 'daily', adjust=self.adjust)
+            if not db_path.exists():
+                QMessageBox.warning(self, "错误", f"DuckDB数据库不存在:\n{db_path}")
+                self.reject()
+                return
+
+            # 创建存储连接
+            storage = DuckDBStorage(str(db_path))
+
+            # 映射复权类型
+            adjust_map = {
+                "none": "none",
+                "qfq": "front",
+                "hfq": "back"
+            }
+            duckdb_adjust = adjust_map.get(self.adjust, "none")
+
+            # 加载数据
+            df = storage.load_data(self.stock_code, period='1d', adjust_type=duckdb_adjust)
+
+            storage.close()
 
             if df.empty:
                 QMessageBox.warning(self, "提示", f"没有找到 {self.stock_code} 的数据")
@@ -1931,8 +1988,6 @@ class DataViewerDialog(QDialog):
 
             # 显示数据
             self._display_data(df)
-
-            manager.close()
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
@@ -1987,14 +2042,26 @@ class DataViewerDialog(QDialog):
             if str(factor_platform_path) not in sys.path:
                 sys.path.insert(0, str(factor_platform_path))
 
-            from data_manager.local_data_manager_with_adjustment import LocalDataManager
+            from data_manager.duckdb_storage import DuckDBStorage
 
-            manager = LocalDataManager()
-            df = manager.load_data(self.stock_code, 'daily', adjust=self.adjust)
-            manager.close()
+            # DuckDB数据库路径
+            db_path = Path('D:/StockData/stock_data.ddb')
+            storage = DuckDBStorage(str(db_path))
+
+            # 映射复权类型
+            adjust_map = {
+                "none": "none",
+                "qfq": "front",
+                "hfq": "back"
+            }
+            duckdb_adjust = adjust_map.get(self.adjust, "none")
+
+            # 加载数据
+            df = storage.load_data(self.stock_code, period='1d', adjust_type=duckdb_adjust)
+            storage.close()
 
             # 选择保存路径
-            default_name = f"{self.stock_code}_{self.adjust}_data.csv"
+            default_name = f"{self.stock_code}_{self.adjust}_duckdb_data.csv"
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "导出CSV",

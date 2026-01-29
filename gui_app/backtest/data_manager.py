@@ -14,11 +14,12 @@ from enum import Enum
 
 class DataSource(Enum):
     """数据源枚举"""
-    LOCAL = "local"  # 本地缓存（最高优先级）
-    QMT = "qmt"
-    QSTOCK = "qstock"
-    AKSHARE = "akshare"
-    MOCK = "mock"
+    DUCKDB = "duckdb"  # DuckDB本地数据库（最高优先级，性能最优）
+    LOCAL = "local"    # 本地缓存（Parquet）
+    QMT = "qmt"        # QMT实时数据
+    QSTOCK = "qstock"  # QStock数据
+    AKSHARE = "akshare" # AKShare数据
+    MOCK = "mock"      # 模拟数据
 
 class DataManager:
     """
@@ -44,7 +45,20 @@ class DataManager:
         self.preferred_source = preferred_source
         self.use_local_cache = use_local_cache
 
-        # 初始化本地数据管理器
+        # 初始化DuckDB数据库（最高优先级）
+        self.duckdb_connection = None
+        try:
+            import duckdb
+            # DuckDB数据库路径（与迁移的数据库一致）
+            self.duckdb_path = 'D:/StockData/stock_data.ddb'
+            self.duckdb_connection = duckdb.connect(self.duckdb_path)
+            print("[OK] DuckDB数据库已连接 (D:/StockData/stock_data.ddb)")
+        except ImportError:
+            print("[INFO] DuckDB未安装，跳过DuckDB数据源")
+        except Exception as e:
+            print(f"[WARNING] DuckDB连接失败: {e}")
+
+        # 初始化本地数据管理器（Parquet缓存，作为后备）
         self.local_data_manager = None
         if use_local_cache:
             try:
@@ -78,7 +92,10 @@ class DataManager:
         """检查所有数据源的可用性"""
         status = {}
 
-        # 检查本地缓存
+        # 检查DuckDB数据库
+        status[DataSource.DUCKDB] = self._check_duckdb_status()
+
+        # 检查本地缓存（Parquet）
         status[DataSource.LOCAL] = self._check_local_status()
 
         # 检查QMT
@@ -98,6 +115,39 @@ class DataManager:
         }
 
         return status
+
+    def _check_duckdb_status(self) -> Dict[str, any]:
+        """检查DuckDB数据库状态"""
+        if self.duckdb_connection is not None:
+            try:
+                # 测试查询
+                result = self.duckdb_connection.execute("""
+                    SELECT COUNT(*) as count FROM stock_daily LIMIT 1
+                """).fetchone()
+
+                if result and result[0] > 0:
+                    return {
+                        'available': True,
+                        'connected': True,
+                        'message': f'DuckDB数据库 ({result[0]:,}条记录)'
+                    }
+                else:
+                    return {
+                        'available': True,
+                        'connected': False,
+                        'message': 'DuckDB数据库为空'
+                    }
+            except Exception as e:
+                return {
+                    'available': False,
+                    'connected': False,
+                    'message': f'DuckDB查询失败: {str(e)[:50]}'
+                }
+        return {
+            'available': False,
+            'connected': False,
+            'message': 'DuckDB未连接'
+        }
 
     def _check_local_status(self) -> Dict[str, any]:
         """检查本地缓存状态"""
@@ -233,13 +283,26 @@ class DataManager:
             priority.extend(other_sources)
             return priority
         else:
-            # 默认优先级：QMT → LOCAL → QStock → AKShare → 模拟数据
-            # QMT优先，因为它提供实时数据
+            # 默认优先级：DuckDB → QMT → LOCAL → QStock → AKShare → MOCK
+            # DuckDB优先，因为它性能最优且已迁移大量数据
             priority = [DataSource.QMT, DataSource.QSTOCK, DataSource.AKSHARE, DataSource.MOCK]
-            # 如果本地缓存可用，将其放在QMT之后（作为备选）
+
+            # 如果DuckDB可用，放在第一位（最高优先级）
+            if (self.duckdb_connection is not None and
+                self.source_status[DataSource.DUCKDB]['connected']):
+                priority.insert(0, DataSource.DUCKDB)
+
+            # 如果本地缓存可用，放在第二位
             if (self.local_data_manager is not None and
                 self.source_status[DataSource.LOCAL]['connected']):
-                priority.insert(1, DataSource.LOCAL)  # 插入到第2位
+                if DataSource.DUCKDB in priority:
+                    # DuckDB已存在，插入到DuckDB之后
+                    duckdb_idx = priority.index(DataSource.DUCKDB)
+                    priority.insert(duckdb_idx + 1, DataSource.LOCAL)
+                else:
+                    # 没有DuckDB，插入到第一位
+                    priority.insert(0, DataSource.LOCAL)
+
             return priority
     
     def _print_initialization_status(self):
@@ -412,7 +475,9 @@ class DataManager:
     def _get_data_from_source(self, source: DataSource, stock_code: str,
                             start_date: str, end_date: str, period: str, adjust: str = 'none') -> pd.DataFrame:
         """从指定数据源获取数据（支持复权）"""
-        if source == DataSource.LOCAL:
+        if source == DataSource.DUCKDB:
+            return self._get_duckdb_data(stock_code, start_date, end_date, adjust)
+        elif source == DataSource.LOCAL:
             return self._get_local_data(stock_code, start_date, end_date, adjust)
         elif source == DataSource.QMT:
             return self._get_qmt_data(stock_code, start_date, end_date, period, adjust)
@@ -422,6 +487,45 @@ class DataManager:
             return self._get_akshare_data(stock_code, start_date, end_date, period)
         else:  # DataSource.MOCK
             return self._generate_mock_data(stock_code, start_date, end_date)
+
+    def _get_duckdb_data(self, stock_code: str, start_date: str, end_date: str, adjust: str = 'none') -> pd.DataFrame:
+        """从DuckDB数据库获取数据（高性能）"""
+        try:
+            if self.duckdb_connection is None:
+                return pd.DataFrame()
+
+            # 构建SQL查询
+            query = f"""
+                SELECT date, open, high, low, close, volume, amount
+                FROM stock_daily
+                WHERE stock_code = '{stock_code}'
+                  AND date >= '{start_date}'
+                  AND date <= '{end_date}'
+                ORDER BY date
+            """
+
+            # 执行查询
+            df = self.duckdb_connection.execute(query).df()
+
+            if df.empty:
+                return pd.DataFrame()
+
+            # 确保日期索引
+            if 'date' in df.columns:
+                df = df.set_index('date')
+                df.index = pd.to_datetime(df.index)
+
+            # 数据清洗
+            df = self._standardize_columns(df)
+            df = self._clean_data(df)
+
+            print(f"[OK] DuckDB获取 {len(df)} 条数据")
+
+            return df
+
+        except Exception as e:
+            print(f"[WARNING] DuckDB获取数据失败: {e}")
+            return pd.DataFrame()
 
     def _get_local_data(self, stock_code: str, start_date: str, end_date: str, adjust: str = 'none') -> pd.DataFrame:
         """从本地缓存获取数据（支持复权）"""
