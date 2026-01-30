@@ -565,9 +565,30 @@ class DuckDBStorage:
 
             stats['by_adjust_type'] = {adj: count for adj, count in adjust_stats}
 
-            # 数据库文件大小
+            # 数据库文件大小（修复：正确计算目录/文件大小）
             if self.db_path.exists():
-                stats['db_size_mb'] = self.db_path.stat().st_size / (1024 * 1024)
+                import os
+                if self.db_path.is_file():
+                    # 如果是单个文件
+                    stats['db_size_mb'] = self.db_path.stat().st_size / (1024 * 1024)
+                elif self.db_path.is_dir():
+                    # 如果是目录，计算目录下所有文件的总大小
+                    total_size = 0
+                    try:
+                        for root, dirs, files in os.walk(self.db_path):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                try:
+                                    total_size += os.path.getsize(file_path)
+                                except:
+                                    continue
+                        stats['db_size_mb'] = total_size / (1024 * 1024)
+                    except Exception as e:
+                        # 如果计算失败，尝试直接获取目录大小
+                        try:
+                            stats['db_size_mb'] = self.db_path.stat().st_size / (1024 * 1024)
+                        except:
+                            stats['db_size_mb'] = 0
 
         except Exception as e:
             warnings.warn(f"获取统计信息失败: {e}")

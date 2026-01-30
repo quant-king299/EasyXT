@@ -94,6 +94,7 @@ class DataDownloadThread(QThread):
             total = len(self.symbols)
             success_count = 0
             failed_count = 0
+            failed_list = []  # 记录失败的股票及原因
 
             for i, symbol in enumerate(self.symbols):
                 if not self._is_running:
@@ -108,6 +109,7 @@ class DataDownloadThread(QThread):
 
                     if df.empty:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 数据为空")
                         continue
 
                     # 保存数据
@@ -125,6 +127,7 @@ class DataDownloadThread(QThread):
                         success_count += 1
                     else:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 保存失败")
 
                     # 每下载100只股票输出一次日志
                     if (i + 1) % 100 == 0:
@@ -132,6 +135,7 @@ class DataDownloadThread(QThread):
 
                 except Exception as e:
                     failed_count += 1
+                    failed_list.append(f"{symbol} - {str(e)[:50]}")
                     continue
 
             manager.close()
@@ -140,11 +144,21 @@ class DataDownloadThread(QThread):
                 'total': total,
                 'success': success_count,
                 'failed': failed_count,
+                'failed_list': failed_list,
                 'task_type': 'download_stocks'
             }
 
             self.finished_signal.emit(result)
             self.log_signal.emit(f"✅ 下载完成! 总数: {total}, 成功: {success_count}, 失败: {failed_count}")
+
+            # 输出失败清单
+            if failed_list:
+                self.log_signal.emit("")
+                self.log_signal.emit("=" * 70)
+                self.log_signal.emit("  失败清单:")
+                for failed_item in failed_list:
+                    self.log_signal.emit(f"    ✗ {failed_item}")
+                self.log_signal.emit("=" * 70)
 
         except Exception as e:
             import traceback
@@ -173,6 +187,7 @@ class DataDownloadThread(QThread):
             total = len(self.symbols)
             success_count = 0
             failed_count = 0
+            failed_list = []  # 记录失败的可转债及原因
 
             for i, symbol in enumerate(self.symbols):
                 if not self._is_running:
@@ -187,6 +202,7 @@ class DataDownloadThread(QThread):
 
                     if df.empty:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 数据为空")
                         continue
 
                     # 保存数据
@@ -204,6 +220,7 @@ class DataDownloadThread(QThread):
                         success_count += 1
                     else:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 保存失败")
 
                     # 每下载50只可转债输出一次日志
                     if (i + 1) % 50 == 0:
@@ -211,6 +228,7 @@ class DataDownloadThread(QThread):
 
                 except Exception as e:
                     failed_count += 1
+                    failed_list.append(f"{symbol} - {str(e)[:50]}")
                     continue
 
             manager.close()
@@ -219,11 +237,21 @@ class DataDownloadThread(QThread):
                 'total': total,
                 'success': success_count,
                 'failed': failed_count,
+                'failed_list': failed_list,
                 'task_type': 'download_bonds'
             }
 
             self.finished_signal.emit(result)
             self.log_signal.emit(f"✅ 下载完成! 总数: {total}, 成功: {success_count}, 失败: {failed_count}")
+
+            # 输出失败清单
+            if failed_list:
+                self.log_signal.emit("")
+                self.log_signal.emit("=" * 70)
+                self.log_signal.emit("  失败清单:")
+                for failed_item in failed_list:
+                    self.log_signal.emit(f"    ✗ {failed_item}")
+                self.log_signal.emit("=" * 70)
 
         except Exception as e:
             import traceback
@@ -258,6 +286,7 @@ class DataDownloadThread(QThread):
             total = len(symbols)
             success_count = 0
             failed_count = 0
+            failed_list = []  # 记录失败的标的及原因
 
             end_date = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - timedelta(days=5)).strftime('%Y-%m-%d')
@@ -275,6 +304,7 @@ class DataDownloadThread(QThread):
 
                     if df.empty:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 数据为空")
                         continue
 
                     # 保存数据（会自动合并）
@@ -284,6 +314,7 @@ class DataDownloadThread(QThread):
                         success_count += 1
                     else:
                         failed_count += 1
+                        failed_list.append(f"{symbol} - 保存失败")
 
                     # 每更新100个标的输出一次日志
                     if (i + 1) % 100 == 0:
@@ -291,6 +322,7 @@ class DataDownloadThread(QThread):
 
                 except Exception as e:
                     failed_count += 1
+                    failed_list.append(f"{symbol} - {str(e)[:50]}")
                     continue
 
             manager.close()
@@ -299,11 +331,21 @@ class DataDownloadThread(QThread):
                 'total': total,
                 'success': success_count,
                 'failed': failed_count,
+                'failed_list': failed_list,
                 'task_type': 'update_data'
             }
 
             self.finished_signal.emit(result)
             self.log_signal.emit(f"✅ 更新完成! 总数: {total}, 成功: {success_count}, 失败: {failed_count}")
+
+            # 输出失败清单
+            if failed_list:
+                self.log_signal.emit("")
+                self.log_signal.emit("=" * 70)
+                self.log_signal.emit("  失败清单:")
+                for failed_item in failed_list:
+                    self.log_signal.emit(f"    ✗ {failed_item}")
+                self.log_signal.emit("=" * 70)
 
         except Exception as e:
             import traceback
@@ -520,6 +562,7 @@ class QuickUpdateThread(QThread):
             total = len(self.stocks)
             success_count = 0
             failed_count = 0
+            failed_list = []  # 记录失败的股票及原因
 
             for i, stock_code in enumerate(self.stocks):
                 if not self._is_running:
@@ -549,6 +592,7 @@ class QuickUpdateThread(QThread):
 
                     if not data or 'time' not in data:
                         failed_count += 1
+                        failed_list.append(f"{stock_code} - 无数据")
                         continue
 
                     # 转换为DataFrame
@@ -589,6 +633,7 @@ class QuickUpdateThread(QThread):
                     df = pd.DataFrame(records)
                     if df.empty:
                         failed_count += 1
+                        failed_list.append(f"{stock_code} - 数据为空")
                         continue
 
                     df.set_index('time', inplace=True)
@@ -622,21 +667,33 @@ class QuickUpdateThread(QThread):
                     else:
                         manager.close()
                         failed_count += 1
+                        failed_list.append(f"{stock_code} - 保存失败")
                         self.log_signal.emit(f"  ✗ {stock_code} 保存失败")
 
                 except Exception as e:
                     failed_count += 1
+                    failed_list.append(f"{stock_code} - {str(e)[:50]}")
                     self.log_signal.emit(f"  ✗ {stock_code} 更新失败: {e}")
                     continue
 
             result = {
                 'total': total,
                 'success': success_count,
-                'failed': failed_count
+                'failed': failed_count,
+                'failed_list': failed_list
             }
 
             self.finished_signal.emit(result)
             self.log_signal.emit(f"✅ 更新完成! 成功: {success_count}, 失败: {failed_count}")
+
+            # 输出失败清单
+            if failed_list:
+                self.log_signal.emit("")
+                self.log_signal.emit("=" * 70)
+                self.log_signal.emit("  失败清单:")
+                for failed_item in failed_list:
+                    self.log_signal.emit(f"    ✗ {failed_item}")
+                self.log_signal.emit("=" * 70)
 
         except Exception as e:
             import traceback
@@ -781,6 +838,254 @@ class VerifyDataThread(QThread):
             self.finished_signal.emit(result)
 
 
+class FinancialDataDownloadThread(QThread):
+    """QMT财务数据下载线程"""
+    log_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int, int)  # current, total
+    finished_signal = pyqtSignal(dict)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, stock_list=None, table_list=None, start_time=None, end_time=None):
+        super().__init__()
+        # 默认下载常用股票
+        self.stock_list = stock_list or ["000001.SZ", "600519.SH", "511380.SH", "512100.SH"]
+        # 默认下载主要财务报表
+        self.table_list = table_list or ["Balance", "Income", "CashFlow"]
+        # 默认时间范围：最近3年
+        from datetime import datetime, timedelta
+        if end_time is None:
+            end_time = datetime.now()
+        else:
+            end_time = datetime.strptime(end_time, '%Y%m%d')
+
+        if start_time is None:
+            start_time = end_time - timedelta(days=365*3)  # 默认3年
+        else:
+            start_time = datetime.strptime(start_time, '%Y%m%d')
+
+        self.start_time = start_time.strftime('%Y%m%d')
+        self.end_time = end_time.strftime('%Y%m%d')
+        self._is_running = True
+
+    def run(self):
+        """运行下载任务"""
+        try:
+            from xtquant import xtdata
+
+            self.log_signal.emit("=" * 70)
+            self.log_signal.emit("  【QMT财务数据下载】")
+            self.log_signal.emit("=" * 70)
+
+            # 步骤0: 过滤ETF和指数
+            self.log_signal.emit("【步骤0】过滤ETF和指数")
+            self.log_signal.emit("-" * 70)
+
+            filtered_stock_list = []
+            etf_count = 0
+            index_count = 0
+            stock_count = 0
+
+            for stock_code in self.stock_list:
+                try:
+                    # 获取股票类型信息
+                    type_info = xtdata.get_instrument_type(stock_code)
+
+                    # 判断类型
+                    if isinstance(type_info, dict):
+                        if type_info.get('stock', False):
+                            # 是股票
+                            filtered_stock_list.append(stock_code)
+                            stock_count += 1
+                            self.log_signal.emit(f"[OK] {stock_code}: 股票")
+                        elif type_info.get('etf', False) or type_info.get('fund', False):
+                            # 是ETF或基金
+                            etf_count += 1
+                            self.log_signal.emit(f"[SKIP] {stock_code}: ETF/基金（无财务报表）")
+                        elif type_info.get('index', False):
+                            # 是指数
+                            index_count += 1
+                            self.log_signal.emit(f"[SKIP] {stock_code}: 指数（无财务报表）")
+                        else:
+                            # 未知类型，尝试下载
+                            self.log_signal.emit(f"[INFO] {stock_code}: 类型未知，将尝试下载")
+                            filtered_stock_list.append(stock_code)
+                            stock_count += 1
+                    else:
+                        # 如果返回的不是字典，尝试下载
+                        self.log_signal.emit(f"[INFO] {stock_code}: 类型={type_info}，将尝试下载")
+                        filtered_stock_list.append(stock_code)
+                        stock_count += 1
+
+                except Exception as e:
+                    # 如果获取类型失败，也尝试下载
+                    self.log_signal.emit(f"[WARN] {stock_code}: 无法获取类型信息，将尝试下载")
+                    filtered_stock_list.append(stock_code)
+                    stock_count += 1
+
+            self.log_signal.emit("")
+            self.log_signal.emit(f"[统计] 原始数量: {len(self.stock_list)}")
+            self.log_signal.emit(f"  - 股票: {stock_count} 只（将下载）")
+            self.log_signal.emit(f"  - ETF/基金: {etf_count} 只（已跳过）")
+            self.log_signal.emit(f"  - 指数: {index_count} 只（已跳过）")
+            self.log_signal.emit("")
+
+            if not filtered_stock_list:
+                self.log_signal.emit("[INFO] 没有需要下载财务数据的股票")
+                result = {
+                    'total': len(self.stock_list),
+                    'success': 0,
+                    'failed': 0,
+                    'skipped': len(self.stock_list),
+                    'task_type': 'financial_data'
+                }
+                self.finished_signal.emit(result)
+                return
+
+            # 更新股票列表为过滤后的列表
+            self.stock_list = filtered_stock_list
+            total_stocks = len(self.stock_list)
+            total_tables = len(self.table_list)
+
+            self.log_signal.emit(f"[INFO] 准备下载 {total_stocks} 只股票的财务数据")
+            self.log_signal.emit(f"[INFO] 数据表: {', '.join(self.table_list)}")
+            self.log_signal.emit(f"[INFO] 时间范围: {self.start_time} ~ {self.end_time}")
+            self.log_signal.emit("")
+
+            success_count = 0
+            failed_count = 0
+            failed_list = []  # 记录失败的股票及原因
+
+            # 步骤1: 下载财务数据
+            self.log_signal.emit("【步骤1】下载财务数据到QMT本地")
+            self.log_signal.emit("-" * 70)
+
+            try:
+                self.log_signal.emit(f"[INFO] 正在下载 {self.stock_list} 的财务数据...")
+                result = xtdata.download_financial_data(
+                    stock_list=self.stock_list,
+                    table_list=self.table_list
+                )
+
+                if result is None or result == '':
+                    self.log_signal.emit("[OK] 财务数据下载完成")
+                else:
+                    self.log_signal.emit(f"[返回] {result}")
+
+            except Exception as e:
+                error_msg = f"[ERROR] 下载失败: {e}"
+                self.log_signal.emit(error_msg)
+                self.error_signal.emit(error_msg)
+                return
+
+            # 步骤2: 读取并验证数据
+            self.log_signal.emit("")
+            self.log_signal.emit("【步骤2】读取并验证财务数据")
+            self.log_signal.emit("-" * 70)
+
+            for i, stock_code in enumerate(self.stock_list):
+                if not self._is_running:
+                    self.log_signal.emit("[WARN] 用户中断下载")
+                    break
+
+                try:
+                    self.progress_signal.emit(i + 1, total_stocks)
+                    self.log_signal.emit(f"[{i+1}/{total_stocks}] {stock_code}:")
+
+                    # 读取财务数据（添加时间范围参数）
+                    result = xtdata.get_financial_data(
+                        stock_list=[stock_code],
+                        table_list=self.table_list,
+                        start_time=self.start_time,
+                        end_time=self.end_time,
+                        report_type='report_time'
+                    )
+
+                    # 处理返回结果（可能是dict或DataFrame）
+                    total_records = 0
+
+                    if isinstance(result, dict):
+                        # 字典格式：{stock_code: {table_name: data}}
+                        if stock_code in result:
+                            stock_data = result[stock_code]
+
+                            for table_name in self.table_list:
+                                if table_name in stock_data:
+                                    table_data = stock_data[table_name]
+                                    if isinstance(table_data, pd.DataFrame):
+                                        record_count = len(table_data)
+                                        total_records += record_count
+                                        self.log_signal.emit(f"    [OK] {table_name}: {record_count} 条记录")
+                                    elif isinstance(table_data, dict):
+                                        record_count = len(table_data)
+                                        total_records += record_count
+                                        self.log_signal.emit(f"    [OK] {table_name}: {record_count} 条记录")
+                                    elif isinstance(table_data, list):
+                                        record_count = len(table_data)
+                                        total_records += record_count
+                                        self.log_signal.emit(f"    [OK] {table_name}: {record_count} 条记录")
+                        else:
+                            self.log_signal.emit(f"    [WARN] {stock_code} 不在返回结果中")
+
+                    elif isinstance(result, pd.DataFrame):
+                        # DataFrame格式：直接是数据
+                        record_count = len(result)
+                        total_records += record_count
+                        self.log_signal.emit(f"    [OK] 财务数据: {record_count} 条记录")
+                        self.log_signal.emit(f"    [INFO] 列: {list(result.columns)[:5]}...")
+
+                    if total_records > 0:
+                        success_count += 1
+                        self.log_signal.emit(f"    [OK] 共 {total_records} 条财务数据")
+                    else:
+                        failed_count += 1
+                        failed_list.append(f"{stock_code} - 数据为空")
+                        self.log_signal.emit(f"    [WARN] 没有获取到财务数据")
+
+                except Exception as e:
+                    failed_count += 1
+                    failed_list.append(f"{stock_code} - {str(e)[:50]}")
+                    self.log_signal.emit(f"    [ERROR] {e}")
+                    continue
+
+            # 完成
+            result = {
+                'total': total_stocks,
+                'success': success_count,
+                'failed': failed_count,
+                'failed_list': failed_list,
+                'skipped': etf_count + index_count,
+                'task_type': 'financial_data'
+            }
+
+            self.finished_signal.emit(result)
+
+            self.log_signal.emit("")
+            self.log_signal.emit("=" * 70)
+            self.log_signal.emit("  下载完成!")
+            self.log_signal.emit(f"  有效股票: {total_stocks} 只")
+            self.log_signal.emit(f"  成功: {success_count} 只")
+            self.log_signal.emit(f"  失败: {failed_count} 只")
+            if etf_count + index_count > 0:
+                self.log_signal.emit(f"  跳过: {etf_count + index_count} 只（ETF/指数无财务数据）")
+            self.log_signal.emit("=" * 70)
+
+        except ImportError:
+            error_msg = "[ERROR] 导入xtquant失败，请确保QMT已安装并运行"
+            self.log_signal.emit(error_msg)
+            self.error_signal.emit(error_msg)
+        except Exception as e:
+            import traceback
+            error_msg = f"[ERROR] 财务数据下载失败: {str(e)}\n{traceback.format_exc()}"
+            self.log_signal.emit(error_msg)
+            self.error_signal.emit(error_msg)
+
+    def stop(self):
+        """停止下载"""
+        self._is_running = False
+        self.quit()
+        self.wait()
+
+
 class LocalDataManagerWidget(QWidget):
     """本地数据管理组件"""
 
@@ -788,6 +1093,7 @@ class LocalDataManagerWidget(QWidget):
         super().__init__()
         self.download_thread = None
         self.duckdb_storage = None
+        self.duckdb_con = None  # 添加DuckDB连接属性
         self.init_ui()
         self.load_local_data_info()
 
@@ -1030,6 +1336,77 @@ class LocalDataManagerWidget(QWidget):
 
         quick_action_layout.addLayout(other_action_layout, 1, 0, 1, 4)
 
+        # ========== QMT财务数据下载区域 ==========
+        financial_group = QGroupBox("💰 QMT财务数据")
+        financial_layout = QGridLayout()
+        financial_group.setLayout(financial_layout)
+        left_layout.addWidget(financial_group)
+
+        # 第一行：股票列表选择
+        financial_layout.addWidget(QLabel("股票列表:"), 0, 0)
+
+        self.financial_stock_combo = QComboBox()
+        self.financial_stock_combo.addItems([
+            "默认股票列表 (4只)",
+            "自定义股票列表",
+            "全部A股（谨慎使用）",
+            "沪深300成分股",
+            "中证500成分股",
+            "中证1000成分股"
+        ])
+        financial_layout.addWidget(self.financial_stock_combo, 0, 1, 1, 3)
+
+        # 第二行：数据表选择
+        financial_layout.addWidget(QLabel("数据表:"), 1, 0)
+
+        # 使用复选框让用户选择数据表
+        table_check_layout = QHBoxLayout()
+
+        self.financial_balance_check = QCheckBox("资产负债表")
+        self.financial_balance_check.setChecked(True)
+        table_check_layout.addWidget(self.financial_balance_check)
+
+        self.financial_income_check = QCheckBox("利润表")
+        self.financial_income_check.setChecked(True)
+        table_check_layout.addWidget(self.financial_income_check)
+
+        self.financial_cashflow_check = QCheckBox("现金流量表")
+        self.financial_cashflow_check.setChecked(True)
+        table_check_layout.addWidget(self.financial_cashflow_check)
+
+        self.financial_cap_check = QCheckBox("股本结构")
+        table_check_layout.addWidget(self.financial_cap_check)
+
+        table_check_layout.addStretch()
+        financial_layout.addLayout(table_check_layout, 1, 1, 1, 3)
+
+        # 第三行：下载按钮
+        self.financial_download_btn = QPushButton("💰 下载QMT财务数据")
+        self.financial_download_btn.clicked.connect(self.download_financial_data)
+        self.financial_download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00BCD4;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0097A7;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        financial_layout.addWidget(self.financial_download_btn, 2, 0, 1, 4)
+
+        # 添加说明标签
+        financial_note = QLabel("注意: 财务数据会下载到QMT本地，读取时需要先下载")
+        financial_note.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
+        financial_layout.addWidget(financial_note, 3, 0, 1, 4)
+
+
         # ========== 手动下载单个标的区域 ==========
         manual_group = QGroupBox("🎯 手动下载单个标的")
         manual_layout = QGridLayout()
@@ -1176,6 +1553,24 @@ class LocalDataManagerWidget(QWidget):
         """)
         view_layout.addWidget(self.view_data_btn)
 
+        # 查看财务数据按钮
+        self.view_financial_btn = QPushButton("💰 查看财务数据")
+        self.view_financial_btn.clicked.connect(self.view_financial_data)
+        self.view_financial_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #00BCD4;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+                font-size: 11px;
+            }
+            QPushButton:hover {
+                background-color: #0097A7;
+            }
+        """)
+        view_layout.addWidget(self.view_financial_btn)
+
         view_layout.addStretch()
         list_layout.addLayout(view_layout)
 
@@ -1214,8 +1609,8 @@ class LocalDataManagerWidget(QWidget):
         log_layout.addWidget(clear_log_btn)
 
         # 初始日志
-        self.log("✅ 本地数据管理组件已加载")
-        self.log("💡 提示：首次使用请先下载数据")
+        self.log("本地数据管理组件已加载")
+        self.log("提示：首次使用请先下载数据")
 
     def log(self, message):
         """输出日志"""
@@ -1229,55 +1624,96 @@ class LocalDataManagerWidget(QWidget):
     def load_local_data_info(self):
         """加载DuckDB数据库信息"""
         try:
+            # 先关闭之前的连接
+            if hasattr(self, 'duckdb_con') and self.duckdb_con is not None:
+                try:
+                    self.duckdb_con.close()
+                except:
+                    pass
+                self.duckdb_con = None
+
             factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
             if str(factor_platform_path) not in sys.path:
                 sys.path.insert(0, str(factor_platform_path))
-
-            from data_manager.duckdb_storage import DuckDBStorage
-
-            # 关闭旧连接
-            if self.duckdb_storage is not None:
-                try:
-                    self.duckdb_storage.close()
-                except:
-                    pass
 
             # DuckDB数据库路径
             db_path = Path('D:/StockData/stock_data.ddb')
 
             if not db_path.exists():
-                self.log(f"⚠️ DuckDB数据库不存在: {db_path}")
+                self.log(f"[WARN] DuckDB数据库不存在: {db_path}")
                 self.log(f"   请先下载数据到DuckDB")
                 return
 
-            # 创建DuckDBStorage实例
-            self.duckdb_storage = DuckDBStorage(str(db_path))
+            # 使用只读模式连接，避免配置冲突
+            import duckdb
+            self.duckdb_con = duckdb.connect(str(db_path), read_only=True)
 
             # 获取统计信息
-            stats = self.duckdb_storage.get_statistics()
+            try:
+                result = self.duckdb_con.execute("""
+                    SELECT
+                        COUNT(*) as total_records,
+                        COUNT(DISTINCT stock_code) as total_symbols,
+                        MIN(date) as first_date,
+                        MAX(date) as last_date
+                    FROM stock_daily
+                """).fetchone()
 
-            # 更新统计标签
-            total_symbols = stats.get('total_symbols', 0)
-            total_records = stats.get('total_records', 0)
-            db_size_mb = stats.get('db_size_mb', 0)
-            last_date = stats.get('last_date', 'N/A')
+                if result and result[0] > 0:
+                    total_records, total_symbols, first_date, last_date = result
 
-            self.total_symbols_label.setText(f"标的总数: {total_symbols:,}")
-            self.total_stocks_label.setText(f"股票数量: {total_symbols:,}")
-            self.total_bonds_label.setText("可转债数量: N/A")
-            self.total_records_label.setText(f"总记录数: {total_records:,}")
-            self.total_size_label.setText(f"存储大小: {db_size_mb:.2f} MB")
-            self.latest_date_label.setText(f"最新日期: {last_date}")
+                    # 更新统计标签
+                    self.total_symbols_label.setText(f"标的总数: {total_symbols:,}")
+                    self.total_stocks_label.setText(f"股票数量: {total_symbols:,}")
+                    self.total_bonds_label.setText("可转债数量: N/A")
+                    self.total_records_label.setText(f"总记录数: {total_records:,}")
+                    self.latest_date_label.setText(f"最新日期: {last_date}")
 
-            # 加载数据列表
-            self._load_duckdb_table()
+                    # 计算数据库文件大小
+                    if db_path.is_file():
+                        db_size_mb = db_path.stat().st_size / (1024 * 1024)
+                    elif db_path.is_dir():
+                        import os
+                        total_size = 0
+                        for root, dirs, files in os.walk(db_path):
+                            for file in files:
+                                file_path = os.path.join(root, file)
+                                try:
+                                    total_size += os.path.getsize(file_path)
+                                except:
+                                    continue
+                        db_size_mb = total_size / (1024 * 1024)
+                    else:
+                        db_size_mb = 0
 
-            self.log(f"✅ DuckDB数据库信息加载成功")
-            self.log(f"   数据库路径: {db_path}")
-            self.log(f"   总记录数: {total_records:,}")
+                    self.total_size_label.setText(f"存储大小: {db_size_mb:.2f} MB")
+
+                    # 加载数据列表
+                    self._load_duckdb_table()
+
+                    self.log(f"[OK] DuckDB数据库信息加载成功")
+                    self.log(f"   数据库路径: {db_path}")
+                    self.log(f"   总记录数: {total_records:,}")
+                    self.log(f"   存储大小: {db_size_mb:.2f} MB")
+                else:
+                    self.log(f"[WARN] DuckDB数据库为空，没有数据")
+                    self.total_symbols_label.setText("标的总数: 0")
+                    self.total_stocks_label.setText("股票数量: 0")
+                    self.total_records_label.setText("总记录数: 0")
+                    self.total_size_label.setText("存储大小: 0.00 MB")
+                    self.latest_date_label.setText("最新日期: N/A")
+
+            except Exception as e:
+                self.log(f"[WARN] 查询统计信息失败: {str(e)}")
+                self.log(f"   可能数据库表不存在或为空")
+                self.total_symbols_label.setText("标的总数: N/A")
+                self.total_stocks_label.setText("股票数量: N/A")
+                self.total_records_label.setText("总记录数: N/A")
+                self.total_size_label.setText("存储大小: N/A")
+                self.latest_date_label.setText("最新日期: N/A")
 
         except Exception as e:
-            self.log(f"⚠️ 加载DuckDB信息失败: {str(e)}")
+            self.log(f"[ERROR] 加载DuckDB信息失败: {str(e)}")
             import traceback
             self.log(f"详细错误: {traceback.format_exc()}")
 
@@ -1287,7 +1723,7 @@ class LocalDataManagerWidget(QWidget):
             # 清空表格
             self.data_table.setRowCount(0)
 
-            if self.duckdb_storage is None:
+            if self.duckdb_con is None:
                 return
 
             # 从DuckDB获取所有股票的统计信息
@@ -1303,7 +1739,7 @@ class LocalDataManagerWidget(QWidget):
                 ORDER BY stock_code
             """
 
-            result = self.duckdb_storage.con.execute(query).fetchall()
+            result = self.duckdb_con.execute(query).fetchall()
 
             for row_data in result:
                 row = self.data_table.rowCount()
@@ -1556,6 +1992,330 @@ class LocalDataManagerWidget(QWidget):
         self.log(f"[INFO] 查看 {stock_code} 数据（{adjust_text}）")
         DataViewerDialog(stock_code, adjust, self).exec_()
 
+    def download_financial_data(self):
+        """下载QMT财务数据"""
+        if self.download_thread and self.download_thread.isRunning():
+            QMessageBox.warning(self, "提示", "已有下载任务正在运行")
+            return
+
+        # 获取股票列表
+        stock_selection = self.financial_stock_combo.currentText()
+
+        if "默认股票列表" in stock_selection:
+            stock_list = ["000001.SZ", "600519.SH", "511380.SH", "512100.SH"]
+        elif "自定义股票列表" in stock_selection:
+            # 弹出输入对话框让用户输入股票列表
+            text, ok = QInputDialog.getText(
+                self, "输入股票列表",
+                "请输入股票代码，用逗号分隔:\n例如: 000001.SZ,600519.SH,511380.SH"
+            )
+            if not ok or not text.strip():
+                return
+            stock_list = [s.strip() for s in text.split(',')]
+        elif "全部A股" in stock_selection:
+            # 警告用户
+            reply = QMessageBox.question(
+                self, "确认下载",
+                "即将下载全部A股的财务数据，这可能需要较长时间。\n\n确定要继续吗？",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            if reply == QMessageBox.No:
+                return
+            # 获取全部A股列表
+            try:
+                from xtquant import xtdata
+                all_stocks = xtdata.get_stock_list_in_sector('沪深A股')
+                stock_list = all_stocks[:100]  # 限制前100只，避免太多
+                QMessageBox.information(self, "提示", f"为避免下载时间过长，限制为前100只股票")
+            except:
+                QMessageBox.warning(self, "错误", "获取股票列表失败")
+                return
+        elif "沪深300" in stock_selection:
+            # 获取沪深300成分股
+            try:
+                from xtquant import xtdata
+                stock_list = xtdata.get_stock_list_in_sector('沪深300')
+            except:
+                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+        elif "中证500" in stock_selection:
+            try:
+                from xtquant import xtdata
+                stock_list = xtdata.get_stock_list_in_sector('中证500')
+            except:
+                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+        elif "中证1000" in stock_selection:
+            try:
+                from xtquant import xtdata
+                stock_list = xtdata.get_stock_list_in_sector('中证1000')
+            except:
+                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+        else:
+            stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+
+        # 获取数据表列表
+        table_list = []
+        if self.financial_balance_check.isChecked():
+            table_list.append("Balance")
+        if self.financial_income_check.isChecked():
+            table_list.append("Income")
+        if self.financial_cashflow_check.isChecked():
+            table_list.append("CashFlow")
+        if self.financial_cap_check.isChecked():
+            table_list.append("Capitalization")
+
+        if not table_list:
+            QMessageBox.warning(self, "提示", "请至少选择一个数据表")
+            return
+
+        self.log(f"💰 开始下载QMT财务数据")
+        self.log(f"   股票数量: {len(stock_list)}")
+        self.log(f"   数据表: {', '.join(table_list)}")
+
+        # 创建下载线程
+        self.download_thread = FinancialDataDownloadThread(
+            stock_list=stock_list,
+            table_list=table_list
+        )
+        self.download_thread.log_signal.connect(self.log)
+        self.download_thread.progress_signal.connect(self.update_progress)
+        self.download_thread.finished_signal.connect(self.on_financial_download_finished)
+        self.download_thread.error_signal.connect(self.on_financial_download_error)
+        self.download_thread.start()
+
+        self._set_download_state(True)
+
+    def on_financial_download_finished(self, result):
+        """财务数据下载完成"""
+        self._set_download_state(False)
+        self.progress_bar.setVisible(False)
+
+        total = result.get('total', 0)
+        success = result.get('success', 0)
+        failed = result.get('failed', 0)
+        skipped = result.get('skipped', 0)
+
+        msg = f"QMT财务数据下载完成！\n\n"
+        msg += f"有效股票: {total} 只\n"
+        msg += f"成功: {success} 只\n"
+        msg += f"失败: {failed} 只"
+        if skipped > 0:
+            msg += f"\n跳过: {skipped} 只（ETF/指数无财务数据）"
+
+        if failed > 0:
+            QMessageBox.warning(self, "下载完成", msg)
+        else:
+            QMessageBox.information(self, "下载完成", msg)
+
+    def download_single_financial(self):
+        """下载单只股票的财务数据"""
+        stock_code = self.financial_stock_input.text().strip()
+
+        if not stock_code:
+            QMessageBox.warning(self, "提示", "请输入股票代码")
+            return
+
+        # 标准化代码格式
+        stock_code = stock_code.upper()
+
+        # 验证代码格式
+        if not ('.' in stock_code):
+            # 如果没有后缀，尝试自动添加
+            if stock_code.startswith('6') or stock_code.startswith('5'):
+                stock_code = stock_code + '.SH'
+            elif stock_code.startswith('0') or stock_code.startswith('3') or stock_code.startswith('1'):
+                stock_code = stock_code + '.SZ'
+
+        # 获取数据表列表
+        table_list = []
+        if self.financial_balance_check.isChecked():
+            table_list.append("Balance")
+        if self.financial_income_check.isChecked():
+            table_list.append("Income")
+        if self.financial_cashflow_check.isChecked():
+            table_list.append("CashFlow")
+        if self.financial_cap_check.isChecked():
+            table_list.append("Capitalization")
+
+        if not table_list:
+            QMessageBox.warning(self, "提示", "请至少选择一个数据表")
+            return
+
+        self.log(f"💰 开始下载 {stock_code} 的财务数据")
+        self.log(f"   数据表: {', '.join(table_list)}")
+
+        # 创建下载线程
+        self.download_thread = FinancialDataDownloadThread(
+            stock_list=[stock_code],
+            table_list=table_list
+        )
+        self.download_thread.log_signal.connect(self.log)
+        self.download_thread.progress_signal.connect(self.update_progress)
+        self.download_thread.finished_signal.connect(self.on_single_financial_finished)
+        self.download_thread.error_signal.connect(self.on_financial_download_error)
+        self.download_thread.start()
+
+        self._set_download_state(True)
+
+    def on_single_financial_finished(self, result):
+        """单只股票财务数据下载完成"""
+        self._set_download_state(False)
+        self.progress_bar.setVisible(False)
+
+        total = result.get('total', 0)
+        success = result.get('success', 0)
+        failed = result.get('failed', 0)
+        skipped = result.get('skipped', 0)
+
+        msg = f"财务数据下载完成！\n\n"
+        msg += f"有效股票: {total} 只\n"
+        msg += f"成功: {success} 只"
+        if failed > 0:
+            msg += f"\n失败: {failed} 只"
+        if skipped > 0:
+            msg += f"\n跳过: {skipped} 只（ETF/指数）"
+
+        if failed > 0:
+            QMessageBox.warning(self, "下载完成", msg)
+        else:
+            QMessageBox.information(self, "下载完成", msg)
+
+        # 刷新财务数据统计
+        self.refresh_financial_stats()
+
+    def refresh_financial_stats(self):
+        """刷新财务数据统计"""
+        try:
+            from xtquant import xtdata
+
+            self.log("[INFO] 正在统计已下载的财务数据...")
+
+            # 测试几只常用股票
+            test_stocks = ["000001.SZ", "600519.SH", "511380.SH", "512100.SH"]
+            table_list = ["Balance", "Income", "CashFlow"]
+
+            total_count = 0
+            stock_count = 0
+
+            for stock_code in test_stocks:
+                try:
+                    result = xtdata.get_financial_data(
+                        stock_list=[stock_code],
+                        table_list=table_list,
+                        start_time="20200101",
+                        end_time="20260130",
+                        report_type='report_time'
+                    )
+
+                    if isinstance(result, dict) and stock_code in result:
+                        stock_data = result[stock_code]
+                        count = 0
+                        for table_name in table_list:
+                            if table_name in stock_data:
+                                table_data = stock_data[table_name]
+                                if isinstance(table_data, dict):
+                                    count += len(table_data)
+                                elif hasattr(table_data, '__len__'):
+                                    count += len(table_data)
+
+                        if count > 0:
+                            stock_count += 1
+                            total_count += count
+
+                except Exception as e:
+                    continue
+
+            self.log(f"[OK] 财务数据统计更新完成: {stock_count}只股票, {total_count}条记录")
+
+        except Exception as e:
+            self.log(f"[ERROR] 统计财务数据失败: {e}")
+
+    def view_financial_data(self):
+        """查看选中股票的财务数据"""
+        # 获取选中的行
+        selected_items = self.data_table.selectedItems()
+        if not selected_items:
+            QMessageBox.warning(self, "提示", "请先在列表中选择一只股票")
+            return
+
+        # 获取股票代码
+        row = self.data_table.currentRow()
+        code_item = self.data_table.item(row, 0)
+        if not code_item:
+            return
+
+        stock_code = code_item.text()
+
+        self.log(f"[INFO] 查看 {stock_code} 的财务数据")
+
+        # 显示财务数据查看对话框
+        FinancialDataViewerDialog(stock_code, self).exec_()
+
+    def export_local_data_to_csv(self):
+        """导出本地数据列表为CSV"""
+        try:
+            # 获取所有数据
+            if self.data_table.rowCount() == 0:
+                QMessageBox.warning(self, "提示", "没有数据可导出")
+                return
+
+            self.log("[INFO] 正在导出数据到CSV...")
+
+            # 选择保存路径
+            default_name = f"本地数据列表_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+            file_path, _ = QFileDialog.getSaveFileName(
+                self,
+                "导出CSV",
+                default_name,
+                "CSV文件 (*.csv)"
+            )
+
+            if not file_path:
+                return
+
+            # 收集数据
+            data_rows = []
+            headers = []
+
+            # 表头
+            for col in range(self.data_table.columnCount()):
+                headers.append(self.data_table.horizontalHeaderItem(col))
+
+            data_rows.append(headers)
+
+            # 数据行
+            for row in range(self.data_table.rowCount()):
+                row_data = []
+                for col in range(self.data_table.columnCount()):
+                    item = self.data_table.item(row, col)
+                    text = item.text() if item else ""
+                    row_data.append(text)
+                data_rows.append(row_data)
+
+            # 写入CSV
+            import csv
+            with open(file_path, 'w', encoding='utf-8-sig', newline='') as f:
+                writer = csv.writer(f)
+                writer.writerows(data_rows)
+
+            count = len(data_rows) - 1  # 减去表头
+            self.log(f"[OK] 数据导出成功!")
+            self.log(f"   文件路径: {file_path}")
+            self.log(f"   记录数: {count} 条")
+
+            QMessageBox.information(self, "导出成功",
+                f"数据已导出到:\n{file_path}\n\n共 {count} 条记录")
+
+        except Exception as e:
+            self.log(f"[ERROR] 导出失败: {str(e)}")
+            QMessageBox.critical(self, "导出失败", f"导出CSV失败:\n{str(e)}")
+
+    def on_financial_download_error(self, error_msg):
+        """财务数据下载出错"""
+        self._set_download_state(False)
+        self.progress_bar.setVisible(False)
+        QMessageBox.critical(self, "下载失败", error_msg)
+
     def download_stocks(self):
         """下载A股数据"""
         if self.download_thread and self.download_thread.isRunning():
@@ -1675,6 +2435,7 @@ class LocalDataManagerWidget(QWidget):
         self.quick_update_btn.setEnabled(not is_downloading)
         self.save_qmt_btn.setEnabled(not is_downloading)
         self.verify_data_btn.setEnabled(not is_downloading)
+        self.financial_download_btn.setEnabled(not is_downloading)
         self.stop_btn.setVisible(is_downloading)
         self.progress_bar.setVisible(is_downloading)
 
@@ -1950,23 +2711,22 @@ class DataViewerDialog(QDialog):
     def load_data(self):
         """加载数据"""
         try:
-            # 导入数据管理器
-            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
-            if str(factor_platform_path) not in sys.path:
-                sys.path.insert(0, str(factor_platform_path))
-
-            from data_manager.duckdb_storage import DuckDBStorage
+            # 使用只读模式连接，避免配置冲突
+            import duckdb
 
             # DuckDB数据库路径
             db_path = Path('D:/StockData/stock_data.ddb')
 
             if not db_path.exists():
-                QMessageBox.warning(self, "错误", f"DuckDB数据库不存在:\n{db_path}")
-                self.reject()
+                self.stats_label.setText(f"❌ 数据库不存在: {db_path}")
+                self.data_table.setRowCount(1)
+                self.data_table.setColumnCount(1)
+                self.data_table.setHorizontalHeaderLabels(["错误"])
+                self.data_table.setItem(0, 0, QTableWidgetItem(f"数据库不存在:\n{db_path}"))
                 return
 
-            # 创建存储连接
-            storage = DuckDBStorage(str(db_path))
+            # 创建只读连接
+            con = duckdb.connect(str(db_path), read_only=True)
 
             # 映射复权类型
             adjust_map = {
@@ -1976,23 +2736,48 @@ class DataViewerDialog(QDialog):
             }
             duckdb_adjust = adjust_map.get(self.adjust, "none")
 
-            # 加载数据
-            df = storage.load_data(self.stock_code, period='1d', adjust_type=duckdb_adjust)
+            # 加载数据（直接查询DuckDB）
+            query = f"""
+                SELECT
+                    date,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    amount
+                FROM stock_daily
+                WHERE stock_code = '{self.stock_code}'
+                  AND period = '1d'
+                  AND adjust_type = '{duckdb_adjust}'
+                ORDER BY date
+            """
 
-            storage.close()
+            df = con.execute(query).df()
+            con.close()
 
             if df.empty:
-                QMessageBox.warning(self, "提示", f"没有找到 {self.stock_code} 的数据")
-                self.reject()
+                self.stats_label.setText(f"❌ 未找到 {self.stock_code} 的数据")
+                self.data_table.setRowCount(1)
+                self.data_table.setColumnCount(1)
+                self.data_table.setHorizontalHeaderLabels(["提示"])
+                self.data_table.setItem(0, 0, QTableWidgetItem(f"未找到 {self.stock_code} 的数据\n请先下载该股票的数据"))
                 return
+
+            # 设置日期为索引
+            df.set_index('date', inplace=True)
 
             # 显示数据
             self._display_data(df)
 
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"加载数据失败: {str(e)}")
+            self.stats_label.setText(f"❌ 加载失败: {str(e)}")
             import traceback
             traceback.print_exc()
+            self.data_table.setRowCount(1)
+            self.data_table.setColumnCount(1)
+            self.data_table.setHorizontalHeaderLabels(["错误"])
+            self.data_table.setItem(0, 0, QTableWidgetItem(f"加载数据失败:\n{str(e)}"))
 
     def _display_data(self, df):
         """显示数据到表格"""
@@ -2037,16 +2822,11 @@ class DataViewerDialog(QDialog):
     def export_csv(self):
         """导出为CSV"""
         try:
-            # 导入数据管理器
-            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
-            if str(factor_platform_path) not in sys.path:
-                sys.path.insert(0, str(factor_platform_path))
-
-            from data_manager.duckdb_storage import DuckDBStorage
+            # 使用只读模式连接
+            import duckdb
 
             # DuckDB数据库路径
             db_path = Path('D:/StockData/stock_data.ddb')
-            storage = DuckDBStorage(str(db_path))
 
             # 映射复权类型
             adjust_map = {
@@ -2056,9 +2836,28 @@ class DataViewerDialog(QDialog):
             }
             duckdb_adjust = adjust_map.get(self.adjust, "none")
 
-            # 加载数据
-            df = storage.load_data(self.stock_code, period='1d', adjust_type=duckdb_adjust)
-            storage.close()
+            # 创建只读连接并加载数据
+            con = duckdb.connect(str(db_path), read_only=True)
+            query = f"""
+                SELECT
+                    date,
+                    open,
+                    high,
+                    low,
+                    close,
+                    volume,
+                    amount
+                FROM stock_daily
+                WHERE stock_code = '{self.stock_code}'
+                  AND period = '1d'
+                  AND adjust_type = '{duckdb_adjust}'
+                ORDER BY date
+            """
+            df = con.execute(query).df()
+            con.close()
+
+            # 设置日期为索引
+            df.set_index('date', inplace=True)
 
             # 选择保存路径
             default_name = f"{self.stock_code}_{self.adjust}_duckdb_data.csv"
@@ -2075,6 +2874,297 @@ class DataViewerDialog(QDialog):
 
         except Exception as e:
             QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
+
+
+class FinancialDataViewerDialog(QDialog):
+    """财务数据查看对话框"""
+
+    def __init__(self, stock_code: str, parent=None):
+        super().__init__(parent)
+        self.stock_code = stock_code
+        self.setWindowTitle(f"查看财务数据 - {stock_code}")
+        self.setMinimumSize(1000, 700)
+        self.init_ui()
+        self.load_data()
+
+    def init_ui(self):
+        """初始化UI"""
+        layout = QVBoxLayout(self)
+
+        # 顶部信息
+        info_layout = QHBoxLayout()
+
+        # 股票代码
+        code_label = QLabel(f"股票代码: <b>{self.stock_code}</b>")
+        code_label.setStyleSheet("font-size: 12pt;")
+        info_layout.addWidget(code_label)
+
+        # 数据表选择
+        info_layout.addWidget(QLabel("数据表:"))
+        self.table_combo = QComboBox()
+        self.table_combo.addItems(["Balance (资产负债表)", "Income (利润表)", "CashFlow (现金流量表)", "Capitalization (股本结构)"])
+        self.table_combo.currentIndexChanged.connect(self.load_data)
+        info_layout.addWidget(self.table_combo)
+
+        info_layout.addStretch()
+
+        # 导出CSV按钮
+        export_btn = QPushButton("📊 导出CSV")
+        export_btn.clicked.connect(self.export_financial_csv)
+        export_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        info_layout.addWidget(export_btn)
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新")
+        refresh_btn.clicked.connect(self.load_data)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        info_layout.addWidget(refresh_btn)
+
+        # 关闭按钮
+        close_btn = QPushButton("✖ 关闭")
+        close_btn.clicked.connect(self.accept)
+        close_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                border: none;
+                padding: 5px 12px;
+                border-radius: 3px;
+            }
+            QPushButton:hover {
+                background-color: #da190b;
+            }
+        """)
+        info_layout.addWidget(close_btn)
+
+        layout.addLayout(info_layout)
+
+        # 数据表格
+        self.data_table = QTableWidget()
+        self.data_table.setAlternatingRowColors(True)
+        self.data_table.setSortingEnabled(True)
+        layout.addWidget(self.data_table)
+
+        # 统计信息
+        self.stats_label = QLabel()
+        self.stats_label.setStyleSheet("font-size: 10pt; color: #666;")
+        layout.addWidget(self.stats_label)
+
+    def load_data(self):
+        """加载数据"""
+        try:
+            from xtquant import xtdata
+            import pandas as pd
+
+            # 获取选择的数据表
+            table_text = self.table_combo.currentText()
+            table_map = {
+                "Balance (资产负债表)": "Balance",
+                "Income (利润表)": "Income",
+                "CashFlow (现金流量表)": "CashFlow",
+                "Capitalization (股本结构)": "Capitalization"
+            }
+            table_name = table_map.get(table_text, "Balance")
+
+            # 下载财务数据
+            self.data_table.setRowCount(0)
+            self.data_table.setColumnCount(0)
+            self.stats_label.setText("正在加载数据...")
+
+            # 先下载
+            xtdata.download_financial_data(
+                stock_list=[self.stock_code],
+                table_list=[table_name]
+            )
+
+            # 再读取
+            result = xtdata.get_financial_data(
+                stock_list=[self.stock_code],
+                table_list=[table_name],
+                start_time="20200101",
+                end_time="20260130",
+                report_type='report_time'
+            )
+
+            if isinstance(result, dict) and self.stock_code in result:
+                stock_data = result[self.stock_code]
+
+                if table_name in stock_data:
+                    table_data = stock_data[table_name]
+
+                    if isinstance(table_data, pd.DataFrame):
+                        # DataFrame格式
+                        self._display_dataframe(table_data)
+                    elif isinstance(table_data, dict):
+                        # 字典格式，转换为表格显示
+                        self._display_dict(table_data)
+                    else:
+                        self.stats_label.setText(f"数据类型: {type(table_data)}")
+                        QMessageBox.information(self, "提示", f"数据格式: {type(table_data)}")
+                else:
+                    self.stats_label.setText(f"未找到 {table_name} 表数据")
+                    QMessageBox.information(self, "提示", f"未找到 {table_name} 表数据\n\n可能原因：\n1. 该股票没有此表数据\n2. 需要先下载财务数据")
+            else:
+                self.stats_label.setText("未找到财务数据")
+                QMessageBox.information(self, "提示", "未找到财务数据\n\n请先下载财务数据")
+
+        except Exception as e:
+            self.stats_label.setText(f"加载失败: {str(e)}")
+            QMessageBox.critical(self, "错误", f"加载财务数据失败: {str(e)}")
+
+    def _display_dataframe(self, df):
+        """显示DataFrame"""
+        # 重置索引
+        df = df.reset_index()
+
+        # 设置列
+        columns = df.columns.tolist()
+        self.data_table.setColumnCount(len(columns))
+        self.data_table.setHorizontalHeaderLabels(columns)
+
+        # 设置行
+        self.data_table.setRowCount(len(df))
+
+        # 填充数据（显示前100条）
+        display_df = df.head(100)
+
+        for row_idx in range(len(display_df)):
+            for col_idx, col in enumerate(columns):
+                value = display_df.iloc[row_idx, col_idx]
+                item = QTableWidgetItem(str(value))
+                self.data_table.setItem(row_idx, col_idx, item)
+
+        # 调整列宽
+        self.data_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+
+        # 更新统计信息
+        total = len(df)
+        if total > 100:
+            self.stats_label.setText(f"总记录数: {total} 条 (显示前100条)")
+        else:
+            self.stats_label.setText(f"总记录数: {total} 条")
+
+    def _display_dict(self, data):
+        """显示字典数据"""
+        # 将字典转换为表格
+        self.data_table.setColumnCount(2)
+        self.data_table.setHorizontalHeaderLabels(["字段名", "值"])
+
+        # 获取所有键
+        keys = list(data.keys())
+        self.data_table.setRowCount(len(keys))
+
+        for row_idx, key in enumerate(keys):
+            value = data[key]
+
+            # 字段名
+            key_item = QTableWidgetItem(str(key))
+            self.data_table.setItem(row_idx, 0, key_item)
+
+            # 值
+            value_str = str(value) if not isinstance(value, (list, dict)) else f"{type(value).__name__}({len(value)})"
+            value_item = QTableWidgetItem(value_str)
+            self.data_table.setItem(row_idx, 1, value_item)
+
+        # 调整列宽
+        self.data_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.data_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+
+        # 更新统计信息
+        self.stats_label.setText(f"字段数量: {len(keys)} 个")
+
+    def export_financial_csv(self):
+        """导出财务数据为CSV"""
+        try:
+            from xtquant import xtdata
+            import pandas as pd
+
+            # 获取选择的数据表
+            table_text = self.table_combo.currentText()
+            table_map = {
+                "Balance (资产负债表)": "Balance",
+                "Income (利润表)": "Income",
+                "CashFlow (现金流量表)": "CashFlow",
+                "Capitalization (股本结构)": "Capitalization"
+            }
+            table_name = table_map.get(table_text, "Balance")
+
+            # 下载数据
+            xtdata.download_financial_data(
+                stock_list=[self.stock_code],
+                table_list=[table_name]
+            )
+
+            # 读取数据
+            result = xtdata.get_financial_data(
+                stock_list=[self.stock_code],
+                table_list=[table_name],
+                start_time="20200101",
+                end_time="20260130",
+                report_type='report_time'
+            )
+
+            if isinstance(result, dict) and self.stock_code in result:
+                stock_data = result[self.stock_code]
+
+                if table_name in stock_data:
+                    table_data = stock_data[table_name]
+
+                    # 转换为DataFrame
+                    if isinstance(table_data, pd.DataFrame):
+                        df = table_data
+                    elif isinstance(table_data, dict):
+                        # 字典转换为DataFrame
+                        df = pd.DataFrame.from_dict(table_data, orient='index').T
+                    else:
+                        QMessageBox.warning(self, "提示", f"无法导出数据类型: {type(table_data)}")
+                        return
+
+                    # 选择保存路径
+                    default_name = f"{self.stock_code}_{table_name}_财务数据.csv"
+                    file_path, _ = QFileDialog.getSaveFileName(
+                        self,
+                        "导出财务数据CSV",
+                        default_name,
+                        "CSV文件 (*.csv)"
+                    )
+
+                    if file_path:
+                        # 导出为CSV
+                        df.to_csv(file_path, encoding='utf-8-sig', index=True)
+                        QMessageBox.information(self, "成功", f"财务数据已导出到:\n{file_path}\n\n共 {len(df)} 条记录")
+                else:
+                    QMessageBox.warning(self, "提示", f"未找到 {table_name} 表数据")
+            else:
+                QMessageBox.warning(self, "提示", "未找到财务数据")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"导出失败: {str(e)}")
+
+
+
 
 
 if __name__ == '__main__':
