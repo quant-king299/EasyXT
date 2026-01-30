@@ -51,8 +51,9 @@ class DataManager:
             import duckdb
             # DuckDB数据库路径（与迁移的数据库一致）
             self.duckdb_path = 'D:/StockData/stock_data.ddb'
-            self.duckdb_connection = duckdb.connect(self.duckdb_path)
-            print("[OK] DuckDB数据库已连接 (D:/StockData/stock_data.ddb)")
+            # 使用read_only=True允许多个进程同时访问
+            self.duckdb_connection = duckdb.connect(self.duckdb_path, read_only=True)
+            print("[OK] DuckDB数据库已连接 (只读模式)")
         except ImportError:
             print("[INFO] DuckDB未安装，跳过DuckDB数据源")
         except Exception as e:
@@ -362,7 +363,11 @@ class DataManager:
     
     def _get_status_message(self, active_source: DataSource) -> str:
         """获取状态消息"""
-        if active_source == DataSource.QMT:
+        if active_source == DataSource.DUCKDB:
+            return "[OK] 使用DuckDB数据库，高速读取本地真实数据"
+        elif active_source == DataSource.LOCAL:
+            return "[OK] 使用本地缓存数据（真实历史数据）"
+        elif active_source == DataSource.QMT:
             return "[OK] 已连接到QMT，使用真实市场数据"
         elif active_source == DataSource.QSTOCK:
             return "[OK] 已连接到QStock，使用真实市场数据"
@@ -716,20 +721,20 @@ class DataManager:
                     
                     # 如果不是最后一次尝试，等待后重试
                     if attempt < max_retries - 1:
-                        print(f"⏳ 等待 {retry_delay} 秒后重试...")
+                        print(f"[WAIT] 等待 {retry_delay} 秒后重试...")
                         time.sleep(retry_delay)
                         retry_delay *= 2  # 指数退避
                     else:
                         # 最后一次尝试失败，记录详细错误信息
                         error_msg = str(retry_e)
                         if "Server disconnected" in error_msg:
-                            print("💡 提示：AKShare服务器连接问题，可能是网络不稳定或服务器维护")
+                            print("[INFO] 提示：AKShare服务器连接问题，可能是网络不稳定或服务器维护")
                         elif "timeout" in error_msg.lower():
-                            print("💡 提示：请求超时，建议检查网络连接")
+                            print("[INFO] 提示：请求超时，建议检查网络连接")
                         elif "403" in error_msg or "forbidden" in error_msg.lower():
-                            print("💡 提示：访问被拒绝，可能触发了反爬虫机制")
+                            print("[INFO] 提示：访问被拒绝，可能触发了反爬虫机制")
                         else:
-                            print(f"💡 提示：AKShare数据获取失败，错误详情：{error_msg}")
+                            print(f"[INFO] 提示：AKShare数据获取失败，错误详情：{error_msg}")
             
             # 所有重试都失败了
             print(f"[ERROR] AKShare获取 {stock_code} 数据失败，已尝试 {max_retries} 次")

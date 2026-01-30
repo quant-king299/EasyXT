@@ -17,7 +17,7 @@ try:
     BACKTRADER_AVAILABLE = True
 except ImportError:
     BACKTRADER_AVAILABLE = False
-    print("⚠️ Backtrader未安装，将使用模拟回测引擎")
+    print("[WARNING] Backtrader未安装，将使用模拟回测引擎")
 
 class AdvancedBacktestEngine:
     """
@@ -174,7 +174,7 @@ class AdvancedBacktestEngine:
                         self.backtest_end_date = pd.to_datetime(max_date).to_pydatetime()
                         
                 except Exception as e:
-                    print(f"⚠️ 处理日期范围时出错: {e}")
+                    print(f"[WARNING] 处理日期范围时出错: {e}")
                     # 使用默认日期范围
                     from datetime import datetime, timedelta
                     self.backtest_end_date = datetime.now()
@@ -203,7 +203,7 @@ class AdvancedBacktestEngine:
                 if not isinstance(df.index, pd.DatetimeIndex):
                     df.index = pd.to_datetime(df.index)
             except Exception as e:
-                print(f"⚠️ 转换日期索引时出错: {e}")
+                print(f"[WARNING] 转换日期索引时出错: {e}")
                 # 如果转换失败，创建一个简单的日期范围
                 df.index = pd.date_range(start='2024-01-01', periods=len(df), freq='D')
             
@@ -230,7 +230,7 @@ class AdvancedBacktestEngine:
         Returns:
             回测结果字典
         """
-        print("🚀 开始执行回测...")
+        print("[火箭] 开始执行回测...")
         
         # 运行回测
         self.results = self.cerebro.run()
@@ -238,7 +238,7 @@ class AdvancedBacktestEngine:
         # 提取性能指标
         self.performance_metrics = self._extract_performance_metrics()
         
-        print("✅ 回测执行完成")
+        print("[OK] 回测执行完成")
         return self.performance_metrics
     
     def _extract_performance_metrics(self) -> Dict[str, Any]:
@@ -323,7 +323,7 @@ class AdvancedBacktestEngine:
                 metrics['vwr'] = vwr_analysis.get('vwr', 0)
             
         except Exception as e:
-            print(f"⚠️ 提取性能指标时出错: {e}")
+            print(f"[WARNING] 提取性能指标时出错: {e}")
             # 返回默认指标
             metrics = {
                 'sharpe_ratio': 1.2,
@@ -366,9 +366,9 @@ class AdvancedBacktestEngine:
             # 如果策略有记录资产价值的数据
             if hasattr(result, 'portfolio_values') and result.portfolio_values:
                 portfolio_values = result.portfolio_values
-                print(f"✅ 从策略中获取到 {len(portfolio_values)} 个净值数据点")
+                print(f"[OK] 从策略中获取到 {len(portfolio_values)} 个净值数据点")
             else:
-                print("⚠️ 策略中没有找到portfolio_values，使用模拟数据")
+                print("[WARNING] 策略中没有找到portfolio_values，使用模拟数据")
                 # 基于总收益率生成曲线
                 try:
                     final_value = self.cerebro.broker.getvalue()
@@ -381,15 +381,15 @@ class AdvancedBacktestEngine:
                         new_value = portfolio_values[-1] * (1 + daily_return)
                         portfolio_values.append(new_value)
                     
-                    print(f"✅ 基于总收益率生成 {len(portfolio_values)} 个净值数据点")
+                    print(f"[OK] 基于总收益率生成 {len(portfolio_values)} 个净值数据点")
                 except Exception as e:
-                    print(f"⚠️ 生成净值曲线失败: {e}")
+                    print(f"[WARNING] 生成净值曲线失败: {e}")
                     portfolio_values = self._generate_mock_portfolio_curve()
             
             return portfolio_values if portfolio_values else self._generate_mock_portfolio_curve()
             
         except Exception as e:
-            print(f"⚠️ 提取净值曲线失败: {e}")
+            print(f"[WARNING] 提取净值曲线失败: {e}")
             return self._generate_mock_portfolio_curve()
     
     def _generate_mock_portfolio_curve(self) -> List[float]:
@@ -416,7 +416,7 @@ class AdvancedBacktestEngine:
         Returns:
             最优参数和性能指标
         """
-        print("🔧 开始参数优化...")
+        print("[TOOLS] 开始参数优化...")
         
         best_params = {}
         best_performance = -float('inf')
@@ -426,7 +426,7 @@ class AdvancedBacktestEngine:
         param_combinations = self._generate_param_combinations(param_ranges)
         
         for i, params in enumerate(param_combinations[:10]):  # 限制测试数量
-            print(f"📊 测试参数组合 {i+1}/10: {params}")
+            print(f"[CHART] 测试参数组合 {i+1}/10: {params}")
             
             # 创建新的回测引擎实例
             temp_engine = AdvancedBacktestEngine(self.initial_cash, self.commission)
@@ -450,9 +450,9 @@ class AdvancedBacktestEngine:
                     best_params = params
                     
             except Exception as e:
-                print(f"⚠️ 参数组合 {params} 测试失败: {e}")
+                print(f"[WARNING] 参数组合 {params} 测试失败: {e}")
         
-        print(f"✅ 参数优化完成，最优参数: {best_params}")
+        print(f"[OK] 参数优化完成，最优参数: {best_params}")
         
         return {
             'best_params': best_params,
@@ -562,7 +562,7 @@ class AdvancedBacktestEngine:
                     trades = self._generate_realistic_trades()
             
         except Exception as e:
-            print(f"⚠️ 提取交易记录失败: {e}")
+            print(f"[WARNING] 提取交易记录失败: {e}")
             trades = self._generate_realistic_trades()
         
         return trades
@@ -763,6 +763,6 @@ if __name__ == "__main__":
     
     # 运行回测
     results = engine.run_backtest()
-    print("📊 回测结果:")
+    print("[CHART] 回测结果:")
     for key, value in results.items():
         print(f"  {key}: {value}")

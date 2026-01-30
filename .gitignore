@@ -138,6 +138,11 @@ config/account_config.py
 account_*.json
 position_*.json
 
+# 通达信自选股文件（自动生成，不应提交）
+my_favorites.txt
+*_favorites.txt
+selected_stocks.txt
+
 # 临时文件
 temp/
 tmp/

@@ -1140,15 +1140,25 @@ class BacktestWidget(QWidget):
             if active_source == 'qmt':
                 self.data_source_label.setText("✅ QMT已连接 (真实数据)")
                 self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
+            elif active_source == 'duckdb':
+                self.data_source_label.setText("✅ DuckDB数据库 (真实数据)")
+                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
+            elif active_source == 'local':
+                self.data_source_label.setText("✅ 本地缓存 (真实数据)")
+                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
             elif active_source == 'qstock':
                 self.data_source_label.setText("✅ QStock已连接 (真实数据)")
                 self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
             elif active_source == 'akshare':
                 self.data_source_label.setText("✅ AKShare已连接 (真实数据)")
                 self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            else:
+            elif active_source == 'mock':
                 self.data_source_label.setText("🎲 使用模拟数据")
                 self.data_source_label.setStyleSheet("color: orange; font-weight: bold;")
+            else:
+                # 未知数据源
+                self.data_source_label.setText(f"❓ 数据源: {active_source}")
+                self.data_source_label.setStyleSheet("color: gray; font-weight: bold;")
             
             # 显示详细状态信息
             source_status = status.get('source_status', {})

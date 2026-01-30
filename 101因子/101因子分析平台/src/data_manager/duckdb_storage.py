@@ -267,76 +267,110 @@ class DuckDBStorage:
             # 导入xtquant
             import xtquant.xtdata as xt_data
 
-            # 映射复权类型
-            # QMT: 'front' 前复权, 'back' 后复权, 'none' 不复权
+            # 映射复权类型到QMT格式
+            # QMT dividend_type: 'none'=不复权, 'front'=前复权, 'back'=后复权
             qmt_adjust_map = {
-                'front': '1',   # 前复权
-                'back': '2',    # 后复权
-                'none': '0'     # 不复权
+                'none': 'none',
+                'front': 'front',
+                'back': 'back'
             }
 
-            qmt_adjust = qmt_adjust_map.get(adjust_type, '1')
+            qmt_adjust = qmt_adjust_map.get(adjust_type, 'none')
 
-            # 从QMT获取数据
-            # 获取最近的数据（count=0表示获取全部）
-            data = xt_data.get_market_data(
+            print(f"[DEBUG] 从QMT获取 {stock_code} 数据，复权类型: {adjust_type} -> QMT参数: {qmt_adjust}")
+
+            # 使用 get_market_data_ex 而不是 get_market_data
+            # 需要提供日期范围，我们使用最近10年的数据
+            from datetime import datetime, timedelta
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=365*10)  # 最近10年
+
+            # 格式化日期为YYYYMMDD
+            start_time = start_date.strftime('%Y%m%d')
+            end_time = end_date.strftime('%Y%m%d')
+
+            # 从QMT获取数据（支持复权）
+            data = xt_data.get_market_data_ex(
                 stock_list=[stock_code],
                 period=period,
-                count=0,
-                dividend_type=qmt_adjust  # 复权类型
+                start_time=start_time,
+                end_time=end_time,
+                dividend_type=qmt_adjust,
+                fill_data=True
             )
 
-            if data and stock_code in data:
-                df = data[stock_code]
+            # 检查返回数据
+            if data is None:
+                print(f"[DEBUG] QMT返回None")
+                warnings.warn(f"从QMT获取复权数据失败，降级为不复权数据: {stock_code}")
+                return self._load_unadjusted(stock_code, period)
 
-                if not df.empty:
-                    # 标准化列名
-                    df.columns = df.columns.str.lower()
+            if not isinstance(data, dict):
+                print(f"[DEBUG] QMT返回类型错误: {type(data)}")
+                warnings.warn(f"从QMT获取复权数据失败，降级为不复权数据: {stock_code}")
+                return self._load_unadjusted(stock_code, period)
 
-                    # 确保有日期索引
-                    if 'time' in df.columns:
-                        df['time'] = pd.to_datetime(df['time'])
-                        df = df.set_index('time')
-                    elif 'date' not in df.index.names:
-                        if 'date' in df.columns:
-                            df['date'] = pd.to_datetime(df['date'])
-                            df = df.set_index('date')
+            if stock_code not in data:
+                print(f"[DEBUG] QMT返回数据中不包含 {stock_code}")
+                warnings.warn(f"从QMT获取复权数据失败，降级为不复权数据: {stock_code}")
+                return self._load_unadjusted(stock_code, period)
 
-                    # 选择需要的列
-                    required_cols = ['open', 'high', 'low', 'close', 'volume']
-                    optional_cols = ['amount']
+            df = data[stock_code]
 
-                    # 确保列存在
-                    for col in required_cols:
-                        if col not in df.columns:
-                            df[col] = 0
+            if df is None or df.empty:
+                print(f"[DEBUG] QMT返回空数据")
+                warnings.warn(f"从QMT获取复权数据失败，降级为不复权数据: {stock_code}")
+                return self._load_unadjusted(stock_code, period)
 
-                    # 添加amount列（如果不存在）
-                    if 'amount' not in df.columns:
-                        df['amount'] = df['close'] * df['volume']
+            print(f"[DEBUG] QMT返回数据形状: {df.shape}, 列名: {list(df.columns)}")
+            print(f"[DEBUG] 索引类型: {type(df.index)}, 索引名称: {df.index.name}")
 
-                    # 选择需要的列
-                    cols_to_keep = required_cols + ['amount']
-                    df = df[cols_to_keep]
+            # 标准化列名
+            df.columns = df.columns.str.lower()
 
-                    # 确保索引名为date（兼容性）
-                    if df.index.name != 'date':
-                        df.index.name = 'date'
+            # DataFrame从QMT返回时已经设置了datetime索引，直接使用
+            # 只需要确保索引名为date
+            if df.index.name is None:
+                df.index.name = 'date'
+            elif df.index.name != 'date':
+                df = df.rename_axis('date')
 
-                    # 按日期升序排列
-                    df = df.sort_index()
+            # 选择需要的列
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
+            optional_cols = ['amount']
 
-                    return df
+            # 确保列存在
+            for col in required_cols:
+                if col not in df.columns:
+                    print(f"[DEBUG] 缺少列: {col}")
+                    df[col] = 0
 
-            # 如果QMT获取失败，降级为从DuckDB读取不复权数据
-            warnings.warn(f"从QMT获取复权数据失败，降级为不复权数据: {stock_code}")
-            return self._load_unadjusted(stock_code, period)
+            # 添加amount列（如果不存在）
+            if 'amount' not in df.columns:
+                df['amount'] = df['close'] * df['volume']
+
+            # 选择需要的列
+            cols_to_keep = required_cols + ['amount']
+            df = df[cols_to_keep]
+
+            # 确保索引名为date（兼容性）
+            if df.index.name != 'date':
+                df.index.name = 'date'
+
+            # 按日期升序排列
+            df = df.sort_index()
+
+            print(f"[OK] 从QMT成功获取 {len(df)} 条复权数据")
+            return df
 
         except ImportError:
             warnings.warn("xtquant模块未安装，无法从QMT获取复权数据")
             return self._load_unadjusted(stock_code, period)
 
         except Exception as e:
+            print(f"[DEBUG] 从QMT获取数据异常: {type(e).__name__}: {e}")
+            import traceback
+            traceback.print_exc()
             warnings.warn(f"从QMT获取复权数据异常 ({stock_code}): {e}")
             return self._load_unadjusted(stock_code, period)
 

@@ -363,37 +363,37 @@ class RiskAnalyzer:
         """
         report = []
         report.append("=" * 50)
-        report.append("📊 投资组合风险分析报告")
+        report.append("[CHART] 投资组合风险分析报告")
         report.append("=" * 50)
         
         # 收益指标
-        report.append("\n📈 收益指标:")
+        report.append("\n[UP] 收益指标:")
         report.append(f"  总收益率: {analysis_results.get('total_return', 0):.2%}")
         report.append(f"  年化收益率: {analysis_results.get('annualized_return', 0):.2%}")
         report.append(f"  年化波动率: {analysis_results.get('volatility', 0):.2%}")
         
         # 风险指标
-        report.append("\n⚠️ 风险指标:")
+        report.append("\n[WARNING] 风险指标:")
         report.append(f"  最大回撤: {analysis_results.get('max_drawdown', 0):.2%}")
         report.append(f"  最大回撤持续期: {analysis_results.get('max_drawdown_duration', 0)} 期")
         report.append(f"  95% VaR: {analysis_results.get('var_95', 0):.2%}")
         report.append(f"  95% CVaR: {analysis_results.get('cvar_95', 0):.2%}")
         
         # 风险调整收益指标
-        report.append("\n🎯 风险调整收益指标:")
+        report.append("\n[TARGET] 风险调整收益指标:")
         report.append(f"  夏普比率: {analysis_results.get('sharpe_ratio', 0):.3f}")
         report.append(f"  索提诺比率: {analysis_results.get('sortino_ratio', 0):.3f}")
         report.append(f"  卡尔马比率: {analysis_results.get('calmar_ratio', 0):.3f}")
         
         # 交易统计
-        report.append("\n📊 交易统计:")
+        report.append("\n[CHART] 交易统计:")
         report.append(f"  胜率: {analysis_results.get('win_rate', 0):.2%}")
         report.append(f"  盈利因子: {analysis_results.get('profit_factor', 0):.2f}")
         report.append(f"  总交易期数: {analysis_results.get('total_periods', 0)}")
         
         # 基准比较（如果有）
         if 'alpha' in analysis_results:
-            report.append("\n📈 基准比较:")
+            report.append("\n[UP] 基准比较:")
             report.append(f"  Alpha: {analysis_results.get('alpha', 0):.2%}")
             report.append(f"  Beta: {analysis_results.get('beta', 0):.3f}")
             report.append(f"  信息比率: {analysis_results.get('information_ratio', 0):.3f}")
@@ -443,13 +443,13 @@ class RiskAnalyzer:
         
         # 根据总分确定等级
         if score >= 7:
-            return "🟢 低风险 (优秀)"
+            return "[GREEN] 低风险 (优秀)"
         elif score >= 5:
-            return "🟡 中等风险 (良好)"
+            return "[YELLOW] 中等风险 (良好)"
         elif score >= 3:
             return "🟠 较高风险 (一般)"
         else:
-            return "🔴 高风险 (需要改进)"
+            return "[RED] 高风险 (需要改进)"
 
 
 if __name__ == "__main__":
