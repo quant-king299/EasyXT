@@ -252,6 +252,12 @@ easy_xt/realtime_data/config/server_config.json
 
 !gui_app/widgets/backtest_widget.py
 
+# ==================== 例外规则：重要的启动脚本 ====================
+# 网格回测启动脚本（重要工具，需要提交）
+!launch_grid_backtest.py
+# 数据管理工具（重要）
+!diagnose_grid_trades.py
+
 # 临时目录和文件
 examples/
 backup/
@@ -295,6 +301,9 @@ bilibili_videos/*.md
 bilibili_videos/*.mp4
 bilibili_videos/*.avi
 bilibili_videos/*.mov
+
+# 忽略skills工具目录（个人使用的内容生成工具）
+skills/
 101因子/101因子分析平台/workflows/test.json
 101因子/101因子分析平台/workflows/TEST2.json
 .claude/settings.local.json

@@ -573,14 +573,14 @@ class QuickUpdateThread(QThread):
                     self.log_signal.emit(f"[{i+1}/{total}] 更新 {stock_code}...")
 
                     # 1. 下载最新数据（最近3个月）
-                    end_date = datetime.now().strftime('%Y%m%d')
-                    start_date = (datetime.now() - timedelta(days=90)).strftime('%Y%m%d')
+                    end_time = datetime.now().strftime('%Y%m%d')
+                    start_time = (datetime.now() - timedelta(days=90)).strftime('%Y%m%d')
 
                     xtdata.download_history_data(
                         stock_code=stock_code,
                         period=self.period,
-                        start_time=start_date,
-                        end_date=end_date
+                        start_time=start_time,
+                        end_time=end_time
                     )
 
                     # 2. 转换数据
