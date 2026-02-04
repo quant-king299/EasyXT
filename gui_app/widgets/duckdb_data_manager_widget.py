@@ -40,9 +40,16 @@ import pandas as pd
 from smart_data_detector import SmartDataDetector
 from data_integrity_checker import DataIntegrityChecker
 
+# 导入连接管理器
+try:
+    from data_manager.duckdb_connection_pool import get_db_manager
+    DB_MANAGER_AVAILABLE = True
+except ImportError:
+    DB_MANAGER_AVAILABLE = False
+
 
 class DataQueryThread(QThread):
-    """数据查询工作线程"""
+    """数据查询工作线程 - 使用只读连接"""
 
     data_ready = pyqtSignal(pd.DataFrame)
     error_occurred = pyqtSignal(str)
@@ -54,9 +61,18 @@ class DataQueryThread(QThread):
 
     def run(self):
         try:
-            con = duckdb.connect(self.duckdb_path)
-            df = con.execute(self.query).df()
-            con.close()
+            if DB_MANAGER_AVAILABLE:
+                # 使用连接管理器（只读模式）
+                manager = get_db_manager(self.duckdb_path)
+                df = manager.execute_read_query(self.query)
+            else:
+                # 回退到直接连接（使用只读模式）
+                con = duckdb.connect(self.duckdb_path, read_only=True)
+                try:
+                    df = con.execute(self.query).df()
+                finally:
+                    con.close()
+
             self.data_ready.emit(df)
         except Exception as e:
             self.error_occurred.emit(str(e))
@@ -297,26 +313,42 @@ class DuckDBDataManagerWidget(QWidget):
     def load_data_tree(self):
         """加载数据树形列表"""
         try:
-            con = duckdb.connect(self.duckdb_path, read_only=True)
-
-            # 按市场分类
-            query = """
-                SELECT
-                    CASE
-                        WHEN stock_code LIKE '%.SH' THEN '上海'
-                        WHEN stock_code LIKE '%.SZ' THEN '深圳'
-                        WHEN stock_code LIKE '%.BJ' THEN '北交所'
-                        ELSE '其他'
-                    END as market,
-                    stock_code,
-                    COUNT(*) as count
-                FROM stock_daily
-                GROUP BY market, stock_code
-                ORDER BY market, stock_code
-            """
-
-            df = con.execute(query).df()
-            con.close()
+            # 使用连接管理器或只读连接
+            if DB_MANAGER_AVAILABLE:
+                manager = get_db_manager(self.duckdb_path)
+                df = manager.execute_read_query("""
+                    SELECT
+                        CASE
+                            WHEN stock_code LIKE '%.SH' THEN '上海'
+                            WHEN stock_code LIKE '%.SZ' THEN '深圳'
+                            WHEN stock_code LIKE '%.BJ' THEN '北交所'
+                            ELSE '其他'
+                        END as market,
+                        stock_code,
+                        COUNT(*) as count
+                    FROM stock_daily
+                    GROUP BY market, stock_code
+                    ORDER BY market, stock_code
+                """)
+            else:
+                con = duckdb.connect(self.duckdb_path, read_only=True)
+                try:
+                    df = con.execute("""
+                        SELECT
+                            CASE
+                                WHEN stock_code LIKE '%.SH' THEN '上海'
+                                WHEN stock_code LIKE '%.SZ' THEN '深圳'
+                                WHEN stock_code LIKE '%.BJ' THEN '北交所'
+                                ELSE '其他'
+                            END as market,
+                            stock_code,
+                            COUNT(*) as count
+                        FROM stock_daily
+                        GROUP BY market, stock_code
+                        ORDER BY market, stock_code
+                    """).df()
+                finally:
+                    con.close()
 
             # 构建树
             self.data_tree.clear()
@@ -432,17 +464,30 @@ class DuckDBDataManagerWidget(QWidget):
     def load_statistics(self):
         """加载统计信息"""
         try:
-            con = duckdb.connect(self.duckdb_path, read_only=True)
-
-            # 基本统计
-            stats = con.execute("""
-                SELECT
-                    COUNT(DISTINCT stock_code) as stock_count,
-                    COUNT(*) as total_records,
-                    MIN(date) as first_date,
-                    MAX(date) as last_date
-                FROM stock_daily
-            """).fetchdf()
+            # 使用连接管理器或只读连接
+            if DB_MANAGER_AVAILABLE:
+                manager = get_db_manager(self.duckdb_path)
+                stats = manager.execute_read_query("""
+                    SELECT
+                        COUNT(DISTINCT stock_code) as stock_count,
+                        COUNT(*) as total_records,
+                        MIN(date) as first_date,
+                        MAX(date) as last_date
+                    FROM stock_daily
+                """)
+            else:
+                con = duckdb.connect(self.duckdb_path, read_only=True)
+                try:
+                    stats = con.execute("""
+                        SELECT
+                            COUNT(DISTINCT stock_code) as stock_count,
+                            COUNT(*) as total_records,
+                            MIN(date) as first_date,
+                            MAX(date) as last_date
+                        FROM stock_daily
+                    """).fetchdf()
+                finally:
+                    con.close()
 
             if not stats.empty:
                 row = stats.iloc[0]
@@ -453,8 +498,6 @@ class DuckDBDataManagerWidget(QWidget):
                 )
                 self.status_label.setText(msg)
                 QMessageBox.information(self, "统计信息", msg)
-
-            con.close()
 
         except Exception as e:
             QMessageBox.warning(self, "错误", f"加载统计信息失败: {e}")

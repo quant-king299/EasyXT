@@ -47,38 +47,21 @@ class DataManager:
 
         # 初始化DuckDB数据库（最高优先级）
         self.duckdb_connection = None
+        self.duckdb_path = 'D:/StockData/stock_data.ddb'
+        self._duckdb_enabled = False  # 标记DuckDB是否可用
         try:
             import duckdb
-            # DuckDB数据库路径（与迁移的数据库一致）
-            self.duckdb_path = 'D:/StockData/stock_data.ddb'
-            # 使用read_only=True允许多个进程同时访问
-            self.duckdb_connection = duckdb.connect(self.duckdb_path, read_only=True)
-            print("[OK] DuckDB数据库已连接 (只读模式)")
+            # 延迟连接，不在初始化时打开
+            self._duckdb_enabled = True
+            print("[OK] DuckDB数据库已启用 (只读模式)")
         except ImportError:
             print("[INFO] DuckDB未安装，跳过DuckDB数据源")
         except Exception as e:
-            print(f"[WARNING] DuckDB连接失败: {e}")
+            print(f"[WARNING] DuckDB初始化失败: {e}")
 
-        # 初始化本地数据管理器（Parquet缓存，作为后备）
+        # 本地数据管理器（Parquet缓存）已弃用 - 所有数据使用DuckDB
         self.local_data_manager = None
-        if use_local_cache:
-            try:
-                # 尝试导入本地数据管理器
-                import sys
-                from pathlib import Path
-                # 添加101因子平台路径
-                # __file__ = gui_app/backtest/data_manager.py
-                # parents[0] = backtest, parents[1] = gui_app, parents[2] = miniqmt扩展
-                factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
-                if str(factor_platform_path) not in sys.path:
-                    sys.path.insert(0, str(factor_platform_path))
-
-                from data_manager import LocalDataManager
-                self.local_data_manager = LocalDataManager()
-                print("[OK] 本地数据缓存已启用")
-            except Exception as e:
-                print(f"[WARNING] 本地数据缓存初始化失败: {e}")
-                self.local_data_manager = None
+        # 注释：旧版本使用Parquet文件作为缓存，现已全部迁移到DuckDB
 
         # 检查各数据源可用性
         self.source_status = self._check_all_sources()
@@ -496,37 +479,50 @@ class DataManager:
     def _get_duckdb_data(self, stock_code: str, start_date: str, end_date: str, adjust: str = 'none') -> pd.DataFrame:
         """从DuckDB数据库获取数据（高性能）"""
         try:
-            if self.duckdb_connection is None:
+            if not self._duckdb_enabled:
                 return pd.DataFrame()
 
-            # 构建SQL查询
-            query = f"""
-                SELECT date, open, high, low, close, volume, amount
-                FROM stock_daily
-                WHERE stock_code = '{stock_code}'
-                  AND date >= '{start_date}'
-                  AND date <= '{end_date}'
-                ORDER BY date
-            """
+            import duckdb
 
-            # 执行查询
-            df = self.duckdb_connection.execute(query).df()
+            # 按需打开连接，使用后立即关闭
+            con = duckdb.connect(self.duckdb_path, read_only=True)
+            try:
+                # 构建SQL查询
+                query = f"""
+                    SELECT date, open, high, low, close, volume, amount
+                    FROM stock_daily
+                    WHERE stock_code = '{stock_code}'
+                      AND date >= '{start_date}'
+                      AND date <= '{end_date}'
+                    ORDER BY date
+                """
 
-            if df.empty:
-                return pd.DataFrame()
+                # 执行查询
+                df = con.execute(query).df()
 
-            # 确保日期索引
-            if 'date' in df.columns:
-                df = df.set_index('date')
-                df.index = pd.to_datetime(df.index)
+                if df.empty:
+                    return pd.DataFrame()
 
-            # 数据清洗
-            df = self._standardize_columns(df)
-            df = self._clean_data(df)
+                # 确保日期索引
+                if 'date' in df.columns:
+                    df = df.set_index('date')
+                    df.index = pd.to_datetime(df.index)
 
-            print(f"[OK] DuckDB获取 {len(df)} 条数据")
+                # 数据清洗
+                df = self._standardize_columns(df)
+                df = self._clean_data(df)
 
-            return df
+                print(f"[OK] DuckDB获取 {len(df)} 条数据")
+
+                return df
+
+            finally:
+                # 立即关闭连接
+                con.close()
+
+        except Exception as e:
+            print(f"[ERROR] DuckDB查询失败: {e}")
+            return pd.DataFrame()
 
         except Exception as e:
             print(f"[WARNING] DuckDB获取数据失败: {e}")

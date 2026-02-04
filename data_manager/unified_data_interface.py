@@ -393,11 +393,15 @@ class UnifiedDataInterface:
                 if stock_code.endswith('.SH'):
                     if stock_code.startswith('5') or stock_code.startswith('51'):
                         df_to_save['symbol_type'] = 'etf'
+                    elif stock_code.startswith('688'):
+                        df_to_save['symbol_type'] = 'stock'  # 科创板
                     else:
                         df_to_save['symbol_type'] = 'stock'
                 elif stock_code.endswith('.SZ'):
                     if stock_code.startswith('15') or stock_code.startswith('16'):
                         df_to_save['symbol_type'] = 'etf'
+                    elif stock_code.startswith('30'):
+                        df_to_save['symbol_type'] = 'stock'  # 创业板
                     else:
                         df_to_save['symbol_type'] = 'stock'
                 else:
@@ -415,10 +419,50 @@ class UnifiedDataInterface:
             """
             self.con.execute(delete_sql)
 
-            # 插入新数据
-            self.con.execute(f"INSERT INTO {table_name} SELECT * FROM df_to_save")
+            # 添加缺失的复权列（如果表有这些列）
+            if table_name == 'stock_daily':
+                # 添加 adjust_type 和 factor 列
+                if 'adjust_type' not in df_to_save.columns:
+                    df_to_save['adjust_type'] = 'none'
+                if 'factor' not in df_to_save.columns:
+                    df_to_save['factor'] = 1.0
 
-            print(f"    → 已保存 {len(df_to_save)} 条记录到 {table_name}")
+                # 添加时间戳列
+                import time
+                current_time = pd.Timestamp.now()
+                if 'created_at' not in df_to_save.columns:
+                    df_to_save['created_at'] = current_time
+                if 'updated_at' not in df_to_save.columns:
+                    df_to_save['updated_at'] = current_time
+
+                # 添加所有复权列（复制原始价格）
+                price_cols = ['open', 'high', 'low', 'close']
+                adjustment_types = ['_front', '_back', '_geometric_front', '_geometric_back']
+
+                for price_col in price_cols:
+                    if price_col in df_to_save.columns:
+                        for adj_type in adjustment_types:
+                            adj_col = price_col + adj_type
+                            if adj_col not in df_to_save.columns:
+                                df_to_save[adj_col] = df_to_save[price_col]
+
+            # 获取表的列顺序
+            table_columns = self.con.execute(f"DESCRIBE {table_name}").fetchdf()['column_name'].tolist()
+
+            # 按表的列顺序重新排列DataFrame
+            df_ordered = pd.DataFrame()
+            for col in table_columns:
+                if col in df_to_save.columns:
+                    df_ordered[col] = df_to_save[col]
+                else:
+                    df_ordered[col] = None  # 缺失列填充NULL
+
+            # 注册并插入新数据
+            self.con.register('df_to_save_temp', df_ordered)
+            self.con.execute(f"INSERT INTO {table_name} SELECT * FROM df_to_save_temp")
+            self.con.unregister('df_to_save_temp')
+
+            print(f"    → 已保存 {len(df_ordered)} 条记录到 {table_name}")
 
         except Exception as e:
             print(f"    [ERROR] 保存失败: {e}")

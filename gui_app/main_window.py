@@ -67,6 +67,7 @@ from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
 from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
+from gui_app.widgets.advanced_data_viewer_widget import AdvancedDataViewerWidget
 
 
 class MainWindow(QMainWindow):
@@ -143,6 +144,13 @@ class MainWindow(QMainWindow):
         self.data_manager_widget = LocalDataManagerWidget()
         data_manager_layout.addWidget(self.data_manager_widget)
         self.tab_widget.addTab(data_manager_tab, "📊 数据管理")
+
+        # 高级数据查看器标签页
+        advanced_viewer_tab = QWidget()
+        advanced_viewer_layout = QVBoxLayout(advanced_viewer_tab)
+        self.advanced_data_viewer_widget = AdvancedDataViewerWidget()
+        advanced_viewer_layout.addWidget(self.advanced_data_viewer_widget)
+        self.tab_widget.addTab(advanced_viewer_tab, "📈 数据查看器")
         
     def create_status_bar(self):
         """创建状态栏"""
