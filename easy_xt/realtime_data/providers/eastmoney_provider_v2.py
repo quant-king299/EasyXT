@@ -24,7 +24,7 @@ except ImportError:
             self.connected = False
 
 
-class EastmoneyDataProvider(BaseDataProvider):
+class EastmoneyDataProviderV2(BaseDataProvider):
     """东方财富数据提供者 - 更新版"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
