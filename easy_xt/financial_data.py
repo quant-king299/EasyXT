@@ -215,7 +215,7 @@ def get_combined_data(
             'financial_data': {股票代码: 财务数据}
         }
     """
-    from easy_xt.tdx_client import TdxClient
+    from tdx_client import TdxClient
 
     result = {
         'market_data': None,
