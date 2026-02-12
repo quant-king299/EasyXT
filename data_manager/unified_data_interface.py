@@ -38,6 +38,7 @@ class UnifiedDataInterface:
         self.duckdb_path = duckdb_path
         self.con = None
         self.qmt_available = False
+        self._tables_initialized = False  # 记录表是否已初始化
 
         # 尝试导入DuckDB
         try:
@@ -57,23 +58,34 @@ class UnifiedDataInterface:
             self.qmt_available = False
             print("[WARNING] QMT xtdata 不可用")
 
-    def connect(self, read_only: bool = True):
+    def connect(self, read_only: bool = False):
         """
         连接DuckDB数据库
 
         Args:
-            read_only: 是否只读模式（避免文件被占用问题）
+            read_only: 是否只读模式（首次建表需要写权限）
+
+        修复：首次使用时允许写模式以创建表
         """
         if not self.duckdb_available:
             return False
 
         try:
             import duckdb
-            # 只读模式可以避免文件被占用的问题
-            if read_only:
+            from pathlib import Path
+
+            # 确保目录存在
+            Path(self.duckdb_path).parent.mkdir(parents=True, exist_ok=True)
+
+            # 首次使用或未初始化时用读写模式
+            if read_only and self._tables_initialized:
                 self.con = duckdb.connect(self.duckdb_path, read_only=True)
             else:
                 self.con = duckdb.connect(self.duckdb_path)
+
+            # 配置性能
+            self.con.execute("PRAGMA threads=4")
+            self.con.execute("PRAGMA memory_limit='4GB'")
 
             print("[INFO] DuckDB 连接成功")
             return True
@@ -81,6 +93,112 @@ class UnifiedDataInterface:
             print(f"[ERROR] DuckDB 连接失败: {e}")
             self.con = None
             return False
+
+    def _ensure_tables_exist(self):
+        """确保所有必需的表都存在
+
+        修复：首次使用时自动创建表，避免"Table does not exist"错误
+        """
+        if not self.con or self._tables_initialized:
+            return
+
+        try:
+            # 创建 stock_daily 表（日线）
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS stock_daily (
+                    stock_code VARCHAR NOT NULL,
+                    symbol_type VARCHAR NOT NULL,
+                    date DATE NOT NULL,
+                    period VARCHAR NOT NULL,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    volume BIGINT,
+                    amount DOUBLE,
+                    adjust_type VARCHAR DEFAULT 'none',
+                    factor DOUBLE DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, date, period, adjust_type)
+                )
+            """)
+
+            # 创建 stock_1m 表（1分钟线）
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS stock_1m (
+                    stock_code VARCHAR NOT NULL,
+                    symbol_type VARCHAR NOT NULL,
+                    datetime TIMESTAMP NOT NULL,
+                    period VARCHAR NOT NULL,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    volume BIGINT,
+                    amount DOUBLE,
+                    adjust_type VARCHAR DEFAULT 'none',
+                    factor DOUBLE DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                )
+            """)
+
+            # 创建 stock_5m 表（5分钟线）
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS stock_5m (
+                    stock_code VARCHAR NOT NULL,
+                    symbol_type VARCHAR NOT NULL,
+                    datetime TIMESTAMP NOT NULL,
+                    period VARCHAR NOT NULL,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    volume BIGINT,
+                    amount DOUBLE,
+                    adjust_type VARCHAR DEFAULT 'none',
+                    factor DOUBLE DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                )
+            """)
+
+            # 创建 stock_tick 表（tick数据）
+            self.con.execute("""
+                CREATE TABLE IF NOT EXISTS stock_tick (
+                    stock_code VARCHAR NOT NULL,
+                    symbol_type VARCHAR NOT NULL,
+                    datetime TIMESTAMP NOT NULL,
+                    period VARCHAR NOT NULL,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    volume BIGINT,
+                    amount DOUBLE,
+                    adjust_type VARCHAR DEFAULT 'none',
+                    factor DOUBLE DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                )
+            """)
+
+            # 创建索引
+            try:
+                self.con.execute("CREATE INDEX IF NOT EXISTS idx_stock_code_daily ON stock_daily (stock_code)")
+                self.con.execute("CREATE INDEX IF NOT EXISTS idx_date_daily ON stock_daily (date)")
+            except:
+                pass  # 索引可能已存在
+
+            self._tables_initialized = True
+            print("[INFO] 数据表检查完成")
+
+        except Exception as e:
+            print(f"[WARNING] 创建表失败: {e}")
 
     def get_stock_data(
         self,
@@ -93,6 +211,8 @@ class UnifiedDataInterface:
     ) -> pd.DataFrame:
         """
         获取股票数据（统一入口）
+
+        修复：首次使用时自动创建表
 
         数据获取策略：
         1. 优先从DuckDB读取（包含五维复权，速度快）
@@ -112,6 +232,9 @@ class UnifiedDataInterface:
             DataFrame: 包含 OHLCV 数据
         """
         print(f"\n[获取数据] {stock_code} | {start_date} ~ {end_date} | {period} | {adjust}")
+
+        # 确保表存在（修复首次使用问题）
+        self._ensure_tables_exist()
 
         # Step 1: 尝试从DuckDB读取
         data = None
@@ -174,8 +297,28 @@ class UnifiedDataInterface:
         period: str,
         adjust: str
     ) -> Optional[pd.DataFrame]:
-        """从DuckDB读取数据"""
+        """从DuckDB读取数据 - 修复版（添加表存在性检查）"""
         try:
+            # 确定表名
+            table_map = {
+                '1d': 'stock_daily',
+                '1m': 'stock_1m',
+                '5m': 'stock_5m',
+                'tick': 'stock_tick'
+            }
+            table_name = table_map.get(period, 'stock_daily')
+
+            # 检查表是否存在（修复首次使用问题）
+            table_exists = self.con.execute(f"""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_name = '{table_name}'
+            """).fetchone()[0] > 0
+
+            if not table_exists:
+                print(f"  [INFO] 表 {table_name} 不存在，返回空数据")
+                return None
+
+            # 确定列名（根据复权类型）
             # 确定表名
             table_map = {
                 '1d': 'stock_daily',
@@ -364,8 +507,10 @@ class UnifiedDataInterface:
         stock_code: str,
         period: str
     ):
-        """保存数据到DuckDB"""
+        """保存数据到DuckDB - 修复版（确保表存在）"""
         try:
+            # 确保表存在（修复首次使用问题）
+            self._ensure_tables_exist()
             # 确定表名
             table_map = {
                 '1d': 'stock_daily',
