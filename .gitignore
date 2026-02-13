@@ -312,3 +312,8 @@ code_converter/full_converted_strategy.py
 gui_app/widgets/GUI使用说明.md
 nul
 FACTOR_ENHANCEMENT_PLAN.md
+data_manager/unified_data_interface.py.backup
+strategies/小市值基础策略V1_QMT版.py
+strategies/小市值基础策略V1.py
+strategies/小市值基础策略V2_QMT版.py
+strategies/小市值基础策略V2.py

@@ -15,6 +15,9 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+# 导入五维复权管理器
+from data_manager.duckdb_fivefold_adjust import FiveFoldAdjustmentManager
+
 
 class UnifiedDataInterface:
     """
@@ -39,6 +42,9 @@ class UnifiedDataInterface:
         self.con = None
         self.qmt_available = False
         self._tables_initialized = False  # 记录表是否已初始化
+
+        # 初始化五维复权管理器
+        self.adjustment_manager = FiveFoldAdjustmentManager(duckdb_path)
 
         # 尝试导入DuckDB
         try:
@@ -110,14 +116,14 @@ class UnifiedDataInterface:
                     symbol_type VARCHAR NOT NULL,
                     date DATE NOT NULL,
                     period VARCHAR NOT NULL,
-                    open DOUBLE,
-                    high DOUBLE,
-                    low DOUBLE,
-                    close DOUBLE,
+                    open DECIMAL(18, 6),
+                    high DECIMAL(18, 6),
+                    low DECIMAL(18, 6),
+                    close DECIMAL(18, 6),
                     volume BIGINT,
-                    amount DOUBLE,
+                    amount DECIMAL(18, 6),
                     adjust_type VARCHAR DEFAULT 'none',
-                    factor DOUBLE DEFAULT 1.0,
+                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (stock_code, date, period, adjust_type)
@@ -131,14 +137,14 @@ class UnifiedDataInterface:
                     symbol_type VARCHAR NOT NULL,
                     datetime TIMESTAMP NOT NULL,
                     period VARCHAR NOT NULL,
-                    open DOUBLE,
-                    high DOUBLE,
-                    low DOUBLE,
-                    close DOUBLE,
+                    open DECIMAL(18, 6),
+                    high DECIMAL(18, 6),
+                    low DECIMAL(18, 6),
+                    close DECIMAL(18, 6),
                     volume BIGINT,
-                    amount DOUBLE,
+                    amount DECIMAL(18, 6),
                     adjust_type VARCHAR DEFAULT 'none',
-                    factor DOUBLE DEFAULT 1.0,
+                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (stock_code, datetime, period, adjust_type)
@@ -152,14 +158,14 @@ class UnifiedDataInterface:
                     symbol_type VARCHAR NOT NULL,
                     datetime TIMESTAMP NOT NULL,
                     period VARCHAR NOT NULL,
-                    open DOUBLE,
-                    high DOUBLE,
-                    low DOUBLE,
-                    close DOUBLE,
+                    open DECIMAL(18, 6),
+                    high DECIMAL(18, 6),
+                    low DECIMAL(18, 6),
+                    close DECIMAL(18, 6),
                     volume BIGINT,
-                    amount DOUBLE,
+                    amount DECIMAL(18, 6),
                     adjust_type VARCHAR DEFAULT 'none',
-                    factor DOUBLE DEFAULT 1.0,
+                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (stock_code, datetime, period, adjust_type)
@@ -173,14 +179,14 @@ class UnifiedDataInterface:
                     symbol_type VARCHAR NOT NULL,
                     datetime TIMESTAMP NOT NULL,
                     period VARCHAR NOT NULL,
-                    open DOUBLE,
-                    high DOUBLE,
-                    low DOUBLE,
-                    close DOUBLE,
+                    open DECIMAL(18, 6),
+                    high DECIMAL(18, 6),
+                    low DECIMAL(18, 6),
+                    close DECIMAL(18, 6),
                     volume BIGINT,
-                    amount DOUBLE,
+                    amount DECIMAL(18, 6),
                     adjust_type VARCHAR DEFAULT 'none',
-                    factor DOUBLE DEFAULT 1.0,
+                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (stock_code, datetime, period, adjust_type)
@@ -236,10 +242,29 @@ class UnifiedDataInterface:
         # 确保表存在（修复首次使用问题）
         self._ensure_tables_exist()
 
-        # Step 1: 尝试从DuckDB读取
+        # Step 1: 尝试从DuckDB读取（使用五维复权管理器）
         data = None
-        if self.duckdb_available and self.con:
-            data = self._read_from_duckdb(stock_code, start_date, end_date, period, adjust)
+        if self.duckdb_available and self.con and hasattr(self, 'adjustment_manager'):
+            print(f"  [INFO] Using FiveFoldAdjustmentManager to query data")
+
+            try:
+                # 使用 FiveFoldAdjustmentManager 获取数据
+                data = self.adjustment_manager.get_data_with_adjustment(
+                    stock_code=stock_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    adjust_type=adjust
+                )
+
+                if data is not None and not data.empty:
+                    print(f"  [OK] 从DuckDB获取成功 {len(data)} 条记录")
+                else:
+                    data = None
+            except Exception as e:
+                print(f"  [WARN] FiveFoldAdjustmentManager查询失败: {e}")
+                print(f"  [INFO] 降级到原有的_read_from_duckdb方法")
+                # 降级到原有的 _read_from_duckdb 方法
+                data = self._read_from_duckdb(stock_code, start_date, end_date, period, adjust)
 
         # Step 2: 检查数据完整性
         need_download = False
@@ -580,16 +605,57 @@ class UnifiedDataInterface:
                 if 'updated_at' not in df_to_save.columns:
                     df_to_save['updated_at'] = current_time
 
-                # 添加所有复权列（复制原始价格）
-                price_cols = ['open', 'high', 'low', 'close']
-                adjustment_types = ['_front', '_back', '_geometric_front', '_geometric_back']
+                # 添加所有复权列（使用五维复权管理器计算真实复权价格）
+                if len(df_to_save) > 0 and 'close' in df_to_save.columns:
+                    print("    [INFO] Calculating five-fold adjustment data...")
 
-                for price_col in price_cols:
-                    if price_col in df_to_save.columns:
-                        for adj_type in adjustment_types:
-                            adj_col = price_col + adj_type
-                            if adj_col not in df_to_save.columns:
-                                df_to_save[adj_col] = df_to_save[price_col]
+                    # TODO: 获取分红数据（暂时为None）
+                    # 后续可以从 QMT、Tushare 或其他数据源获取
+                    dividends = None
+
+                    # 调用五维复权管理器计算真实复权数据
+                    try:
+                        adjusted_data = self.adjustment_manager.calculate_adjustment(
+                            df_to_save,
+                            dividends=dividends
+                        )
+
+                        # 保存各种复权类型的数据到 df_to_save
+                        for adj_type, df_adj in adjusted_data.items():
+                            if adj_type == 'none':
+                                continue
+
+                            # 映射列名
+                            col_mapping = {
+                                'front': ('open_front', 'high_front', 'low_front', 'close_front'),
+                                'back': ('open_back', 'high_back', 'low_back', 'close_back'),
+                                'geometric_front': ('open_geometric_front', 'high_geometric_front',
+                                                   'low_geometric_front', 'close_geometric_front'),
+                                'geometric_back': ('open_geometric_back', 'high_geometric_back',
+                                                   'low_geometric_back', 'close_geometric_back'),
+                            }
+
+                            target_cols = col_mapping.get(adj_type, [])
+                            for i, price_col in enumerate(['open', 'high', 'low', 'close']):
+                                if price_col in df_adj.columns and i < len(target_cols):
+                                    df_to_save[target_cols[i]] = df_adj[price_col]
+
+                        print("    [OK] Five-fold adjustment calculated")
+                    except Exception as e:
+                        print(f"    [WARN] Five-fold adjustment calculation failed: {e}")
+                        print("    [WARN] Front adjustment columns will be copies of original prices")
+
+                        # 降级处理：复制原始价格到所有复权列
+                        # 注意：即使列已存在，也要覆盖以确保有值
+                        price_cols = ['open', 'high', 'low', 'close']
+                        adjustment_types = ['_front', '_back', '_geometric_front', '_geometric_back']
+
+                        for price_col in price_cols:
+                            if price_col in df_to_save.columns:
+                                for adj_type in adjustment_types:
+                                    adj_col = price_col + adj_type
+                                    # 总是复制原始价格到复权列（无论列是否已存在）
+                                    df_to_save[adj_col] = df_to_save[price_col]
 
             # 获取表的列顺序
             table_columns = self.con.execute(f"DESCRIBE {table_name}").fetchdf()['column_name'].tolist()

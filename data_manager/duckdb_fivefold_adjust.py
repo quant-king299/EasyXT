@@ -73,25 +73,25 @@ class FiveFoldAdjustmentManager:
         # 定义需要添加的列
         columns_to_add = [
             # 前复权
-            ('open_front', 'DOUBLE'),
-            ('high_front', 'DOUBLE'),
-            ('low_front', 'DOUBLE'),
-            ('close_front', 'DOUBLE'),
+            ('open_front', 'DECIMAL(28,6)'),
+            ('high_front', 'DECIMAL(28,6)'),
+            ('low_front', 'DECIMAL(28,6)'),
+            ('close_front', 'DECIMAL(28,6)'),
             # 后复权
-            ('open_back', 'DOUBLE'),
-            ('high_back', 'DOUBLE'),
-            ('low_back', 'DOUBLE'),
-            ('close_back', 'DOUBLE'),
+            ('open_back', 'DECIMAL(28,6)'),
+            ('high_back', 'DECIMAL(28,6)'),
+            ('low_back', 'DECIMAL(28,6)'),
+            ('close_back', 'DECIMAL(28,6)'),
             # 等比前复权
-            ('open_geometric_front', 'DOUBLE'),
-            ('high_geometric_front', 'DOUBLE'),
-            ('low_geometric_front', 'DOUBLE'),
-            ('close_geometric_front', 'DOUBLE'),
+            ('open_geometric_front', 'DECIMAL(28,6)'),
+            ('high_geometric_front', 'DECIMAL(28,6)'),
+            ('low_geometric_front', 'DECIMAL(28,6)'),
+            ('close_geometric_front', 'DECIMAL(28,6)'),
             # 等比后复权
-            ('open_geometric_back', 'DOUBLE'),
-            ('high_geometric_back', 'DOUBLE'),
-            ('low_geometric_back', 'DOUBLE'),
-            ('close_geometric_back', 'DOUBLE'),
+            ('open_geometric_back', 'DECIMAL(28,6)'),
+            ('high_geometric_back', 'DECIMAL(28,6)'),
+            ('low_geometric_back', 'DECIMAL(28,6)'),
+            ('close_geometric_back', 'DECIMAL(28,6)'),
         ]
 
         # 获取现有列
@@ -100,6 +100,32 @@ class FiveFoldAdjustmentManager:
             WHERE table_name = 'stock_daily'
         """).fetchdf()['column_name'].tolist()
 
+        # 先删除已存在的复权列（如果是DOUBLE类型）
+        # 原因：可能之前创建的是DOUBLE，需要先删除再重新创建DECIMAL
+        to_drop = []
+        for col_name, _ in columns_to_add:
+            if col_name in existing_columns:
+                # 检查该列的数据类型
+                col_info = self.con.execute(f"""
+                    SELECT data_type FROM information_schema.columns
+                    WHERE table_name = 'stock_daily'
+                      AND column_name = '{col_name}'
+                """).fetchone()
+
+                if col_info and col_info[0] == 'DOUBLE':
+                    to_drop.append(col_name)
+
+        if to_drop:
+            print(f"[INFO] 删除旧的DOUBLE类型列: {len(to_drop)} 个")
+            for col_name in to_drop:
+                try:
+                    self.con.execute(f"ALTER TABLE stock_daily DROP COLUMN {col_name}")
+                    print(f"  [OK] 删除列: {col_name}")
+                    existing_columns.remove(col_name)
+                except Exception as e:
+                    print(f"  [WARN] 删除失败 {col_name}: {e}")
+
+        # 添加新的复权列
         added_count = 0
         for col_name, col_type in columns_to_add:
             if col_name not in existing_columns:
@@ -136,6 +162,8 @@ class FiveFoldAdjustmentManager:
 
         # 如果没有分红数据，所有复权数据与不复权相同
         if dividends is None or dividends.empty:
+            # 没有分红数据时，返回原始价格作为复权数据
+            # 这样前复权列至少有值（等于原始价格），而不是NULL
             for adj_type in ['front', 'back', 'geometric_front', 'geometric_back']:
                 results[adj_type] = df.copy()
         else:
@@ -171,11 +199,11 @@ class FiveFoldAdjustmentManager:
 
         for idx in reversed(df.index):
             # 检查这一天或之后是否有分红
-            future_dividends = dividends_sorted[dividends_sorted['ex_date'] > idx]
+            future_dividends_sorted = dividends_sorted[dividends_sorted['ex_date'] > idx]
 
-            if not future_dividends.empty:
+            if not future_dividends_sorted.empty:
                 # 计算复权因子
-                for _, div_row in future_dividends.iterrows():
+                for _, div_row in future_dividends_sorted.iterrows():
                     # 现金分红
                     if pd.notna(div_row.get('dividend_per_share')):
                         dividend = div_row['dividend_per_share']
@@ -216,10 +244,10 @@ class FiveFoldAdjustmentManager:
 
         for idx in df.index:
             # 检查这一天是否有分红
-            day_dividends = dividends_sorted[dividends_sorted['ex_date'] == idx]
+            day_dividends_sorted = dividends_sorted[dividends_sorted['ex_date'] == idx]
 
-            if not day_dividends.empty:
-                for _, div_row in day_dividends.iterrows():
+            if not day_dividends_sorted.empty:
+                for _, div_row in day_dividends_sorted.iterrows():
                     # 现金分红
                     if pd.notna(div_row.get('dividend_per_share')):
                         dividend = div_row['dividend_per_share']
@@ -366,6 +394,34 @@ class FiveFoldAdjustmentManager:
         if adjust_type not in self.ADJUST_TYPES:
             print(f"[ERROR] 不支持的复权类型: {adjust_type}")
             return pd.DataFrame()
+
+        # 检查复权列是否存在，如果不存在则先添加
+        if adjust_type != 'none':
+            existing_columns = self.con.execute("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'stock_daily'
+            """).fetchdf()['column_name'].tolist()
+
+            # 根据复权类型确定需要检查的列
+            required_cols = []
+            if adjust_type == 'front':
+                required_cols = ['open_front', 'high_front', 'low_front', 'close_front']
+            elif adjust_type == 'back':
+                required_cols = ['open_back', 'high_back', 'low_back', 'close_back']
+            elif adjust_type == 'geometric_front':
+                required_cols = ['open_geometric_front', 'high_geometric_front',
+                             'low_geometric_front', 'close_geometric_front']
+            elif adjust_type == 'geometric_back':
+                required_cols = ['open_geometric_back', 'high_geometric_back',
+                             'low_geometric_back', 'close_geometric_back']
+
+            # 检查是否所有需要的列都存在
+            missing_cols = [col for col in required_cols if col not in existing_columns]
+
+            if missing_cols:
+                print(f"[INFO] 复权列不存在，先添加: {missing_cols[:2]}...")
+                self.add_adjustment_columns()
 
         # 根据复权类型选择列
         if adjust_type == 'none':
