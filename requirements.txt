@@ -5,6 +5,10 @@ matplotlib>=3.5.0
 requests>=2.25.0
 psutil>=5.9.0
 
+# 数据存储
+pyarrow>=10.0.0  # Parquet文件支持（数据管理需要）
+fastparquet>=0.8.0  # Parquet备用引擎（可选）
+
 # 数据源（可选）
 qstock>=1.0.0
 akshare>=1.9.0

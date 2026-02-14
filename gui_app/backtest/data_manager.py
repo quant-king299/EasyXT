@@ -194,11 +194,35 @@ class DataManager:
         """检查QStock状态"""
         try:
             import qstock as qs
-            
+
             # 尝试获取一个简单的数据来测试连接
             try:
                 # 测试获取股票列表（这个操作通常比较快）
-                test_data = qs.get_data('000001', start='2024-01-01', end='2024-01-02')
+                # 使用更简单的测试方式，避免 qstock.get_data() 的兼容性问题
+                try:
+                    # 方法1：尝试获取股票列表（更稳定）
+                    stock_list = qs.get_stock_list()
+                    if stock_list is not None and len(stock_list) > 0:
+                        return {
+                            'available': True,
+                            'connected': True,
+                            'message': f'QStock连接正常 (股票列表: {len(stock_list)}只)'
+                        }
+                    else:
+                        return {
+                            'available': True,
+                            'connected': False,
+                            'message': 'QStock无法获取股票列表'
+                        }
+                except Exception as list_err:
+                    # 方法2：如果获取列表失败，尝试简单获取数据
+                    # 添加超时和异常处理
+                    import warnings
+                    with warnings.catch_warnings():
+                        warnings.simplefilter("ignore")
+                        test_data = qs.get_data('000001', start='2024-01-01', end='2024-01-02')
+
+                # 检查是否成功获取数据
                 if test_data is not None and not test_data.empty:
                     return {
                         'available': True,

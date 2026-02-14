@@ -479,6 +479,91 @@ class UnifiedDataInterface:
             print(f"  [ERROR] QMT 数据获取失败: {e}")
             return None
 
+    def _get_dividends_from_qmt(
+        self,
+        stock_code: str,
+        start_date,
+        end_date
+    ) -> Optional[pd.DataFrame]:
+        """
+        从QMT获取分红数据，用于计算复权价格
+
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+
+        Returns:
+            DataFrame: 分红数据，包含 ex_date, dividend_per_share 等列
+        """
+        try:
+            from xtquant import xtdata
+
+            # 转换日期格式
+            start_str = pd.to_datetime(start_date).strftime('%Y%m%d')
+            end_str = pd.to_datetime(end_date).strftime('%Y%m%d')
+
+            # 调用QMT接口获取分红数据
+            divid_data = xtdata.get_divid_factors(stock_code, start_str, end_str)
+
+            if divid_data is None or divid_data.empty:
+                print(f"    [INFO] 无分红数据: {stock_code}")
+                return pd.DataFrame()
+
+            # 转换为标准格式
+            # QMT返回的数据可能包含多列，我们需要提取必要的列
+            dividends_df = pd.DataFrame()
+
+            # 检查返回的数据结构并提取需要的字段
+            if isinstance(divid_data, pd.DataFrame):
+                # 尝试映射列名
+                col_mapping = {
+                    'date': 'ex_date',
+                    'ex_date': 'ex_date',
+                    'exDivDate': 'ex_date',
+                    'bonus_date': 'ex_date',
+                    'dividend': 'dividend_per_share',
+                    'dividend_per_share': 'dividend_per_share',
+                    'cashBonus': 'dividend_per_share',
+                    'bonus_ratio': 'bonus_ratio',
+                    'bonusRatio': 'bonus_ratio',
+                    'rightsissue_ratio': 'rights_issue_ratio',
+                }
+
+                # 查找实际的列名
+                actual_cols = {}
+                for qmt_col, std_col in col_mapping.items():
+                    if qmt_col in divid_data.columns:
+                        actual_cols[std_col] = qmt_col
+
+                # 提取数据
+                for std_col, qmt_col in actual_cols.items():
+                    dividends_df[std_col] = divid_data[qmt_col]
+
+                # 确保有ex_date列
+                if 'ex_date' not in dividends_df.columns and len(divid_data.columns) > 0:
+                    # 尝试使用第一列作为ex_date
+                    dividends_df['ex_date'] = divid_data.iloc[:, 0]
+
+                # 确保有dividend_per_share列
+                if 'dividend_per_share' not in dividends_df.columns and len(divid_data.columns) > 1:
+                    dividends_df['dividend_per_share'] = divid_data.iloc[:, 1]
+
+                if not dividends_df.empty and 'ex_date' in dividends_df.columns:
+                    # 确保日期格式正确
+                    dividends_df['ex_date'] = pd.to_datetime(dividends_df['ex_date']).dt.date
+                    print(f"    [OK] 获取 {len(dividends_df)} 条分红记录")
+                    return dividends_df
+                else:
+                    print(f"    [WARN] 分红数据格式不符，无法使用")
+                    return pd.DataFrame()
+
+            return pd.DataFrame()
+
+        except Exception as e:
+            print(f"    [WARN] 获取分红数据失败: {e}")
+            return pd.DataFrame()
+
     def _check_missing_trading_days(
         self,
         data: pd.DataFrame,
@@ -609,9 +694,8 @@ class UnifiedDataInterface:
                 if len(df_to_save) > 0 and 'close' in df_to_save.columns:
                     print("    [INFO] Calculating five-fold adjustment data...")
 
-                    # TODO: 获取分红数据（暂时为None）
-                    # 后续可以从 QMT、Tushare 或其他数据源获取
-                    dividends = None
+                    # 获取分红数据（用于计算真实复权价格）
+                    dividends = self._get_dividends_from_qmt(stock_code, df_to_save['date'].min(), df_to_save['date'].max())
 
                     # 调用五维复权管理器计算真实复权数据
                     try:

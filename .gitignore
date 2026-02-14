@@ -317,3 +317,5 @@ strategies/小市值基础策略V1_QMT版.py
 strategies/小市值基础策略V1.py
 strategies/小市值基础策略V2_QMT版.py
 strategies/小市值基础策略V2.py
+tools/diagnose_front_adjust_null.py
+tools/restore_widget_from_github.py
