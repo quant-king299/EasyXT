@@ -4,6 +4,12 @@ xtquant 安装检查脚本
 """
 import sys
 import os
+import io
+
+# 修复 Windows 控制台编码问题
+if sys.platform == 'win32':
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+    sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
 
 def print_banner():
