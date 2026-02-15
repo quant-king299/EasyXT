@@ -162,10 +162,8 @@ tmp/
 Thumbs.db
 desktop.ini
 
-# xtquant相关
-xtquant/userdata_mini/
-xtquant/logs/
-xtquant/config/user/
+# xtquant相关（需要单独下载，不纳入版本控制）
+xtquant/
 
 # 开发和调试文件
 *test*.py
