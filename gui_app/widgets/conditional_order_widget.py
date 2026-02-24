@@ -97,7 +97,8 @@ class ConditionalOrderWidget(QWidget):
             "价格条件单",
             "时间条件单",
             "涨跌幅条件单",
-            "止盈止损单"
+            "止盈止损单",
+            "高级止盈止损策略"  # 新增高级止盈止损策略
         ])
         self.order_type_combo.currentIndexChanged.connect(self.on_order_type_changed)
         type_layout.addRow("条件单类型:", self.order_type_combo)
@@ -149,6 +150,14 @@ class ConditionalOrderWidget(QWidget):
         self.order_price_spin.setSpecialValueText("市价单")  # 0显示为"市价单"
         action_layout.addRow("价格:", self.order_price_spin)
 
+        # 成本价（用于高级止盈止损策略计算盈亏）
+        self.cost_price_input_spin = QDoubleSpinBox()
+        self.cost_price_input_spin.setMinimumWidth(180)  # 设置最小宽度180px
+        self.cost_price_input_spin.setRange(0.01, 9999.99)
+        self.cost_price_input_spin.setValue(10.0)
+        self.cost_price_input_spin.setDecimals(2)
+        action_layout.addRow("成本价:", self.cost_price_input_spin)
+
         layout.addWidget(action_group)
 
         # 有效期设置
@@ -160,18 +169,13 @@ class ConditionalOrderWidget(QWidget):
         expiry_layout.setHorizontalSpacing(18)  # 标签与输入框间距18px
         expiry_layout.setVerticalSpacing(15)  # 行间距15px
 
-        self.valid_date_edit = QDateEdit()
-        self.valid_date_edit.setMinimumWidth(200)  # 设置最小宽度200px
-        self.valid_date_edit.setDate(datetime.now().date() + timedelta(days=1))
-        self.valid_date_edit.setCalendarPopup(True)
-        expiry_layout.addRow("有效日期:", self.valid_date_edit)
-
         self.valid_time_edit = QDateTimeEdit()
         self.valid_time_edit.setMinimumWidth(250)  # 设置最小宽度250px
         self.valid_time_edit.setDateTime(
             QDateTime.currentDateTime().addDays(1)
         )
         self.valid_time_edit.setDisplayFormat("yyyy-MM-dd hh:mm:ss")
+        self.valid_time_edit.setCalendarPopup(True)
         expiry_layout.addRow("有效期至:", self.valid_time_edit)
 
         layout.addWidget(expiry_group)
@@ -310,8 +314,10 @@ class ConditionalOrderWidget(QWidget):
             self.create_time_condition_ui(parent_widget)
         elif "涨跌幅条件单" in order_type:
             self.create_change_condition_ui(parent_widget)
-        elif "止盈止损" in order_type:
+        elif "止盈止损单" in order_type:
             self.create_stop_condition_ui(parent_widget)
+        elif "高级止盈止损策略" in order_type:
+            self.create_advanced_stop_loss_ui(parent_widget)
 
     def create_price_condition_ui(self, layout):
         """创建价格条件UI"""
@@ -408,6 +414,246 @@ class ConditionalOrderWidget(QWidget):
         self.stop_profit_price_spin.setDecimals(2)
         layout.addRow("止盈价:", self.stop_profit_price_spin)
 
+    def create_advanced_stop_loss_ui(self, layout):
+        """创建高级止盈止损策略UI"""
+        # 快捷预设按钮
+        preset_layout = QHBoxLayout()
+
+        preset_label = QLabel("快捷预设:")
+        preset_layout.addWidget(preset_label)
+
+        self.preset_conservative_btn = QPushButton("新手保守")
+        self.preset_conservative_btn.clicked.connect(lambda: self.apply_preset('新手保守'))
+        preset_layout.addWidget(self.preset_conservative_btn)
+
+        self.preset_steady_btn = QPushButton("中长线稳健")
+        self.preset_steady_btn.clicked.connect(lambda: self.apply_preset('中长线稳健'))
+        preset_layout.addWidget(self.preset_steady_btn)
+
+        self.preset_aggressive_btn = QPushButton("短线激进")
+        self.preset_aggressive_btn.clicked.connect(lambda: self.apply_preset('短线激进'))
+        preset_layout.addWidget(self.preset_aggressive_btn)
+
+        preset_layout.addStretch()
+        layout.addRow(preset_layout)
+
+        # 说明文本
+        description_label = QLabel()
+        description_label.setStyleSheet("""
+            QLabel {
+                color: #666;
+                font-size: 11px;
+                padding: 5px;
+                background-color: #e3f2fd;
+                border-radius: 4px;
+            }
+        """)
+        description_label.setText(
+            "<b>💡 提示：</b>点击上方快捷预设按钮可快速填充参数，也可手动调整下方各策略参数"
+        )
+        description_label.setWordWrap(True)
+        layout.addRow(description_label)
+
+        # ========== 策略1：浮盈回落止损 ==========
+        s1_group = QGroupBox("🥇 策略1(浮盈回落止损)")
+        s1_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #4CAF50;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        s1_layout = QFormLayout(s1_group)
+
+        self.enable_strategy1_cb = QCheckBox("启用策略1")
+        self.enable_strategy1_cb.setChecked(True)
+        s1_layout.addRow("", self.enable_strategy1_cb)
+
+        self.s1_profit_min_spin = QDoubleSpinBox()
+        self.s1_profit_min_spin.setRange(0, 100)
+        self.s1_profit_min_spin.setValue(20)
+        self.s1_profit_min_spin.setSuffix("%")
+        s1_layout.addRow("最小浮盈:", self.s1_profit_min_spin)
+
+        self.s1_profit_max_spin = QDoubleSpinBox()
+        self.s1_profit_max_spin.setRange(0, 200)
+        self.s1_profit_max_spin.setValue(50)
+        self.s1_profit_max_spin.setSuffix("%")
+        s1_layout.addRow("最大浮盈:", self.s1_profit_max_spin)
+
+        self.s1_pullback_spin = QDoubleSpinBox()
+        self.s1_pullback_spin.setRange(0, 50)
+        self.s1_pullback_spin.setValue(10)
+        self.s1_pullback_spin.setSuffix("%")
+        s1_layout.addRow("回落止损:", self.s1_pullback_spin)
+
+        layout.addRow(s1_group)
+
+        # ========== 策略2：最高价回落止损 ==========
+        s2_group = QGroupBox("🥈 策略2(最高价回落止损)")
+        s2_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #2196F3;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        s2_layout = QFormLayout(s2_group)
+
+        self.enable_strategy2_cb = QCheckBox("启用策略2")
+        self.enable_strategy2_cb.setChecked(True)
+        s2_layout.addRow("", self.enable_strategy2_cb)
+
+        self.s2_rise_threshold_spin = QDoubleSpinBox()
+        self.s2_rise_threshold_spin.setRange(0, 100)
+        self.s2_rise_threshold_spin.setValue(10)
+        self.s2_rise_threshold_spin.setSuffix("%")
+        s2_layout.addRow("涨幅阈值:", self.s2_rise_threshold_spin)
+
+        self.s2_pullback_spin = QDoubleSpinBox()
+        self.s2_pullback_spin.setRange(0, 50)
+        self.s2_pullback_spin.setValue(5)
+        self.s2_pullback_spin.setSuffix("%")
+        s2_layout.addRow("回落止损:", self.s2_pullback_spin)
+
+        layout.addRow(s2_group)
+
+        # ========== 策略3：高开回落止损 ==========
+        s3_group = QGroupBox("🥉 策略3(高开回落止损)")
+        s3_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #FF9800;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        s3_layout = QFormLayout(s3_group)
+
+        self.enable_strategy3_cb = QCheckBox("启用策略3")
+        self.enable_strategy3_cb.setChecked(True)
+        s3_layout.addRow("", self.enable_strategy3_cb)
+
+        s3_params_layout = QHBoxLayout()
+
+        s3_params_layout.addWidget(QLabel("高开"))
+        self.s3_gap_open_spin = QDoubleSpinBox()
+        self.s3_gap_open_spin.setRange(0, 20)
+        self.s3_gap_open_spin.setValue(3)
+        self.s3_gap_open_spin.setSuffix("%")
+        s3_params_layout.addWidget(self.s3_gap_open_spin)
+
+        s3_params_layout.addWidget(QLabel("高于开盘"))
+        self.s3_high_above_open_spin = QDoubleSpinBox()
+        self.s3_high_above_open_spin.setRange(0, 20)
+        self.s3_high_above_open_spin.setValue(2)
+        self.s3_high_above_open_spin.setSuffix("%")
+        s3_params_layout.addWidget(self.s3_high_above_open_spin)
+
+        s3_params_layout.addWidget(QLabel("回落"))
+        self.s3_pullback_spin = QDoubleSpinBox()
+        self.s3_pullback_spin.setRange(0, 20)
+        self.s3_pullback_spin.setValue(2)
+        self.s3_pullback_spin.setSuffix("%")
+        s3_params_layout.addWidget(self.s3_pullback_spin)
+
+        s3_params_layout.addWidget(QLabel("止损"))
+        s3_params_layout.addStretch()
+
+        s3_layout.addRow("条件:", s3_params_layout)
+        layout.addRow(s3_group)
+
+        # ========== 策略4：总体亏损止损 ==========
+        s4_group = QGroupBox("🛡 策略4(总体亏损止损)")
+        s4_group.setStyleSheet("""
+            QGroupBox {
+                font-weight: bold;
+                border: 2px solid #f44336;
+                border-radius: 5px;
+                margin-top: 10px;
+                padding-top: 10px;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 10px;
+                padding: 0 5px;
+            }
+        """)
+        s4_layout = QFormLayout(s4_group)
+
+        self.enable_strategy4_cb = QCheckBox("启用策略4")
+        self.enable_strategy4_cb.setChecked(True)
+        s4_layout.addRow("", self.enable_strategy4_cb)
+
+        self.s4_loss_threshold_spin = QDoubleSpinBox()
+        self.s4_loss_threshold_spin.setRange(-50, 0)
+        self.s4_loss_threshold_spin.setValue(-5)
+        self.s4_loss_threshold_spin.setSuffix("%")
+        s4_layout.addRow("亏损止损线:", self.s4_loss_threshold_spin)
+
+        # 警告提示
+        s4_warning = QLabel("⚠️ 这是最后的防线，建议始终启用以避免深度套牢")
+        s4_warning.setStyleSheet("color: #f44336; font-size: 11px;")
+        s4_warning.setWordWrap(True)
+        s4_layout.addRow("", s4_warning)
+
+        layout.addRow(s4_group)
+
+    def apply_preset(self, preset_name: str):
+        """应用预设参数"""
+        presets = {
+            '中长线稳健': {
+                's1_profit_min': 20, 's1_profit_max': 50, 's1_pullback': 10,
+                's2_rise_threshold': 10, 's2_pullback': 5,
+                's3_gap_open': 3, 's3_high_above_open': 2, 's3_pullback': 2,
+                's4_loss_threshold': -5,
+            },
+            '短线激进': {
+                's1_profit_min': 10, 's1_profit_max': 20, 's1_pullback': 5,
+                's2_rise_threshold': 10, 's2_pullback': 5,
+                's3_gap_open': 5, 's3_high_above_open': 3, 's3_pullback': 3,
+                's4_loss_threshold': -8,
+            },
+            '新手保守': {
+                's1_profit_min': 15, 's1_profit_max': 30, 's1_pullback': 8,
+                's2_rise_threshold': 5, 's2_pullback': 2,
+                's3_gap_open': 2, 's3_high_above_open': 1.5, 's3_pullback': 1.5,
+                's4_loss_threshold': -5,
+            }
+        }
+
+        params = presets.get(preset_name)
+        if params:
+            self.s1_profit_min_spin.setValue(params['s1_profit_min'])
+            self.s1_profit_max_spin.setValue(params['s1_profit_max'])
+            self.s1_pullback_spin.setValue(params['s1_pullback'])
+            self.s2_rise_threshold_spin.setValue(params['s2_rise_threshold'])
+            self.s2_pullback_spin.setValue(params['s2_pullback'])
+            self.s3_gap_open_spin.setValue(params['s3_gap_open'])
+            self.s3_high_above_open_spin.setValue(params['s3_high_above_open'])
+            self.s3_pullback_spin.setValue(params['s3_pullback'])
+            self.s4_loss_threshold_spin.setValue(params['s4_loss_threshold'])
+
     def on_order_type_changed(self, index):
         """条件单类型改变事件"""
         # 清空旧的条件UI
@@ -438,7 +684,7 @@ class ConditionalOrderWidget(QWidget):
             threshold = self.change_threshold_spin.value()
             desc += f"{direction} {threshold:.2f}%"
 
-        elif "止盈止损" in order_type:
+        elif "止盈止损单" in order_type:
             stop_type = self.stop_type_combo.currentText()
             desc += f"{stop_type}"
             if "止盈" in stop_type or "止盈止损" in stop_type:
@@ -447,6 +693,27 @@ class ConditionalOrderWidget(QWidget):
             if "止损" in stop_type or "止盈止损" in stop_type:
                 loss = self.stop_loss_price_spin.value()
                 desc += f" (止损价: {loss:.2f})"
+
+        elif "高级止盈止损策略" in order_type:
+            enabled = []
+            if self.enable_strategy1_cb.isChecked():
+                enabled.append("策略1")
+            if self.enable_strategy2_cb.isChecked():
+                enabled.append("策略2")
+            if self.enable_strategy3_cb.isChecked():
+                enabled.append("策略3")
+            if self.enable_strategy4_cb.isChecked():
+                enabled.append("策略4")
+
+            desc += f"启用: {','.join(enabled)}"
+            if self.enable_strategy1_cb.isChecked():
+                desc += f", 策略1:浮盈{self.s1_profit_min_spin.value():.0f}%-{self.s1_profit_max_spin.value():.0f}%回落{self.s1_pullback_spin.value():.0f}%"
+            if self.enable_strategy2_cb.isChecked():
+                desc += f", 策略2:涨幅超{self.s2_rise_threshold_spin.value():.0f}%回落{self.s2_pullback_spin.value():.0f}%"
+            if self.enable_strategy3_cb.isChecked():
+                desc += f", 策略3:高开{self.s3_gap_open_spin.value():.0f}%回落{self.s3_pullback_spin.value():.0f}%"
+            if self.enable_strategy4_cb.isChecked():
+                desc += f", 策略4:浮亏{abs(self.s4_loss_threshold_spin.value()):.0f}%止损"
 
         return desc
 
@@ -495,6 +762,36 @@ class ConditionalOrderWidget(QWidget):
                 'created_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             }
 
+            # 如果是高级止盈止损策略，添加额外参数
+            if "高级止盈止损策略" in order_type:
+                # 保存成本价
+                order['cost_price'] = self.cost_price_input_spin.value()
+                order['enabled_strategies'] = []
+                if self.enable_strategy1_cb.isChecked():
+                    order['enabled_strategies'].append(1)
+                if self.enable_strategy2_cb.isChecked():
+                    order['enabled_strategies'].append(2)
+                if self.enable_strategy3_cb.isChecked():
+                    order['enabled_strategies'].append(3)
+                if self.enable_strategy4_cb.isChecked():
+                    order['enabled_strategies'].append(4)
+
+                # 保存各策略参数
+                order['strategy_params'] = {}
+                if 1 in order['enabled_strategies']:
+                    order['strategy_params']['s1_profit_min'] = self.s1_profit_min_spin.value() / 100
+                    order['strategy_params']['s1_profit_max'] = self.s1_profit_max_spin.value() / 100
+                    order['strategy_params']['s1_pullback'] = self.s1_pullback_spin.value() / 100
+                if 2 in order['enabled_strategies']:
+                    order['strategy_params']['s2_rise_threshold'] = self.s2_rise_threshold_spin.value() / 100
+                    order['strategy_params']['s2_pullback'] = self.s2_pullback_spin.value() / 100
+                if 3 in order['enabled_strategies']:
+                    order['strategy_params']['s3_gap_open'] = self.s3_gap_open_spin.value() / 100
+                    order['strategy_params']['s3_high_above_open'] = self.s3_high_above_open_spin.value() / 100
+                    order['strategy_params']['s3_pullback'] = self.s3_pullback_spin.value() / 100
+                if 4 in order['enabled_strategies']:
+                    order['strategy_params']['s4_loss_threshold'] = self.s4_loss_threshold_spin.value() / 100
+
             # 添加到列表
             self.orders.append(order)
 
@@ -540,8 +837,10 @@ class ConditionalOrderWidget(QWidget):
                 type_str = "时间"
             elif "涨跌幅" in order_type:
                 type_str = "涨跌幅"
-            elif "止盈止损" in order_type:
+            elif "止盈止损单" in order_type:
                 type_str = "止盈止损"
+            elif "高级止盈止损策略" in order_type:
+                type_str = "高级止损"
             else:
                 type_str = order_type[:4]
             self.order_table.setItem(row, 1, QTableWidgetItem(type_str))
@@ -779,6 +1078,8 @@ ID: {order['id']}
                     triggered = self._check_time_condition(order)
                 elif "止盈止损单" in order_type:
                     triggered = self._check_stop_condition(order, current_price)
+                elif "高级止盈止损策略" in order_type:
+                    triggered = self._check_advanced_stop_loss_condition(order, current_price)
 
                 # 如果触发条件满足，执行交易
                 if triggered:
@@ -906,6 +1207,190 @@ ID: {order['id']}
             return False
         except:
             return False
+
+    def _check_advanced_stop_loss_condition(self, order: dict, current_price: float) -> bool:
+        """检查高级止盈止损策略条件"""
+        try:
+            # 初始化运行时状态（如果还没有）
+            if 'runtime_state' not in order:
+                order['runtime_state'] = {
+                    'highest_price': order.get('cost_price', current_price),
+                    'lowest_price': order.get('cost_price', current_price),
+                    'highest_price_after_profit': 0.0,
+                    'today_open_price': None,
+                    'yesterday_close_price': None,
+                }
+
+            state = order['runtime_state']
+            cost_price = order.get('cost_price', current_price)
+            enabled_strategies = order.get('enabled_strategies', [1, 2, 3, 4])
+
+            # 更新最高价和最低价
+            state['highest_price'] = max(state['highest_price'], current_price)
+            state['lowest_price'] = min(state['lowest_price'], current_price)
+
+            # 获取今日开盘价和昨收价
+            try:
+                from xtquant import xtdata
+                from easy_xt.utils import StockCodeUtils
+                normalized_code = StockCodeUtils.normalize_code(order['stock_code'])
+                tick_data = xtdata.get_full_tick([normalized_code])
+                if tick_data and normalized_code in tick_data:
+                    tick_info = tick_data[normalized_code]
+                    if 'open' in tick_info:
+                        state['today_open_price'] = float(tick_info['open'])
+                    if 'lastClose' in tick_info:
+                        state['yesterday_close_price'] = float(tick_info['lastClose'])
+            except:
+                pass
+
+            # 获取策略参数（从订单中获取，如果没有则使用默认值）
+            params = order.get('strategy_params', {})
+            if not params:
+                # 如果没有参数，使用默认的中长线稳健参数
+                params = {
+                    's1_profit_min': 0.20, 's1_profit_max': 0.50, 's1_pullback': 0.10,
+                    's2_rise_threshold': 0.10, 's2_pullback': 0.05,
+                    's3_gap_open': 0.03, 's3_high_above_open': 0.02, 's3_pullback': 0.02,
+                    's4_loss_threshold': -0.05,
+                }
+
+            # 检查各策略
+            triggered_strategies = []
+
+            # 策略1: 浮盈回落止损
+            if 1 in enabled_strategies:
+                triggered, reason = self._check_strategy1_advanced(state, current_price, cost_price, params)
+                if triggered:
+                    triggered_strategies.append(('策略1', reason))
+
+            # 策略2: 最高价回落止损
+            if 2 in enabled_strategies:
+                triggered, reason = self._check_strategy2_advanced(state, current_price, cost_price, params)
+                if triggered:
+                    triggered_strategies.append(('策略2', reason))
+
+            # 策略3: 高开回落止损
+            if 3 in enabled_strategies:
+                triggered, reason = self._check_strategy3_advanced(state, current_price, cost_price, params)
+                if triggered:
+                    triggered_strategies.append(('策略3', reason))
+
+            # 策略4: 总体亏损止损
+            if 4 in enabled_strategies:
+                triggered, reason = self._check_strategy4_advanced(state, current_price, cost_price, params)
+                if triggered:
+                    triggered_strategies.append(('策略4', reason))
+
+            # 如果有策略触发
+            if triggered_strategies:
+                self.log(f"🚨 高级止盈止损触发: {order['id']}")
+                for strategy_name, reason in triggered_strategies:
+                    self.log(f"  {strategy_name}: {reason}")
+                return True
+
+            return False
+
+        except Exception as e:
+            self.log(f"检查高级止盈止损条件失败: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
+
+    def _check_strategy1_advanced(self, state: dict, current_price: float, cost_price: float, params: dict) -> tuple:
+        """检查策略1：浮盈回落止损"""
+        current_profit = (current_price - cost_price) / cost_price
+
+        s1_min = params.get('s1_profit_min', 0.20)
+        s1_max = params.get('s1_profit_max', 0.50)
+        s1_pullback = params.get('s1_pullback', 0.10)
+
+        if current_profit < s1_min:
+            return False, ""
+
+        if current_profit >= s1_max:
+            return True, f"浮盈{current_profit*100:.1f}%，超过目标{s1_max*100:.0f}%"
+
+        if state['highest_price_after_profit'] == 0:
+            state['highest_price_after_profit'] = current_price
+        else:
+            state['highest_price_after_profit'] = max(state['highest_price_after_profit'], current_price)
+
+        pullback_ratio = (state['highest_price_after_profit'] - current_price) / state['highest_price_after_profit']
+
+        if pullback_ratio >= s1_pullback:
+            return True, f"从最高价回落{pullback_ratio*100:.1f}%，触发止损线{s1_pullback*100:.0f}%"
+
+        return False, ""
+
+    def _check_strategy2_advanced(self, state: dict, current_price: float, cost_price: float, params: dict) -> tuple:
+        """检查策略2：最高价回落止损"""
+        highest_price = state['highest_price']
+        highest_rise = (highest_price - cost_price) / cost_price
+
+        s2_threshold = params.get('s2_rise_threshold', 0.10)
+        s2_pullback = params.get('s2_pullback', 0.05)
+
+        if highest_rise < s2_threshold:
+            return False, ""
+
+        pullback_ratio = (highest_price - current_price) / highest_price
+
+        if pullback_ratio >= s2_pullback:
+            return True, f"最高价涨幅{highest_rise*100:.1f}%，回落{pullback_ratio*100:.1f}%，触发止损"
+
+        return False, ""
+
+    def _check_strategy3_advanced(self, state: dict, current_price: float, cost_price: float, params: dict) -> tuple:
+        """检查策略3：高开回落止损"""
+        if state['today_open_price'] is None or state['yesterday_close_price'] is None:
+            return False, ""
+
+        s3_gap_open = params.get('s3_gap_open', 0.03)
+        s3_high_above = params.get('s3_high_above_open', 0.02)
+        s3_pullback = params.get('s3_pullback', 0.02)
+
+        gap_open_ratio = (state['today_open_price'] - state['yesterday_close_price']) / state['yesterday_close_price']
+
+        if gap_open_ratio < s3_gap_open:
+            return False, ""
+
+        high_above_ratio = (state['highest_price'] - state['today_open_price']) / state['today_open_price']
+
+        if high_above_ratio < s3_high_above:
+            return False, ""
+
+        pullback_ratio = (state['highest_price'] - current_price) / state['highest_price']
+
+        if pullback_ratio >= s3_pullback:
+            return True, f"高开{gap_open_ratio*100:.1f}%，回落{pullback_ratio*100:.1f}%，触发止损"
+
+        return False, ""
+
+    def _check_strategy4_advanced(self, state: dict, current_price: float, cost_price: float, params: dict) -> tuple:
+        """检查策略4：总体亏损止损"""
+        profit_loss = (current_price - cost_price) / cost_price
+
+        s4_threshold = params.get('s4_loss_threshold', -0.05)
+
+        if profit_loss <= s4_threshold:
+            return True, f"浮亏{abs(profit_loss)*100:.1f}%，触发止损线{abs(s4_threshold)*100:.0f}%"
+
+        return False, ""
+
+        if pullback_ratio >= params['s3_pullback']:
+            return True, f"高开{gap_open_ratio*100:.1f}%，回落{pullback_ratio*100:.1f}%，触发止损"
+
+        return False, ""
+
+    def _check_strategy4_advanced(self, state: dict, current_price: float, cost_price: float, params: dict) -> tuple:
+        """检查策略4：总体亏损止损"""
+        profit_loss = (current_price - cost_price) / cost_price
+
+        if profit_loss <= params['s4_loss_threshold']:
+            return True, f"浮亏{abs(profit_loss)*100:.1f}%，触发止损线{abs(params['s4_loss_threshold'])*100:.0f}%"
+
+        return False, ""
 
     def _execute_order(self, order: dict, current_price: float):
         """执行订单"""
