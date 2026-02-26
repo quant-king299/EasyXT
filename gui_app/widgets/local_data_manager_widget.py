@@ -1497,6 +1497,12 @@ class LocalDataManagerWidget(QWidget):
         self.progress_bar.setVisible(False)
         action_layout.addWidget(self.progress_bar, 3, 0, 1, 4)
 
+        # 进度标签
+        self.progress_label = QLabel()
+        self.progress_label.setVisible(False)
+        self.progress_label.setStyleSheet("color: #666; font-size: 9pt;")
+        action_layout.addWidget(self.progress_label, 4, 0, 1, 4)
+
         # 停止按钮
         self.stop_btn = QPushButton("⏹️ 停止下载")
         self.stop_btn.clicked.connect(self.stop_download)
@@ -1514,7 +1520,7 @@ class LocalDataManagerWidget(QWidget):
                 background-color: #da190b;
             }
         """)
-        action_layout.addWidget(self.stop_btn, 4, 0, 1, 4)
+        action_layout.addWidget(self.stop_btn, 5, 0, 1, 4)
 
         # ========== 快速操作区域 ==========
         quick_action_group = QGroupBox("⚡ 快速操作")
@@ -1638,6 +1644,103 @@ class LocalDataManagerWidget(QWidget):
         financial_note = QLabel("说明: 下载财务数据后，点击「保存到DuckDB」可永久存储")
         financial_note.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
         financial_layout.addWidget(financial_note, 3, 0, 1, 4)
+
+        # ========== Tushare数据下载区域 ==========
+        tushare_group = QGroupBox("🌐 Tushare数据下载（财务、分红、股东等）")
+        tushare_layout = QGridLayout()
+        tushare_group.setLayout(tushare_layout)
+        left_layout.addWidget(tushare_group)
+
+        # Token配置 - 从环境变量读取
+        tushare_layout.addWidget(QLabel("Token:"), 0, 0)
+        self.tushare_token_input = QLineEdit()
+        self.tushare_token_input.setPlaceholderText("未配置 Token，请在 .env 文件中设置")
+        self.tushare_token_input.setReadOnly(True)
+
+        # 尝试从环境变量读取 Token（不显示具体值）
+        try:
+            from config import get_env_config
+            env_config = get_env_config()
+            token = env_config.tushare_token
+            if token:
+                # 只显示 Token 的前8位和后4位，中间用***代替
+                if len(token) > 12:
+                    masked_token = f"{token[:8]}...{token[-4:]}"
+                else:
+                    masked_token = "*** 已配置 ***"
+                self.tushare_token_input.setText(masked_token)
+                self.tushare_token_input.setStyleSheet("background-color: #e8f5e9; color: #2e7d32;")
+            else:
+                self.tushare_token_input.setText("未配置")
+                self.tushare_token_input.setStyleSheet("background-color: #ffebee; color: #c62828;")
+        except:
+            self.tushare_token_input.setText("配置读取失败")
+            self.tushare_token_input.setStyleSheet("background-color: #fff3e0; color: #ef6c00;")
+
+        tushare_layout.addWidget(self.tushare_token_input, 0, 1)
+
+        self.tushare_test_btn = QPushButton("测试")
+        self.tushare_test_btn.setMaximumWidth(60)
+        self.tushare_test_btn.clicked.connect(self.test_tushare_connection)
+        tushare_layout.addWidget(self.tushare_test_btn, 0, 2)
+
+        # 数据类型选择（使用复选框）
+        tushare_data_layout = QHBoxLayout()
+
+        self.tushare_chk_financial = QCheckBox("财务数据")
+        self.tushare_chk_financial.setChecked(True)
+        self.tushare_chk_financial.setToolTip("下载利润表、资产负债表、现金流量表")
+        tushare_data_layout.addWidget(self.tushare_chk_financial)
+
+        self.tushare_chk_dividend = QCheckBox("分红数据")
+        self.tushare_chk_dividend.setChecked(True)
+        self.tushare_chk_dividend.setToolTip("下载分红送股数据")
+        tushare_data_layout.addWidget(self.tushare_chk_dividend)
+
+        self.tushare_chk_moneyflow = QCheckBox("资金流向")
+        self.tushare_chk_moneyflow.setToolTip("下载个股资金流向数据")
+        tushare_data_layout.addWidget(self.tushare_chk_moneyflow)
+
+        self.tushare_chk_holders = QCheckBox("股东数据")
+        self.tushare_chk_holders.setToolTip("下载前十大股东数据")
+        tushare_data_layout.addWidget(self.tushare_chk_holders)
+
+        tushare_data_layout.addStretch()
+        tushare_layout.addLayout(tushare_data_layout, 1, 0, 1, 3)
+
+        # 数据范围设置
+        tushare_layout.addWidget(QLabel("数据年份:"), 2, 0)
+        self.tushare_years_spinbox = QSpinBox()
+        self.tushare_years_spinbox.setRange(1, 20)
+        self.tushare_years_spinbox.setValue(5)
+        self.tushare_years_spinbox.setSuffix(" 年")
+        tushare_layout.addWidget(self.tushare_years_spinbox, 2, 1)
+
+        # 下载按钮
+        self.tushare_download_btn = QPushButton("🌐 从Tushare下载")
+        self.tushare_download_btn.clicked.connect(self.download_from_tushare)
+        self.tushare_download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #9C27B0;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #7B1FA2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        tushare_layout.addWidget(self.tushare_download_btn, 2, 2)
+
+        # 说明标签
+        tushare_note = QLabel("💡 Tushare提供财务数据、分红、股东等补充数据，可与QMT数据配合使用")
+        tushare_note.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
+        tushare_layout.addWidget(tushare_note, 3, 0, 1, 3)
 
 
         # ========== 手动下载单个标的区域 ==========
@@ -2530,6 +2633,133 @@ class LocalDataManagerWidget(QWidget):
             QMessageBox.information(self, "验证完成", msg)
         else:
             QMessageBox.warning(self, "验证完成", msg + "\n⚠️ 该股票没有本地数据，请先下载")
+
+    # ========== Tushare相关方法 ==========
+
+    def test_tushare_connection(self):
+        """测试Tushare连接"""
+        # 从环境变量读取 Token（不从输入框读取，因为输入框显示的是掩码）
+        try:
+            from config import get_env_config
+            env_config = get_env_config()
+            token = env_config.tushare_token
+        except:
+            token = None
+
+        if not token:
+            QMessageBox.warning(self, "警告", "未检测到 Token，请先配置 .env 文件")
+            self.log("❌ Token 未配置")
+            return
+
+        self.log("正在测试Tushare连接...")
+
+        try:
+            import tushare as ts
+            ts.set_token(token)
+            pro = ts.pro_api()
+
+            # 测试API调用
+            df = pro.trade_cal(exchange='SSE', start_date='20240101', end_date='20240110')
+
+            if df is not None and len(df) > 0:
+                QMessageBox.information(self, "成功", f"✅ Tushare连接成功！\n\n获取到 {len(df)} 条交易日历数据")
+                self.log("✅ Tushare连接测试成功")
+            else:
+                QMessageBox.warning(self, "警告", "连接失败，请检查Token是否正确")
+
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"连接失败：\n{str(e)}")
+            self.log(f"❌ Tushare连接测试失败: {e}")
+
+    def download_from_tushare(self):
+        """从Tushare下载数据"""
+        # 从环境变量读取 Token（不从输入框读取）
+        try:
+            from config import get_env_config
+            env_config = get_env_config()
+            token = env_config.tushare_token
+        except:
+            token = None
+
+        if not token:
+            QMessageBox.warning(self, "警告", "未检测到 Token，请先配置 .env 文件")
+            self.log("❌ Token 未配置，无法下载")
+            return
+
+        # 确定下载类型
+        data_types = []
+        if self.tushare_chk_financial.isChecked():
+            data_types.append('financial')
+        if self.tushare_chk_dividend.isChecked():
+            data_types.append('dividend')
+        if self.tushare_chk_moneyflow.isChecked():
+            data_types.append('moneyflow')
+        if self.tushare_chk_holders.isChecked():
+            data_types.append('holders')
+
+        if not data_types:
+            QMessageBox.warning(self, "警告", "请选择至少一种数据类型")
+            return
+
+        # 获取参数
+        years = self.tushare_years_spinbox.value()
+
+        self.log(f"🌐 开始从Tushare下载数据...")
+        self.log(f"   数据类型: {', '.join(data_types)}")
+        self.log(f"   数据年份: {years}年")
+
+        # 禁用下载按钮
+        self.tushare_download_btn.setEnabled(False)
+
+        # 创建下载线程
+        try:
+            from gui_app.widgets.tushare_download_widget import TushareDownloadThread
+
+            # 只下载第一种类型（避免复杂的多任务处理）
+            task_type = data_types[0]
+
+            self.tushare_download_thread = TushareDownloadThread(
+                task_type=task_type,
+                years=years,
+                db_path='D:/StockData/stock_data.ddb'
+            )
+
+            self.tushare_download_thread.log_signal.connect(self.log)
+            self.tushare_download_thread.progress_signal.connect(self.update_progress)
+            self.tushare_download_thread.finished_signal.connect(self.on_tushare_download_finished)
+            self.tushare_download_thread.error_signal.connect(self.on_tushare_download_error)
+
+            self.tushare_download_thread.start()
+
+        except ImportError as e:
+            self.log(f"❌ 导入Tushare模块失败: {e}")
+            self.log("提示: 请确保tushare_manager模块已正确安装")
+            self.tushare_download_btn.setEnabled(True)
+
+    def on_tushare_download_finished(self, result: dict):
+        """Tushare下载完成"""
+        self.tushare_download_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+
+        total = result.get('total', 0)
+        success = result.get('success', 0)
+        failed = result.get('failed', 0)
+
+        QMessageBox.information(
+            self, "完成",
+            f"Tushare下载完成！\n\n总数: {total}\n成功: {success}\n失败: {failed}"
+        )
+
+        # 刷新统计数据
+        self.load_duckdb_statistics()
+
+    def on_tushare_download_error(self, error: str):
+        """Tushare下载错误"""
+        self.tushare_download_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_label.setVisible(False)
+        QMessageBox.critical(self, "错误", error)
 
 
 class DataViewerDialog(QDialog):

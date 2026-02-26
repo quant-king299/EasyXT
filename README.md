@@ -92,6 +92,33 @@ PY
 ```
 
 > 说明：pip 仅安装 Python 包，不会安装 QMT/xtquant，本地需自备。
+
+### ⚙️ 首次使用配置（重要）
+
+如果你需要使用 **Tushare 数据下载功能**，请配置环境变量：
+
+1. **复制配置文件**
+   ```bash
+   # Windows PowerShell
+   Copy-Item .env.example .env
+
+   # Windows CMD
+   copy .env.example .env
+
+   # Linux/Mac
+   cp .env.example .env
+   ```
+
+2. **获取并填写 Tushare Token**
+   - 访问 [Tushare Pro](https://tushare.pro) 注册并获取 Token
+   - 打开 `.env` 文件，将 `your_tushare_token_here` 替换为你的 Token：
+   ```env
+   TUSHARE_TOKEN=你的Token
+   ```
+
+3. **保存并重启程序**
+
+> 📖 详细配置说明：[SETUP_TUSHARE_TOKEN.md](SETUP_TUSHARE_TOKEN.md) | [docs/TUSHARE_TOKEN_CONFIG.md](docs/TUSHARE_TOKEN_CONFIG.md)
 >
 > 必装的 xtquant 特殊版本（强制）：请到以下 Release 页面下载附件 `xtquant.rar`，解压后覆盖到本项目根目录下的 `xtquant/` 目录（若不存在则直接解压到根目录会创建该目录）：
 >
