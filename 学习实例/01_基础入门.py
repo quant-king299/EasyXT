@@ -725,6 +725,11 @@ def split_and_buy(api, account_id, code, total_volume, max_single=5000):
     print("  - 提高成交概率")
     print("  - 减少滑点影响")
 
+    print("\n📚 进阶学习：")
+    print("  想要在实际交易中使用拆单功能？")
+    print("  请学习：02_交易基础.py - 第6课：拆单交易实战")
+    print("  该课程将演示如何在实际交易中应用拆单策略")
+
 def main():
     """主函数：运行所有基础学习课程"""
     print("🎓 EasyXT基础入门学习课程")

@@ -1244,10 +1244,201 @@ def lesson_05_quick_buy(api):
     except Exception as e:
         print(f"✗ 按金额买入异常: {e}")
 
-def lesson_06_order_monitoring(api):
-    """第6课：委托监控"""
+def lesson_06_split_order(api):
+    """第6课：拆单交易实战"""
     print("\n" + "=" * 60)
-    print("第6课：委托监控")
+    print("第6课：拆单交易实战")
+    print("=" * 60)
+
+    print("💡 拆单交易：将大额订单拆分成多个小单，降低市场冲击")
+    print("适用场景：大额买入/卖出、降低滑点、提高成交概率")
+
+    # 拆单函数（来自01_基础入门 Lesson 8）
+    def split_order(volume: int, max_single_volume: int = 10000,
+                   split_strategy: str = 'equal') -> list:
+        """
+        拆单函数
+
+        Args:
+            volume: 总数量
+            max_single_volume: 单笔最大数量
+            split_strategy: 拆单策略
+                - 'equal': 平均拆分
+                - 'decreasing': 递减拆分（大单在前）
+                - 'increasing': 递增拆分（小单在前）
+
+        Returns:
+            list: 拆分后的数量列表
+        """
+        if volume <= max_single_volume:
+            return [volume]
+
+        num_splits = (volume + max_single_volume - 1) // max_single_volume
+
+        if split_strategy == 'equal':
+            base_volume = volume // num_splits
+            remainder = volume % num_splits
+            result = [base_volume + 1] * remainder + [base_volume] * (num_splits - remainder)
+            return result
+        elif split_strategy == 'decreasing':
+            result = []
+            remaining = volume
+            while remaining > 0:
+                current = min(max_single_volume, remaining)
+                result.append(current)
+                remaining -= current
+            return result
+        elif split_strategy == 'increasing':
+            result = []
+            remaining = volume
+            while remaining > 0:
+                current = min(max_single_volume, remaining)
+                result.insert(0, current)
+                remaining -= current
+            return result
+        else:
+            return split_order(volume, max_single_volume, 'equal')
+
+    # 拆单买入实战
+    print("\n1. 拆单买入实战示例")
+    print("-" * 40)
+
+    print("⚠️  警告：以下代码将执行实际交易！")
+    confirm = input("是否继续执行拆单买入？(输入 'yes' 或 'y' 继续): ")
+    if confirm.lower() not in ['yes', 'y']:
+        print("已跳过拆单买入")
+        return
+
+    # 示例参数
+    total_volume = 30000  # 总数量30000股
+    max_single = 5000     # 单笔最大5000股
+    strategy = 'equal'    # 平均拆分
+
+    print(f"\n交易参数：")
+    print(f"  股票代码: {TEST_CODE}")
+    print(f"  总数量: {total_volume} 股")
+    print(f"  单笔最大: {max_single} 股")
+    print(f"  拆单策略: {strategy}")
+
+    # 执行拆单
+    splits = split_order(total_volume, max_single, strategy)
+    print(f"\n拆分结果：")
+    print(f"  拆分数: {len(splits)} 笔")
+    print(f"  拆分明细: {splits}")
+
+    # 逐笔下单
+    print(f"\n开始逐笔下单...")
+    order_ids = []
+    success_count = 0
+    fail_count = 0
+
+    for i, volume in enumerate(splits, 1):
+        print(f"\n第 {i}/{len(splits)} 笔: {volume} 股")
+
+        try:
+            # 调用买入接口
+            order_id = api.buy(
+                account_id=ACCOUNT_ID,
+                code=TEST_CODE,
+                volume=volume,
+                price=0,  # 市价单
+                price_type='market'
+            )
+
+            if order_id:
+                order_ids.append(order_id)
+                success_count += 1
+                print(f"  ✓ 下单成功，委托号: {order_id}")
+            else:
+                fail_count += 1
+                print(f"  ✗ 下单失败")
+
+        except Exception as e:
+            fail_count += 1
+            print(f"  ✗ 下单异常: {e}")
+
+        # 避免下单过快
+        if i < len(splits):  # 最后一笔不需要等待
+            time.sleep(0.5)
+
+    # 统计结果
+    print(f"\n拆单买入完成！")
+    print(f"  成功: {success_count} 笔")
+    print(f"  失败: {fail_count} 笔")
+    print(f"  委托编号: {order_ids}")
+
+    # 查询委托状态
+    if order_ids:
+        print(f"\n查询委托状态...")
+        time.sleep(2)
+
+        try:
+            orders = api.get_orders(ACCOUNT_ID)
+            if not orders.empty:
+                print(f"\n委托详情：")
+                for order_id in order_ids:
+                    order_info = orders[orders['order_id'] == order_id]
+                    if not order_info.empty:
+                        status = order_info.iloc[0].get('status', '未知')
+                        volume = order_info.iloc[0].get('order_volume', 0)
+                        price = order_info.iloc[0].get('order_price', 0)
+                        print(f"  委托 {order_id}: {status}, {volume}股, {price:.2f}元")
+        except Exception as e:
+            print(f"查询委托状态异常: {e}")
+
+    # 拆单卖出示例
+    print("\n\n2. 拆单卖出示例（参考）")
+    print("-" * 40)
+
+    print("拆单卖出代码示例：")
+    example_code = '''
+def split_and_sell(api, account_id, code, total_volume, max_single=5000):
+    """拆单卖出函数"""
+
+    # 1. 拆分订单
+    splits = split_order(total_volume, max_single, 'decreasing')  # 递减拆分
+    print(f"总数量: {total_volume}, 拆分为 {len(splits)} 笔")
+
+    # 2. 逐笔下单
+    order_ids = []
+    for i, volume in enumerate(splits, 1):
+        print(f"下单第 {i}/{len(splits)} 笔: {volume} 股")
+
+        # 调用卖出接口
+        order_id = api.sell(
+            account_id=account_id,
+            code=code,
+            volume=volume,
+            price=0,  # 市价单
+            price_type='market'
+        )
+
+        if order_id:
+            order_ids.append(order_id)
+            print(f"  ✓ 下单成功，委托号: {order_id}")
+        else:
+            print(f"  ✗ 下单失败")
+
+        # 避免下单过快
+        time.sleep(0.5)
+
+    return order_ids
+
+# 使用示例（需要在有持仓时使用）
+# order_ids = split_and_sell(api, ACCOUNT_ID, TEST_CODE, 10000, 5000)
+'''
+    print(example_code)
+
+    print("\n💡 拆单交易要点：")
+    print("  • 根据市场流动性选择合适的单笔数量")
+    print("  • 使用市价单可提高成交概率，但可能有滑点")
+    print("  • 逐笔下单之间需要适当间隔，避免被认定为异常交易")
+    print("  • 建议在模拟环境中充分测试后再用于实盘")
+
+def lesson_07_order_monitoring(api):
+    """第7课：委托监控"""
+    print("\n" + "=" * 60)
+    print("第7课：委托监控")
     print("=" * 60)
     
     print("1. 查看所有当日委托")
@@ -1301,19 +1492,20 @@ def lesson_06_order_monitoring(api):
     except Exception as e:
         print(f"✗ 查看成交记录异常: {e}")
 
-def lesson_07_practice_summary(api):
-    """第7课：实践总结"""
+def lesson_08_practice_summary(api):
+    """第8课：实践总结"""
     print("\n" + "=" * 60)
-    print("第7课：实践总结")
+    print("第8课：实践总结")
     print("=" * 60)
-    
+
     print("本课程学习了以下交易基础功能：")
     print("1. ✓ 交易服务初始化")
     print("2. ✓ 账户信息查询")
     print("3. ✓ 市价单交易")
     print("4. ✓ 限价单交易")
     print("5. ✓ 便捷买入功能")
-    print("6. ✓ 委托监控")
+    print("6. ✓ 拆单交易实战")
+    print("7. ✓ 委托监控")
     
     print("\n交易基础要点总结：")
     print("• 交易前必须先初始化数据和交易服务")
@@ -1377,8 +1569,9 @@ def main():
         lambda: lesson_03_market_order(api),
         lambda: lesson_04_limit_order(api),
         lambda: lesson_05_quick_buy(api),
-        lambda: lesson_06_order_monitoring(api),
-        lambda: lesson_07_practice_summary(api)
+        lambda: lesson_06_split_order(api),
+        lambda: lesson_07_order_monitoring(api),
+        lambda: lesson_08_practice_summary(api)
     ]
     
     for i, lesson in enumerate(lessons, 2):
