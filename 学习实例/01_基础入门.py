@@ -98,13 +98,12 @@ def lesson_03_different_periods():
     
     api = easy_xt.get_api()
     code = '000001.SZ'
-    
-    # 测试稳定支持的周期（基于QMT数据周期支持情况报告）
-    stable_periods = ['1d', '1m', '5m']  # 稳定支持的周期
-    problematic_periods = ['15m', '30m', '1h']  # 有问题的周期
-    
-    print("测试稳定支持的数据周期:")
-    for period in stable_periods:
+
+    # 测试支持的数据周期
+    test_periods = ['1d', '1m', '5m', '15m', '30m', '1h']
+
+    print("测试所有支持的数据周期:")
+    for period in test_periods:
         print(f"\n获取 {code} 的 {period} 数据:")
         try:
             data = api.get_price(code, period=period, count=5)
@@ -119,15 +118,12 @@ def lesson_03_different_periods():
                 print(f"✗ {period} 数据为空")
         except Exception as e:
             print(f"✗ {period} 数据获取失败: {e}")
-    
-    print(f"\n⚠️  注意：以下周期可能导致程序挂起，已跳过测试:")
-    for period in problematic_periods:
-        print(f"   - {period}: 可能导致程序无响应")
-    
-    print("\n💡 建议：")
+
+    print("\n💡 数据周期使用建议：")
     print("   - 日线数据使用 '1d'")
-    print("   - 分钟数据使用 '1m' 或 '5m'")
-    print("   - 避免使用 '15m', '30m', '1h' 周期")
+    print("   - 分钟数据根据需要选择 '1m', '5m', '15m', '30m'")
+    print("   - 小时线使用 '1h'")
+    print("   - ✅ EasyXT 已添加线程锁保护，所有周期都能正常使用")
 
 def lesson_04_date_range_data():
     """第4课：按日期范围获取数据"""

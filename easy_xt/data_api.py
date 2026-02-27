@@ -1,12 +1,24 @@
 """
 数据API封装模块
 简化xtquant数据接口的调用
+
+⚠️ 线程安全说明：
+xtdata.download_history_data2() 方法在并发调用时可能导致卡死。
+为了解决这个问题，我们在 DataAPI 类中添加了类级别的线程锁 (_download_lock)，
+确保同一时间只有一个线程执行下载操作。
+
+锁保护的方法包括：
+- download_history_data_batch()
+- 任何内部调用 download_history_data2 的方法
+
+这样可以确保即使在并发场景下，也能正常工作，不会导致卡死。
 """
 import pandas as pd
 from typing import Union, List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import sys
 import os
+import threading  # 添加线程锁支持
 
 # 添加xtquant路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -108,7 +120,11 @@ def validate_stock_codes(codes: Union[str, List[str]]) -> tuple[bool, str]:
 
 class DataAPI:
     """数据API封装类"""
-    
+
+    # 类级别的线程锁，用于保护 xtdata 的下载操作
+    # 确保 download_history_data2 等方法在同一时间只有一个线程调用
+    _download_lock = threading.Lock()
+
     def __init__(self):
         self.xt = xt
         self._connected = False
@@ -909,15 +925,16 @@ class DataAPI:
         
         # 结果字典
         results = {}
-        
-        # 批量下载数据
-        try:
-            self.xt.download_history_data2(
-                stock_list=stock_list,
-                period=period,
-                start_time=start_time,
-                end_time=end_time
-            )
+
+        # 批量下载数据（使用线程锁保护，防止并发调用导致卡死）
+        with DataAPI._download_lock:  # 获取类级别锁
+            try:
+                self.xt.download_history_data2(
+                    stock_list=stock_list,
+                    period=period,
+                    start_time=start_time,
+                    end_time=end_time
+                )
             # 下载完成后，验证每只股票的数据是否真正下载成功
             for stock in stock_list:
                 try:
@@ -937,17 +954,18 @@ class DataAPI:
                         results[stock] = False
                 except Exception:
                     results[stock] = False
-        except Exception as e:
-            # 如果出现异常，尝试逐个下载
-            print(f"批量下载失败，尝试逐个下载: {e}")
-            for stock in stock_list:
-                try:
-                    self.xt.download_history_data2(
-                        stock_list=[stock],
-                        period=period,
-                        start_time=start_time,
-                        end_time=end_time
-                    )
+            except Exception as e:
+                # 如果出现异常，尝试逐个下载
+                print(f"批量下载失败，尝试逐个下载: {e}")
+                for stock in stock_list:
+                    try:
+                        # 逐个下载时也需要锁保护
+                        self.xt.download_history_data2(
+                            stock_list=[stock],
+                            period=period,
+                            start_time=start_time,
+                            end_time=end_time
+                        )
                     # 验证数据是否真正下载成功
                     try:
                         test_data = self.xt.get_local_data(
