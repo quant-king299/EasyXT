@@ -935,39 +935,11 @@ class DataAPI:
                     start_time=start_time,
                     end_time=end_time
                 )
-            # 下载完成后，验证每只股票的数据是否真正下载成功
-            for stock in stock_list:
-                try:
-                    # 尝试获取少量数据来验证下载是否成功
-                    test_data = self.xt.get_local_data(
-                        field_list=['open', 'close', 'volume'],
-                        stock_list=[stock],
-                        period=period,
-                        start_time=start_time,
-                        end_time=end_time,
-                        count=1
-                    )
-                    # 如果能获取到数据且不为空，则认为下载成功
-                    if stock in test_data and test_data[stock] is not None and len(test_data[stock]) > 0:
-                        results[stock] = True
-                    else:
-                        results[stock] = False
-                except Exception:
-                    results[stock] = False
-            except Exception as e:
-                # 如果出现异常，尝试逐个下载
-                print(f"批量下载失败，尝试逐个下载: {e}")
+
+                # 下载完成后，验证每只股票的数据是否真正下载成功
                 for stock in stock_list:
                     try:
-                        # 逐个下载时也需要锁保护
-                        self.xt.download_history_data2(
-                            stock_list=[stock],
-                            period=period,
-                            start_time=start_time,
-                            end_time=end_time
-                        )
-                    # 验证数据是否真正下载成功
-                    try:
+                        # 尝试获取少量数据来验证下载是否成功
                         test_data = self.xt.get_local_data(
                             field_list=['open', 'close', 'volume'],
                             stock_list=[stock],
@@ -976,19 +948,50 @@ class DataAPI:
                             end_time=end_time,
                             count=1
                         )
+                        # 如果能获取到数据且不为空，则认为下载成功
                         if stock in test_data and test_data[stock] is not None and len(test_data[stock]) > 0:
                             results[stock] = True
-                            print(f"{stock} 历史数据下载完成并验证成功")
                         else:
                             results[stock] = False
-                            print(f"{stock} 历史数据下载完成但验证失败")
                     except Exception:
                         results[stock] = False
-                        print(f"{stock} 历史数据下载完成但验证失败")
-                except Exception as stock_error:
-                    results[stock] = False
-                    print(f"{stock} 历史数据下载失败: {stock_error}")
-        
+
+            except Exception as e:
+                # 如果出现异常，尝试逐个下载
+                print(f"批量下载失败，尝试逐个下载: {e}")
+                for stock in stock_list:
+                    try:
+                        # 逐个下载时也需要锁保护（已经在with块中）
+                        self.xt.download_history_data2(
+                            stock_list=[stock],
+                            period=period,
+                            start_time=start_time,
+                            end_time=end_time
+                        )
+
+                        # 验证数据是否真正下载成功
+                        try:
+                            test_data = self.xt.get_local_data(
+                                field_list=['open', 'close', 'volume'],
+                                stock_list=[stock],
+                                period=period,
+                                start_time=start_time,
+                                end_time=end_time,
+                                count=1
+                            )
+                            if stock in test_data and test_data[stock] is not None and len(test_data[stock]) > 0:
+                                results[stock] = True
+                                print(f"{stock} 历史数据下载完成并验证成功")
+                            else:
+                                results[stock] = False
+                                print(f"{stock} 历史数据下载完成但验证失败")
+                        except Exception:
+                            results[stock] = False
+                            print(f"{stock} 历史数据下载完成但验证失败")
+                    except Exception as e2:
+                        results[stock] = False
+                        print(f"{stock} 下载失败: {e2}")
+
         return results
     
     @ErrorHandler.handle_api_error
