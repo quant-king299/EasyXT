@@ -138,10 +138,13 @@ def lesson_03_callback_function():
     """第3课：使用回调函数接收推送"""
     print_section("第3课：使用回调函数实时接收数据推送")
 
+    # ==================== 演示1：基础回调 ====================
+    print_subsection("演示1：回调函数自动执行（无需等待）")
+
     code = '000001.SZ'
 
-    print(f"\n演示股票：{code}")
-    print("使用 subscribe_whole_quote + 回调函数")
+    print(f"\n💡 核心要点：回调函数自动执行，不需要sleep等待！")
+    print(f"演示股票：{code}")
 
     # 创建一个计数器
     counter = {'count': 0, 'max': 5}
@@ -150,6 +153,9 @@ def lesson_03_callback_function():
         """
         tick数据回调函数
 
+        ⚠️ 重要：这个函数不需要手动调用！
+        当服务器推送新数据时，xtquant会自动调用这个函数
+
         Args:
             data: dict {股票代码: tick数据}
         """
@@ -157,42 +163,149 @@ def lesson_03_callback_function():
             tick = data[code]
             counter['count'] += 1
 
-            print(f"\n[推送 #{counter['count']}] {datetime.now().strftime('%H:%M:%S')}")
-            print(f"  最新价: {tick.get('lastPrice', 0):.2f}")
+            # 显示精确时间戳，证明是自动执行
+            print(f"\n📨 [推送 #{counter['count']}] {datetime.now().strftime('%H:%M:%S.%f')[:-3]}")
+            print(f"   回调函数自动执行！无需等待！")
+            print(f"   最新价: {tick.get('lastPrice', 0):.2f}")
 
             # 显示五档
             ask_price = tick.get('askPrice', 0)
             bid_price = tick.get('bidPrice', 0)
 
             if ask_price and hasattr(ask_price, '__len__') and len(ask_price) > 0:
-                print(f"  卖一: {ask_price[0]:.2f}  买一: {bid_price[0]:.2f}")
+                print(f"   买一: {bid_price[0]:.2f}  卖一: {ask_price[0]:.2f}")
 
     print("\n开始订阅，将接收5次数据推送...")
-    print("(收到数据后会自动停止)\n")
+    print("(数据来了会自动触发回调函数)\n")
 
     # 订阅并设置回调
     xt.subscribe_whole_quote(code_list=[code], callback=on_tick_data)
 
-    # 等待推送
+    # 等待推送（这里只是为了保持程序运行，不是等待数据！）
     start_time = time.time()
     while counter['count'] < counter['max'] and (time.time() - start_time) < 30:
-        time.sleep(0.1)
+        time.sleep(0.01)  # 极短休眠，让CPU可以处理回调
 
     if counter['count'] >= counter['max']:
         print(f"\n✓ 成功接收 {counter['count']} 次数据推送")
     else:
         print(f"\n⚠️ 30秒内只收到 {counter['count']} 次推送")
 
+    # ==================== 演示2：回调函数中执行逻辑 ====================
+    print_subsection("演示2：在回调函数中执行交易逻辑")
+
+    code = '600000.SH'
+    last_price = {'value': None}
+    alert_count = {'value': 0}
+
+    def on_tick_with_logic(data):
+        """回调函数中执行价格监控逻辑"""
+        if code in data:
+            tick = data[code]
+            current_price = tick.get('lastPrice', 0)
+
+            # 首次推送记录价格
+            if last_price['value'] is None:
+                last_price['value'] = current_price
+                print(f"\n📊 [{datetime.now().strftime('%H:%M:%S')}] "
+                      f"开始监控: {code}, 初始价格: {current_price:.2f}")
+                return
+
+            # 计算价格变化
+            price_change = current_price - last_price['value']
+            change_pct = (price_change / last_price['value']) * 100
+
+            # 价格变动超过0.01元时触发提示
+            if abs(price_change) >= 0.01:
+                direction = "📈 上涨" if price_change > 0 else "📉 下跌"
+                print(f"\n{direction} | {datetime.now().strftime('%H:%M:%S.%f')[:-3]} | "
+                      f"{last_price['value']:.2f} → {current_price:.2f} | "
+                      f"变动: {price_change:+.2f} ({change_pct:+.2f}%)")
+                last_price['value'] = current_price
+                alert_count['value'] += 1
+
+    print(f"\n监控股票: {code}")
+    print("策略: 价格变动超过0.01元时触发提示")
+    print("注意：回调函数自动执行，无需轮询！\n")
+
+    xt.subscribe_whole_quote(code_list=[code], callback=on_tick_with_logic)
+
+    # 运行10秒
+    start_time = time.time()
+    while time.time() - start_time < 10:
+        time.sleep(0.01)
+
+    print(f"\n✓ 10秒内触发了 {alert_count['value']} 次价格变动提示")
+
+    # ==================== 演示3：多股票回调 ====================
+    print_subsection("演示3：同时监控多只股票")
+
+    codes = ['000001.SZ', '000002.SZ']
+    push_count = {'value': 0}
+
+    def on_multi_tick(data):
+        """多股票回调函数"""
+        timestamp = datetime.now().strftime('%H:%M:%S.%f')[:-3]
+        print(f"\n📨 [{timestamp}] 收到推送:")
+
+        for code in codes:
+            if code in data:
+                tick_list = data[code]
+                # subscribe_whole_quote返回的是tick数组
+                if isinstance(tick_list, list) and len(tick_list) > 0:
+                    tick = tick_list[-1]  # 取最新的tick
+                else:
+                    tick = tick_list
+
+                price = tick.get('lastPrice', 0)
+                print(f"   {code}: {price:.2f} 元", end='  ')
+
+        push_count['value'] += 1
+
+    print(f"\n监控股票: {codes}")
+    print(f"目标: 接收 3 次推送\n")
+
+    xt.subscribe_whole_quote(code_list=codes, callback=on_multi_tick)
+
+    start_time = time.time()
+    while push_count['value'] < 3 and (time.time() - start_time) < 30:
+        time.sleep(0.01)
+
+    print(f"\n✓ 演示完成")
+
     print("\n【回调函数要点】")
-    print("  1. 回调函数由系统自动调用，有新数据时触发")
-    print("  2. 回调函数的参数就是推送的数据")
-    print("  3. 可以在回调函数中实时处理数据")
-    print("  4. 适合持续监控行情的场景")
+    print("  1. ✅ 回调函数由系统自动调用，有新数据时触发")
+    print("  2. ✅ 不需要sleep等待，数据来了立即执行")
+    print("  3. ✅ 可以在回调函数中实时处理数据")
+    print("  4. ✅ 适合持续监控行情的场景")
+    print("  5. ✅ 回调函数中可以实现任意交易逻辑")
 
 
 def lesson_04_order_book_data():
     """第4课：正确获取五档行情数据"""
     print_section("第4课：五档行情数据结构详解")
+
+    print("""
+⚠️ 重要说明：主动获取 vs 回调函数
+
+【方式1：回调函数】推荐 ✅ (详见第3课)
+  - 数据推送后回调函数自动执行
+  - 实时性最好，零延迟
+  - 适合持续监控行情
+  - 不需要等待
+
+【方式2：主动获取】本课演示 ⚠️
+  - subscribe_quote() 订阅
+  - get_full_tick() 从缓存读取
+  - 适合一次性获取数据
+  - ⚠️ 必须等待数据推送到缓存
+
+【主动获取的两种等待方式】
+  ❌ 方式A：固定等待 (time.sleep(2)) - 简单但浪费
+  ✅ 方式B：轮询检查 - 数据到了立即返回，推荐
+
+本课演示：轮询检查方式（推荐）
+    """)
 
     api = easy_xt.get_api()
     api.init_data()
@@ -205,18 +318,50 @@ def lesson_04_order_book_data():
     # 订阅
     print("\n步骤1: 订阅tick行情")
     xt.subscribe_quote(code, period='tick')
+    print("  ✓ 订阅成功")
 
-    # 等待推送
-    print("步骤2: 等待数据推送（2秒）...")
-    time.sleep(2.0)
+    # 轮询等待数据到达
+    print("\n步骤2: 轮询等待数据推送（数据到了立即返回）")
+    print("       优势：不浪费时间，数据到了立即获取")
+
+    def wait_for_tick(code, timeout=3.0, interval=0.1):
+        """
+        轮询等待tick数据
+
+        Args:
+            code: 股票代码
+            timeout: 超时时间（秒）
+            interval: 检查间隔（秒）
+
+        Returns:
+            tick数据或None
+        """
+        import time
+        start_time = time.time()
+
+        while time.time() - start_time < timeout:
+            tick_data = xt.get_full_tick([code])
+
+            if tick_data and code in tick_data:
+                tick = tick_data[code]
+
+                # 检查五档数据是否存在
+                ask_price = tick.get('askPrice', [])
+                if ask_price and len(ask_price) > 0 and ask_price[0] > 0:
+                    elapsed = time.time() - start_time
+                    print(f"  ✓ 数据已到达（耗时 {elapsed:.3f} 秒）")
+                    return tick
+
+            time.sleep(interval)
+
+        print("  ⚠️ 超时，数据未到达")
+        return None
 
     # 获取数据
-    print("步骤3: 获取完整tick数据")
-    tick_data = xt.get_full_tick([code])
+    tick = wait_for_tick(code, timeout=3.0, interval=0.1)
 
-    if tick_data and code in tick_data:
-        tick = tick_data[code]
-
+    if tick is not None:
+        print("\n步骤3: 获取完整tick数据")
         print_subsection("五档数据的字段结构")
 
         print("\n原始数据字段（根据官方文档）：")
@@ -285,11 +430,21 @@ def lesson_04_order_book_data():
                 else:
                     print(f"  市场情绪: 买卖平衡 ➡️")
 
+    else:
+        print("\n⚠️ 未能获取到五档数据")
+        print("   可能原因：")
+        print("   - 非交易时间")
+        print("   - 网络连接问题")
+        print("   - QMT服务未启动")
+
     print("\n【重要提示】")
     print("  1. 五档数据必须先订阅才能获取")
     print("  2. askPrice/bidPrice 是数组，不是单个值")
     print("  3. 索引0表示第一档（买一/卖一）")
     print("  4. 非交易时间五档数据可能为空")
+    print("  5. 主动获取推荐使用轮询检查，而非固定等待")
+    print("     - 固定等待: time.sleep(2) - 简单但浪费时间")
+    print("     - 轮询检查: 数据到了立即返回 - 推荐 ✅")
 
 
 def lesson_05_easy_xt_wrapper():
@@ -467,13 +622,51 @@ def lesson_06_common_pitfalls():
   - 数据是数组格式，需要索引访问
 
 解决：
-  ✓ 至少等待2秒让数据推送
-  ✓ 使用正确的字段名
-  ✓ 使用 askPrice[0] 获取第一档
+  ✓ 方式A：使用轮询检查（推荐）
+    def wait_for_tick(code, timeout=3.0):
+        start = time.time()
+        while time.time() - start < timeout:
+            tick_data = xt.get_full_tick([code])
+            if tick_data and code in tick_data:
+                ask_price = tick_data[code].get('askPrice', [])
+                if ask_price and len(ask_price) > 0:
+                    return tick_data[code]
+            time.sleep(0.1)
+        return None
+
+  ✓ 方式B：固定等待（简单但不推荐）
+    time.sleep(2.0)  # 保守估计，可能浪费时间
+
+  ✓ 使用正确的字段名和索引
+    ask_price[0]  # 获取卖一价
+
+💡 最佳实践：
+  - 如果只需要一次性获取：使用轮询检查
+  - 如果需要持续监控：使用回调函数（第3课）
 
 ---
 
-❓ 问题2：非交易时间数据为空
+❓ 问题2：为什么要用轮询而不是固定等待？
+
+原因：
+  - 固定等待(time.sleep(2))：可能等太久或不够
+  - 轮询检查：数据到了立即返回，不浪费时间
+
+对比：
+  方式           | 响应时间     | 代码复杂度 | 推荐度
+  ---------------|-------------|-----------|--------
+  固定等待2秒    | 2秒（固定）  | 简单      | ⭐⭐
+  固定等待0.5秒  | 0.5秒       | 简单      | ⭐⭐⭐
+  轮询检查       | 0.1-0.3秒   | 中等      | ⭐⭐⭐⭐⭐
+  回调函数       | 0秒（实时） | 简单      | ⭐⭐⭐⭐⭐
+
+💡 推荐选择：
+  - 持续监控行情 → 使用回调函数
+  - 一次性获取   → 使用轮询检查
+
+---
+
+❓ 问题3：非交易时间数据为空
 
 原因：
   - 非交易时间（周末、夜间）五档数据为0是正常的
@@ -486,7 +679,7 @@ def lesson_06_common_pitfalls():
 
 ---
 
-❓ 问题3：回调函数不执行
+❓ 问题4：回调函数不执行
 
 原因：
   - 订阅后没有保持程序运行
@@ -500,7 +693,7 @@ def lesson_06_common_pitfalls():
 
 ---
 
-❓ 问题4：获取的数据总是旧的
+❓ 问题5：获取的数据总是旧的
 
 原因：
   - 只获取了一次，没有持续订阅
@@ -690,7 +883,8 @@ def main():
     print("  - 使用 tools/诊断tick字段.py - 诊断数据问题")
 
     print("\n💡 提示：")
-    print("  - 订阅机制是获取实时数据的关键")
+    print("  - 回调函数方式：数据来了自动执行，无需等待（推荐）")
+    print("  - 主动获取方式：使用轮询检查，数据到了立即返回")
     print("  - 五档数据需要正确使用 askPrice/bidPrice 数组")
     print("  - 使用EasyXT封装的接口可以简化操作")
 
