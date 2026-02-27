@@ -424,11 +424,12 @@ class EasyXT:
         # 获取当前价格
         try:
             current_price_data = self.data.get_current_price(code)
-            if current_price_data.empty or code not in current_price_data.index:
+            if current_price_data.empty:
                 ErrorHandler.log_error(f"无法获取{code}的当前价格")
                 return None
 
-            current_price = current_price_data.loc[code, 'lastPrice']
+            # 获取价格（DataFrame第一行的price列）
+            current_price = current_price_data.iloc[0]['price']
             if current_price <= 0:
                 ErrorHandler.log_error(f"{code}的当前价格无效: {current_price}")
                 return None
@@ -490,11 +491,12 @@ class EasyXT:
 
             # 获取当前价格
             current_price_data = self.data.get_current_price(code)
-            if current_price_data.empty or code not in current_price_data.index:
+            if current_price_data.empty:
                 ErrorHandler.log_error(f"无法获取{code}的当前价格")
                 return None
 
-            current_price = current_price_data.loc[code, 'lastPrice']
+            # 获取价格（DataFrame第一行的price列）
+            current_price = current_price_data.iloc[0]['price']
             if current_price <= 0:
                 ErrorHandler.log_error(f"{code}的当前价格无效: {current_price}")
                 return None

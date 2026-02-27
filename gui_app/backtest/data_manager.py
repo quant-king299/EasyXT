@@ -217,10 +217,18 @@ class DataManager:
                 except Exception as list_err:
                     # 方法2：如果获取列表失败，尝试简单获取数据
                     # 添加超时和异常处理
-                    import warnings
-                    with warnings.catch_warnings():
-                        warnings.simplefilter("ignore")
-                        test_data = qs.get_data('000001', start='2024-01-01', end='2024-01-02')
+                    try:
+                        import warnings
+                        with warnings.catch_warnings():
+                            warnings.simplefilter("ignore")
+                            test_data = qs.get_data('000001', start='2024-01-01', end='2024-01-02')
+                    except Exception as data_err:
+                        # qstock.get_data() 也失败了，返回不可用状态
+                        return {
+                            'available': False,
+                            'connected': False,
+                            'message': f'QStock连接失败: {str(data_err)[:100]}'
+                        }
 
                 # 检查是否成功获取数据
                 if test_data is not None and not test_data.empty:

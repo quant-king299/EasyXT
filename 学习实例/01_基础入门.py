@@ -536,200 +536,6 @@ def lesson_07_trading_dates():
     except Exception as e:
         print(f"✗ 获取交易日失败: {e}")
 
-def lesson_08_split_order():
-    """第8课：拆单交易（高级功能）"""
-    print("\n" + "=" * 60)
-    print("第8课：拆单交易（高级功能）")
-    print("=" * 60)
-    print("💡 拆单交易：将大额订单拆分成多个小单，降低市场冲击")
-
-    # 拆单函数示例
-    def split_order(volume: int, max_single_volume: int = 10000,
-                   split_strategy: str = 'equal') -> list:
-        """
-        拆单函数
-
-        Args:
-            volume: 总数量
-            max_single_volume: 单笔最大数量
-            split_strategy: 拆单策略
-                - 'equal': 平均拆分
-                - 'decreasing': 递减拆分（大单在前）
-                - 'increasing': 递增拆分（小单在前）
-
-        Returns:
-            list: 拆分后的数量列表
-        """
-        if volume <= max_single_volume:
-            return [volume]
-
-        num_splits = (volume + max_single_volume - 1) // max_single_volume
-
-        if split_strategy == 'equal':
-            # 平均拆分
-            base_volume = volume // num_splits
-            remainder = volume % num_splits
-            result = [base_volume + 1] * remainder + [base_volume] * (num_splits - remainder)
-            return result
-
-        elif split_strategy == 'decreasing':
-            # 递减拆分（大单在前）
-            result = []
-            remaining = volume
-            while remaining > 0:
-                current = min(max_single_volume, remaining)
-                result.append(current)
-                remaining -= current
-            return result
-
-        elif split_strategy == 'increasing':
-            # 递增拆分（小单在前）
-            result = []
-            remaining = volume
-            while remaining > 0:
-                current = min(max_single_volume, remaining)
-                result.insert(0, current)  # 插入到前面
-                remaining -= current
-            return result
-
-        else:
-            # 默认平均拆分
-            return split_order(volume, max_single_volume, 'equal')
-
-    # 演示1：基础拆单
-    print("\n1. 基础拆单示例")
-    print("-" * 40)
-
-    total_volume = 50000  # 50000股
-    max_single = 10000    # 单笔最大10000股
-
-    print(f"总数量: {total_volume} 股")
-    print(f"单笔最大: {max_single} 股")
-
-    # 不同策略拆分
-    strategies = ['equal', 'decreasing', 'increasing']
-    strategy_names = {
-        'equal': '平均拆分',
-        'decreasing': '递减拆分（大单在前）',
-        'increasing': '递增拆分（小单在前）'
-    }
-
-    for strategy in strategies:
-        splits = split_order(total_volume, max_single, strategy)
-        print(f"\n{strategy_names[strategy]}:")
-        print(f"  拆分数: {len(splits)} 笔")
-        print(f"  拆分明细: {splits}")
-
-    # 演示2：实际交易拆单
-    print("\n\n2. 实际交易拆单应用")
-    print("-" * 40)
-    print("假设场景：买入 100000 股，单笔最大 5000 股")
-
-    api = easy_xt.get_api()
-
-    # 初始化交易服务（示例，实际使用时需要配置）
-    print("\n⚠️ 注意：以下为示例代码，实际交易需要：")
-    print("   1. 初始化交易服务: api.init_trade(userdata_path, session_id)")
-    print("   2. 添加账户: api.add_account(account_id)")
-    print("   3. 确认账户资金充足")
-
-    example_code = '''
-# 示例代码：拆单买入
-def split_and_buy(api, account_id, code, total_volume, max_single=5000):
-    """拆单买入函数"""
-
-    # 1. 拆分订单
-    splits = split_order(total_volume, max_single, 'equal')
-    print(f"总数量: {total_volume}, 拆分为 {len(splits)} 笔")
-
-    # 2. 逐笔下单
-    order_ids = []
-    for i, volume in enumerate(splits, 1):
-        print(f"下单第 {i}/{len(splits)} 笔: {volume} 股")
-
-        # 调用买入接口
-        order_id = api.buy(
-            account_id=account_id,
-            code=code,
-            volume=volume,
-            price=0,  # 市价单
-            price_type='market'
-        )
-
-        if order_id:
-            order_ids.append(order_id)
-            print(f"  ✓ 下单成功，委托号: {order_id}")
-        else:
-            print(f"  ✗ 下单失败")
-
-        # 避免下单过快
-        import time
-        time.sleep(0.5)  # 间隔0.5秒
-
-    return order_ids
-
-# 使用示例
-# order_ids = split_and_buy(api, '你的账户ID', '000001.SZ', 100000, 5000)
-# print(f"拆单完成，共 {len(order_ids)} 笔委托")
-'''
-
-    print(example_code)
-
-    # 演示3：智能拆单策略
-    print("\n\n3. 智能拆单策略")
-    print("-" * 40)
-
-    def smart_split_order(volume, max_single, current_price=10,
-                          market_impact_threshold=0.001):
-        """
-        智能拆单：考虑市场冲击的拆单策略
-
-        Args:
-            volume: 总数量
-            max_single: 单笔最大数量
-            current_price: 当前价格
-            market_impact_threshold: 市场冲击阈值（比例）
-
-        Returns:
-            list: 拆分后的订单列表，每个订单包含数量和时间间隔
-        """
-        # 计算单笔最大金额
-        max_amount = max_single * current_price
-
-        # 计算拆分数
-        num_splits = max(3, (volume + max_single - 1) // max_single)
-
-        # 平均拆分
-        volumes = split_order(volume, volume // num_splits, 'equal')
-
-        # 生成订单列表（包含时间间隔）
-        orders = []
-        for i, vol in enumerate(volumes):
-            orders.append({
-                'volume': vol,
-                'delay': i * 1.0  # 每笔间隔1秒
-            })
-
-        return orders
-
-    # 演示智能拆单
-    print("智能拆单示例:")
-    smart_orders = smart_split_order(100000, 5000, current_price=15)
-    print(f"总数量: 100000 股，当前价格: 15 元")
-    print(f"拆分结果:")
-    for i, order in enumerate(smart_orders, 1):
-        print(f"  第{i}笔: {order['volume']} 股，间隔 {order['delay']} 秒")
-
-    print("\n💡 智能拆单优势:")
-    print("  - 降低市场冲击成本")
-    print("  - 提高成交概率")
-    print("  - 减少滑点影响")
-
-    print("\n📚 进阶学习：")
-    print("  想要在实际交易中使用拆单功能？")
-    print("  请学习：02_交易基础.py - 第6课：拆单交易实战")
-    print("  该课程将演示如何在实际交易中应用拆单策略")
-
 def main():
     """主函数：运行所有基础学习课程"""
     print("🎓 EasyXT基础入门学习课程")
@@ -744,8 +550,7 @@ def main():
         lesson_04_date_range_data,
         lesson_05_current_price,
         lesson_06_stock_list,
-        lesson_07_trading_dates,
-        lesson_08_split_order
+        lesson_07_trading_dates
     ]
     
     for lesson in lessons:
@@ -771,7 +576,6 @@ def main():
     print("✓ 第5课: 实时价格和五档行情")
     print("✓ 第6课: 获取股票列表")
     print("✓ 第7课: 获取交易日历")
-    print("✓ 第8课: 拆单交易（高级功能）")
 
     print("\n接下来可以学习：")
     print("- 02_交易基础.py - 学习基础交易功能")

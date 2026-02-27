@@ -1213,9 +1213,38 @@ def lesson_05_quick_buy(api):
     if confirm.lower() not in ['yes', 'y']:
         print("已跳过便捷买入")
         return
-    
-    # 1. 按金额买入
-    buy_amount = 1000  # 买入1000元
+
+    # 先获取当前价格，计算合适的买入金额
+    print(f"\n正在获取 {TEST_CODE} 的当前价格...")
+    try:
+        price_data = api.get_current_price(TEST_CODE)
+        if not price_data.empty:
+            current_price = price_data.iloc[0]['price']
+            print(f"当前价格: {current_price:.2f} 元/股")
+
+            # 计算买入1手（100股）需要的金额
+            min_amount = current_price * 100
+            print(f"买入1手(100股)最少需要: {min_amount:.2f} 元")
+
+            # 建议金额（向上取整到100的倍数）
+            suggested_amount = int(min_amount / 100) * 100 + 200
+            print(f"建议买入金额: {suggested_amount} 元（可买{int(suggested_amount/current_price/100)*100}股）")
+
+            # 让用户确认或输入金额
+            user_input = input(f"\n请输入买入金额（直接回车使用建议金额 {suggested_amount} 元）: ").strip()
+            if user_input:
+                buy_amount = float(user_input)
+            else:
+                buy_amount = suggested_amount
+
+            print(f"使用买入金额: {buy_amount} 元")
+        else:
+            print("⚠️ 无法获取当前价格，使用默认金额")
+            buy_amount = 1000
+    except Exception as e:
+        print(f"⚠️ 获取价格失败: {e}，使用默认金额")
+        buy_amount = 1000
+
     print(f"\n1. 按金额买入 {TEST_CODE}，金额: {buy_amount}元")
     
     try:
@@ -1235,8 +1264,8 @@ def lesson_05_quick_buy(api):
             if not orders.empty:
                 order_info = orders[orders['order_id'] == order_id]
                 if not order_info.empty:
-                    volume = order_info.iloc[0]['order_volume']
-                    price = order_info.iloc[0]['order_price']
+                    volume = order_info.iloc[0]['volume']
+                    price = order_info.iloc[0]['price']
                     print(f"委托数量: {volume}股")
                     print(f"委托价格: {price:.2f}")
         else:
@@ -1380,8 +1409,8 @@ def lesson_06_split_order(api):
                     order_info = orders[orders['order_id'] == order_id]
                     if not order_info.empty:
                         status = order_info.iloc[0].get('status', '未知')
-                        volume = order_info.iloc[0].get('order_volume', 0)
-                        price = order_info.iloc[0].get('order_price', 0)
+                        volume = order_info.iloc[0].get('volume', 0)
+                        price = order_info.iloc[0].get('price', 0)
                         print(f"  委托 {order_id}: {status}, {volume}股, {price:.2f}元")
         except Exception as e:
             print(f"查询委托状态异常: {e}")
