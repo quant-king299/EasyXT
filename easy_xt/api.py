@@ -393,7 +393,133 @@ class EasyXT:
             ErrorHandler.log_error("交易服务未初始化")
             return None
         return self.trade.sell(account_id, code, volume, price, price_type)
-    
+
+    def quick_buy(self,
+                  account_id: str,
+                  code: str,
+                  amount: float,
+                  price_type: str = 'market') -> Optional[int]:
+        """
+        按金额快速买入股票
+
+        根据指定金额自动计算买入数量并下单
+
+        Args:
+            account_id: 资金账号
+            code: 股票代码
+            amount: 买入金额（元）
+            price_type: 价格类型，'market'市价, 'limit'限价
+
+        Returns:
+            Optional[int]: 委托编号，失败返回None
+
+        Example:
+            >>> # 买入1000元的平安银行
+            >>> order_id = api.quick_buy(account_id='123456', code='000001.SZ', amount=1000)
+        """
+        if not self._trade_connected:
+            ErrorHandler.log_error("交易服务未初始化")
+            return None
+
+        # 获取当前价格
+        try:
+            current_price_data = self.data.get_current_price(code)
+            if current_price_data.empty or code not in current_price_data.index:
+                ErrorHandler.log_error(f"无法获取{code}的当前价格")
+                return None
+
+            current_price = current_price_data.loc[code, 'lastPrice']
+            if current_price <= 0:
+                ErrorHandler.log_error(f"{code}的当前价格无效: {current_price}")
+                return None
+
+            # 计算买入数量（向下取整到100的倍数）
+            # A股最小交易单位是100股（1手）
+            volume = int(amount / current_price / 100) * 100
+
+            if volume < 100:
+                ErrorHandler.log_error(f"金额{amount}元不足以买入100股（当前价格{current_price:.2f}元）")
+                return None
+
+            # 调用买入接口
+            return self.buy(account_id, code, volume, 0, price_type)
+
+        except Exception as e:
+            ErrorHandler.log_error(f"quick_buy失败: {str(e)}")
+            return None
+
+    def quick_sell(self,
+                   account_id: str,
+                   code: str,
+                   amount: float,
+                   price_type: str = 'market') -> Optional[int]:
+        """
+        按金额快速卖出股票
+
+        根据指定金额和持仓计算卖出数量并下单
+
+        Args:
+            account_id: 资金账号
+            code: 股票代码
+            amount: 卖出金额（元）
+            price_type: 价格类型，'market'市价, 'limit'限价
+
+        Returns:
+            Optional[int]: 委托编号，失败返回None
+
+        Example:
+            >>> # 卖出1000元的持仓股票
+            >>> order_id = api.quick_sell(account_id='123456', code='000001.SZ', amount=1000)
+        """
+        if not self._trade_connected:
+            ErrorHandler.log_error("交易服务未初始化")
+            return None
+
+        try:
+            # 获取当前持仓
+            positions = self.get_positions(account_id, code)
+            if positions.empty:
+                ErrorHandler.log_error(f"没有{code}的持仓")
+                return None
+
+            # 获取持仓数量
+            volume_available = positions.iloc[0]['available_volume'] if 'available_volume' in positions.columns else positions.iloc[0]['volume']
+            if volume_available <= 0:
+                ErrorHandler.log_error(f"{code}没有可用持仓")
+                return None
+
+            # 获取当前价格
+            current_price_data = self.data.get_current_price(code)
+            if current_price_data.empty or code not in current_price_data.index:
+                ErrorHandler.log_error(f"无法获取{code}的当前价格")
+                return None
+
+            current_price = current_price_data.loc[code, 'lastPrice']
+            if current_price <= 0:
+                ErrorHandler.log_error(f"{code}的当前价格无效: {current_price}")
+                return None
+
+            # 计算卖出数量（向下取整到100的倍数）
+            volume = int(amount / current_price / 100) * 100
+
+            # 检查是否超过可用持仓
+            if volume > volume_available:
+                volume = int(volume_available / 100) * 100
+                if volume < 100:
+                    ErrorHandler.log_error(f"可用持仓不足{volume_available}股")
+                    return None
+
+            if volume < 100:
+                ErrorHandler.log_error(f"金额{amount}元不足以卖出100股")
+                return None
+
+            # 调用卖出接口
+            return self.sell(account_id, code, volume, 0, price_type)
+
+        except Exception as e:
+            ErrorHandler.log_error(f"quick_sell失败: {str(e)}")
+            return None
+
     def cancel_order(self, account_id: str, order_id: int) -> bool:
         """
         撤销委托
