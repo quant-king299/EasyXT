@@ -455,7 +455,246 @@ class DataAPI:
                 raise
             ErrorHandler.log_error(f"获取实时价格失败: {str(e)}")
             raise DataError(f"获取实时价格失败: {str(e)}")
-    
+
+    @ErrorHandler.handle_api_error
+    def get_order_book(self, codes: Union[str, List[str]]) -> pd.DataFrame:
+        """
+        获取五档行情数据（买卖盘口）
+
+        注意：需要先订阅行情才能获取五档数据
+
+        Args:
+            codes: 股票代码
+
+        Returns:
+            DataFrame: 包含五档买卖价和量的数据
+            字段包括：
+            - code: 股票代码
+            - lastPrice: 最新价
+            - bid1-bid5: 买一到买五价格
+            - ask1-ask5: 卖一到卖五价格
+            - bidVol1-bidVol5: 买一到买五量
+            - askVol1-askVol5: 卖一到卖五量
+
+        Raises:
+            ConnectionError: 连接失败
+            DataError: 数据获取失败
+        """
+        if not self.xt:
+            raise ConnectionError("xtquant未正确导入，无法获取数据")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
+
+        codes = StockCodeUtils.normalize_codes(codes)
+
+        try:
+            # 先订阅行情（重要：必须先订阅才能获取五档数据）
+            if isinstance(codes, str):
+                codes_list = [codes]
+            else:
+                codes_list = codes
+
+            # 订阅每只股票的tick行情
+            print("[DEBUG] 开始订阅行情...")
+            for code in codes_list:
+                try:
+                    # subscribe_quote 订阅行情接口
+                    # period: 'tick' 分笔, '1d' 日线等
+                    if hasattr(self.xt, 'subscribe_quote'):
+                        result = self.xt.subscribe_quote(code, period='tick')
+                        print(f"[DEBUG] {code} 订阅结果: {result}")
+                except Exception as e:
+                    # 订阅失败不中断，继续尝试获取数据
+                    print(f"[DEBUG] {code} 订阅异常: {e}")
+
+            # 等待让订阅生效并重试获取数据
+            import time
+            print("[DEBUG] 等待数据推送...")
+            time.sleep(2.0)  # 增加到2秒
+
+            # 获取完整tick数据，带重试机制
+            tick_data = None
+            max_retries = 3
+            for attempt in range(max_retries):
+                tick_data = self.xt.get_full_tick(codes)
+                if tick_data:
+                    # 检查是否有五档数据
+                    has_order_book = False
+                    for code, tick_info in tick_data.items():
+                        if tick_info:
+                            # 根据官方文档，字段名是 askPrice 和 bidPrice
+                            ask_price = tick_info.get('askPrice')
+                            bid_price = tick_info.get('bidPrice')
+                            # 这些字段可能是数组或单个值
+                            # 检查是否有非空值（数组、非None的数字都算有数据）
+                            if ask_price is not None or bid_price is not None:
+                                has_order_book = True
+                                break
+
+                    if has_order_book:
+                        print(f"[DEBUG] 第{attempt + 1}次尝试成功获取到五档数据")
+                        break
+                    else:
+                        print(f"[DEBUG] 第{attempt + 1}次尝试：五档数据为空，等待2秒后重试...")
+                        if attempt < max_retries - 1:
+                            time.sleep(2.0)
+                else:
+                    print(f"[DEBUG] 第{attempt + 1}次尝试：无法获取tick数据")
+                    if attempt < max_retries - 1:
+                        time.sleep(2.0)
+
+            if not tick_data:
+                raise DataError("无法获取五档行情数据")
+
+            result_list = []
+            for code, tick_info in tick_data.items():
+                if tick_info:
+                    # 获取askPrice和bidPrice - 根据文档这些可能是数组
+                    ask_price = tick_info.get('askPrice', 0)
+                    bid_price = tick_info.get('bidPrice', 0)
+                    ask_vol = tick_info.get('askVol', 0)
+                    bid_vol = tick_info.get('bidVol', 0)
+
+                    # 处理askPrice和bidPrice可能是数组的情况
+                    def extract_price_or_vol(value, index=0):
+                        """提取价格或量，支持数组或单个值"""
+                        if hasattr(value, '__len__') and not isinstance(value, str):
+                            # 是数组或列表
+                            if len(value) > index:
+                                return value[index]
+                            return 0
+                        # 是单个值
+                        if index == 0:
+                            return value if value else 0
+                        return 0
+
+                    # 提取五档行情数据
+                    order_book_data = {
+                        'code': code,
+                        'lastPrice': tick_info.get('lastPrice', 0),
+                        'open': tick_info.get('open', 0),
+                        'high': tick_info.get('high', 0),
+                        'low': tick_info.get('low', 0),
+                        'preClose': tick_info.get('lastClose', 0),
+                        'volume': tick_info.get('volume', 0),
+                        'amount': tick_info.get('amount', 0),
+                        'time': tick_info.get('time', 0),
+                        # 五档买价 - 使用askPrice和bidPrice
+                        'bid1': extract_price_or_vol(bid_price, 0),
+                        'bid2': extract_price_or_vol(bid_price, 1),
+                        'bid3': extract_price_or_vol(bid_price, 2),
+                        'bid4': extract_price_or_vol(bid_price, 3),
+                        'bid5': extract_price_or_vol(bid_price, 4),
+                        # 五档卖价
+                        'ask1': extract_price_or_vol(ask_price, 0),
+                        'ask2': extract_price_or_vol(ask_price, 1),
+                        'ask3': extract_price_or_vol(ask_price, 2),
+                        'ask4': extract_price_or_vol(ask_price, 3),
+                        'ask5': extract_price_or_vol(ask_price, 4),
+                        # 五档买量
+                        'bidVol1': extract_price_or_vol(bid_vol, 0),
+                        'bidVol2': extract_price_or_vol(bid_vol, 1),
+                        'bidVol3': extract_price_or_vol(bid_vol, 2),
+                        'bidVol4': extract_price_or_vol(bid_vol, 3),
+                        'bidVol5': extract_price_or_vol(bid_vol, 4),
+                        # 五档卖量
+                        'askVol1': extract_price_or_vol(ask_vol, 0),
+                        'askVol2': extract_price_or_vol(ask_vol, 1),
+                        'askVol3': extract_price_or_vol(ask_vol, 2),
+                        'askVol4': extract_price_or_vol(ask_vol, 3),
+                        'askVol5': extract_price_or_vol(ask_vol, 4),
+                    }
+                    result_list.append(order_book_data)
+
+            if not result_list:
+                raise DataError("未获取到有效的五档行情数据")
+
+            return pd.DataFrame(result_list)
+
+        except Exception as e:
+            if isinstance(e, (ConnectionError, DataError)):
+                raise
+            ErrorHandler.log_error(f"获取五档行情失败: {str(e)}")
+            raise DataError(f"获取五档行情失败: {str(e)}")
+
+    @ErrorHandler.handle_api_error
+    def get_l2_quote(self, codes: Union[str, List[str]]) -> Dict[str, Dict]:
+        """
+        获取Level2五档行情数据（专用接口）
+
+        Args:
+            codes: 股票代码
+
+        Returns:
+            Dict: {股票代码: {字段: 值}}
+            包含完整的五档买卖价量和逐笔数据
+
+        Raises:
+            ConnectionError: 连接失败
+            DataError: 数据获取失败
+        """
+        if not self.xt:
+            raise ConnectionError("xtquant未正确导入，无法获取数据")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
+
+        codes = StockCodeUtils.normalize_codes(codes)
+
+        try:
+            # 尝试使用get_l2_quote接口
+            if hasattr(self.xt, 'get_l2_quote'):
+                # Level2行情接口
+                l2_data = self.xt.get_l2_quote(codes)
+                if l2_data:
+                    return l2_data
+                else:
+                    raise DataError("Level2行情数据为空，可能需要Level2权限")
+
+            # 如果没有get_l2_quote，使用subscribe_quote订阅后获取
+            elif hasattr(self.xt, 'subscribe_quote'):
+                # 订阅行情
+                for code in codes:
+                    try:
+                        self.xt.subscribe_quote(code, period='tick')
+                    except:
+                        pass
+
+                # 再次获取完整tick
+                tick_data = self.xt.get_full_tick(codes)
+
+                result = {}
+                for code, tick_info in tick_data.items():
+                    if tick_info:
+                        # 检查是否有五档数据
+                        has_bid_ask = (
+                            tick_info.get('bid1', 0) > 0 or
+                            tick_info.get('ask1', 0) > 0
+                        )
+
+                        if has_bid_ask:
+                            result[code] = tick_info
+                        else:
+                            # 如果没有五档数据，添加提示
+                            result[code] = {
+                                **tick_info,
+                                '_note': '当前未获取到五档数据，可能需要Level2权限或交易时间内'
+                            }
+
+                return result if result else tick_data
+
+            else:
+                # 使用get_full_tick作为后备
+                tick_data = self.xt.get_full_tick(codes)
+                return tick_data if tick_data else {}
+
+        except Exception as e:
+            if isinstance(e, (ConnectionError, DataError)):
+                raise
+            ErrorHandler.log_error(f"获取Level2行情失败: {str(e)}")
+            raise DataError(f"获取Level2行情失败: {str(e)}")
+
     @ErrorHandler.handle_api_error
     def get_financial_data(self, 
                           codes: Union[str, List[str]], 
@@ -988,3 +1227,150 @@ class DataAPI:
             raise last_error
         ErrorHandler.log_error(f"获取价格数据失败: {str(last_error)}")
         raise DataError(f"获取价格数据失败: {str(last_error)}")
+
+    # ==================== 订阅相关方法 ====================
+
+    @ErrorHandler.handle_api_error
+    def subscribe_quote(self,
+                        codes: Union[str, List[str]],
+                        period: str = 'tick',
+                        callback: Optional[callable] = None) -> int:
+        """
+        订阅行情数据
+
+        Args:
+            codes: 股票代码
+            period: 周期，'tick'分笔, '1m'1分钟, '5m'5分钟, '1d'日线等
+            callback: 回调函数，接收推送数据
+
+        Returns:
+            int: 订阅号，成功返回>0，失败返回-1
+
+        Raises:
+            ConnectionError: 连接失败
+        """
+        if not self.xt:
+            raise ConnectionError("xtquant未正确导入，无法订阅数据")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用connect()")
+
+        codes = StockCodeUtils.normalize_codes(codes)
+        if isinstance(codes, str):
+            codes = [codes]
+
+        # xtquant的subscribe_quote只支持单个股票订阅
+        # 如果是多个股票，需要逐个订阅，返回第一个订阅号
+        first_seq_id = -1
+        for code in codes:
+            try:
+                seq_id = self.xt.subscribe_quote(code, period=period, callback=callback)
+                if first_seq_id == -1 and seq_id > 0:
+                    first_seq_id = seq_id
+                print(f"  {code} 订阅成功，订阅号: {seq_id}")
+            except Exception as e:
+                print(f"  {code} 订阅失败: {e}")
+
+        return first_seq_id
+
+    @ErrorHandler.handle_api_error
+    def subscribe_whole_quote(self,
+                             codes: Union[str, List[str]],
+                             callback: Optional[callable] = None) -> int:
+        """
+        订阅全推行情数据
+
+        相比subscribe_quote，这个接口更适合订阅大量股票：
+        - 可以一次订阅多个股票
+        - 只支持tick周期
+        - 返回数据格式为 {stock: data}
+
+        Args:
+            codes: 股票代码列表
+            callback: 回调函数
+
+        Returns:
+            int: 订阅号，成功返回>0，失败返回-1
+
+        Raises:
+            ConnectionError: 连接失败
+        """
+        if not self.xt:
+            raise ConnectionError("xtquant未正确导入，无法订阅数据")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用connect()")
+
+        codes = StockCodeUtils.normalize_codes(codes)
+        if isinstance(codes, str):
+            codes = [codes]
+
+        try:
+            seq_id = self.xt.subscribe_whole_quote(code_list=codes, callback=callback)
+            if seq_id > 0:
+                print(f"  订阅成功，订阅号: {seq_id}")
+            else:
+                print(f"  订阅失败")
+            return seq_id
+        except Exception as e:
+            ErrorHandler.log_error(f"订阅全推行情失败: {str(e)}")
+            return -1
+
+    @ErrorHandler.handle_api_error
+    def unsubscribe_quote(self, seq_id: int) -> bool:
+        """
+        取消订阅
+
+        Args:
+            seq_id: 订阅号
+
+        Returns:
+            bool: 是否成功
+        """
+        if not self.xt:
+            return False
+
+        try:
+            self.xt.unsubscribe_quote(seq_id)
+            print(f"  订阅号 {seq_id} 已取消订阅")
+            return True
+        except Exception as e:
+            ErrorHandler.log_error(f"取消订阅失败: {str(e)}")
+            return False
+
+    def run_forever(self, check_interval: float = 1.0):
+        """
+        阻塞当前线程，持续接收行情推送
+
+        Args:
+            check_interval: 检查连接状态的间隔时间（秒）
+        """
+        if not self.xt:
+            print("❌ xtquant未正确导入")
+            return
+
+        if not self._connected:
+            print("❌ 数据服务未连接")
+            return
+
+        print("✓ 开始接收行情推送，按 Ctrl+C 退出...")
+
+        try:
+            # 使用xtquant的run()方法来阻塞并处理回调
+            # 这个方法会定期检查连接状态
+            if hasattr(self.xt, 'run'):
+                self.xt.run()
+            else:
+                # 如果没有run()方法，使用简单的sleep循环
+                import time
+                print(f"  使用兼容模式，检查间隔: {check_interval}秒")
+                while True:
+                    time.sleep(check_interval)
+        except KeyboardInterrupt:
+            print("\n\n✓ 已停止接收行情推送")
+        except Exception as e:
+            # 连接断开会抛出异常
+            if '连接断开' in str(e) or 'is_connected' in str(e):
+                print(f"\n❌ 行情服务连接断开")
+            else:
+                print(f"\n❌ 运行出错: {e}")

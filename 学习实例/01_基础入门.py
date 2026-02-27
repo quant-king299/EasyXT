@@ -213,13 +213,13 @@ def lesson_04_date_range_data():
         print(f"✗ count方式获取失败: {e}")
 
 def lesson_05_current_price():
-    """第5课：获取实时价格"""
+    """第5课：获取实时价格和五档行情"""
     print("\n" + "=" * 60)
-    print("第5课：获取实时价格")
+    print("第5课：获取实时价格和五档行情")
     print("=" * 60)
-    
+
     api = easy_xt.get_api()
-    
+
     # 1. 获取单只股票实时价格
     print("1. 获取平安银行实时价格")
     try:
@@ -230,7 +230,7 @@ def lesson_05_current_price():
                 current = api.mock_get_current_price('000001.SZ')
             else:
                 raise Exception("无法获取实时价格")
-        
+
         if not current.empty:
             print("✓ 实时价格获取成功")
             print(current.to_string())
@@ -238,9 +238,172 @@ def lesson_05_current_price():
             print("✗ 未获取到实时价格")
     except Exception as e:
         print(f"✗ 获取实时价格失败: {e}")
-    
-    # 2. 获取多只股票实时价格
-    print("\n2. 获取多只股票实时价格")
+
+    # 2. 获取五档行情数据（新增）
+    print("\n2. 获取五档行情数据（买卖盘口）")
+    print("💡 提示：需要先订阅行情才能获取五档数据")
+    print("💡 建议：在交易时间内运行，数据更准确")
+
+    try:
+        code = '000001.SZ'
+
+        # 使用easy_xt的get_order_book获取五档行情
+        print(f"\n使用easy_xt获取 {code} 的五档行情...")
+        print("步骤1: 订阅tick行情...")
+        print("步骤2: 获取完整tick数据...")
+        print("步骤3: 提取五档行情数据...")
+
+        order_book = api.get_order_book(code)
+
+        if order_book is not None and not order_book.empty:
+            print("✓ 五档行情获取成功")
+
+            # 获取第一行数据
+            data = order_book.iloc[0]
+
+            # 检查五档数据是否有值
+            has_bid_ask_data = (
+                data['bid1'] > 0 or
+                data['ask1'] > 0 or
+                data['bidVol1'] > 0 or
+                data['askVol1'] > 0
+            )
+
+            # 显示基础信息
+            print("\n" + "="*50)
+            print(f"{'股票代码':<10} {data['code']}")
+            print(f"{'最新价':<10} {data['lastPrice']:.2f}")
+            print(f"{'开盘价':<10} {data['open']:.2f}")
+            print(f"{'最高价':<10} {data['high']:.2f}")
+            print(f"{'最低价':<10} {data['low']:.2f}")
+            print("="*50)
+
+            if has_bid_ask_data:
+                # 有五档数据，正常显示
+                print("\n【五档盘口】")
+                print(f"{'档位':<8} {'买盘':<20} {'卖盘':<20}")
+                print("-"*50)
+
+                for i in range(1, 6):
+                    bid_price = data[f'bid{i}']
+                    ask_price = data[f'ask{i}']
+                    bid_vol = data[f'bidVol{i}']
+                    ask_vol = data[f'askVol{i}']
+
+                    if bid_price > 0 or ask_price > 0:
+                        bid_str = f"{bid_price:.2f} ({bid_vol:,.0f} 手)" if bid_price > 0 else "--"
+                        ask_str = f"{ask_price:.2f} ({ask_vol:,.0f} 手)" if ask_price > 0 else "--"
+                        print(f"  {i}档    {bid_str:<20} {ask_str:<20}")
+                    else:
+                        break
+
+                # 计算买卖价差
+                bid1 = data['bid1']
+                ask1 = data['ask1']
+                if bid1 > 0 and ask1 > 0:
+                    spread = ask1 - bid1
+                    spread_pct = (spread / bid1) * 100
+                    print(f"\n【盘口分析】")
+                    print(f"买卖价差: {spread:.2f} 元 ({spread_pct:.3f}%)")
+                    print(f"中间价: {(bid1 + ask1) / 2:.2f} 元")
+
+                # 计算买卖盘总量
+                total_bid_vol = sum(data[f'bidVol{i}'] for i in range(1, 6))
+                total_ask_vol = sum(data[f'askVol{i}'] for i in range(1, 6))
+
+                if total_bid_vol > 0 or total_ask_vol > 0:
+                    print(f"\n【盘口总量】")
+                    print(f"买盘总量: {total_bid_vol:,.0f} 手")
+                    print(f"卖盘总量: {total_ask_vol:,.0f} 手")
+
+                    if total_bid_vol > 0 and total_ask_vol > 0:
+                        ratio = total_bid_vol / total_ask_vol
+                        print(f"买卖比: {ratio:.2f}")
+                        if ratio > 1:
+                            print(f"市场情绪: {'买盘强势' if ratio > 1.2 else '买盘略强'}")
+                        elif ratio < 1:
+                            print(f"市场情绪: {'卖盘强势' if ratio < 0.8 else '卖盘略强'}")
+                        else:
+                            print(f"市场情绪: 买卖平衡")
+
+                print(f"\n【数据字段】")
+                print(f"可用字段: {', '.join(order_book.columns.tolist())}")
+
+            else:
+                # 五档数据为0的情况
+                print("\n⚠️ 五档行情数据为空（值为0）")
+                print("\n【诊断信息】")
+                print(f"当前时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"星期: {['一', '二', '三', '四', '五', '六', '日'][datetime.now().weekday()]}")
+
+                # 检查是否是交易时间
+                current_hour = datetime.now().hour
+                current_minute = datetime.now().minute
+                current_weekday = datetime.now().weekday()
+
+                is_weekend = current_weekday >= 5  # 周六周日
+                # 交易时间：9:30-11:30, 13:00-15:00
+                morning = (9 < current_hour < 11) or (current_hour == 9 and current_minute >= 30) or (current_hour == 11 and current_minute <= 30)
+                afternoon = (13 <= current_hour < 15)
+                is_trading_time = morning or afternoon
+
+                print(f"\n【时间检查】")
+                print(f"是否周末: {'是' if is_weekend else '否'}")
+                print(f"是否交易时间: {'是' if is_trading_time else '否'}")
+
+                if is_weekend:
+                    print("\n💡 原因：今天是周末，市场不开盘")
+                    print("   请在周一到周五的交易时间（9:30-15:00）运行")
+
+                elif not is_trading_time:
+                    print(f"\n💡 原因：当前不是交易时间（当前{current_hour:02d}:{current_minute:02d}）")
+                    print("   请在交易时间（9:30-15:00）运行")
+
+                else:
+                    print("\n💡 可能原因：")
+                    print("   1. QMT未登录或连接断开")
+                    print("   2. 股票停牌")
+                    print("   3. 需要Level2行情权限才能获取五档数据")
+                    print("   4. 订阅数据推送延迟（已自动重试3次）")
+                    print("   5. QMT客户端未订阅tick行情")
+                    print("\n【订阅机制说明】")
+                    print("   五档行情数据通过异步推送获取：")
+                    print("   1. subscribe_quote() - 发送订阅请求")
+                    print("   2. QMT服务器推送tick数据到客户端")
+                    print("   3. get_full_tick() - 从缓存读取推送的数据")
+                    print("   4. 如果数据还没推送，需要等待或重试")
+
+                print("\n【建议】")
+                print("   ✓ 在交易时间（9:30-15:00）内运行")
+                print("   ✓ 确保QMT客户端已登录")
+                print("   ✓ 检查QMT客户端是否显示实时五档数据")
+                print("   ✓ 确认是否有Level2行情权限")
+                print("   ✓ 等待几秒后重试（已自动重试3次，每次间隔2秒）")
+
+        else:
+            print("⚠️ 五档行情数据为空")
+            print("💡 可能的原因：")
+            print("  - QMT客户端未启动")
+            print("  - 数据服务未连接")
+            print("  - 当前非交易时间")
+
+    except Exception as e:
+        error_msg = str(e)
+        print(f"⚠️ 获取五档行情失败: {error_msg}")
+
+        if "xtquant" in error_msg or "xtdata" in error_msg:
+            print("\n💡 提示：")
+            print("  - xtdata需要从迅投QMT客户端目录安装")
+            print("  - 请确保QMT客户端已启动")
+            print("  - 可以先使用api.get_current_price()获取基础行情")
+        else:
+            print("\n💡 请检查：")
+            print("  - QMT客户端是否已启动")
+            print("  - 是否已调用api.init_data()")
+            print("  - 网络连接是否正常")
+
+    # 3. 获取多只股票实时价格
+    print("\n3. 获取多只股票实时价格")
     try:
         codes = ['000001.SZ', '000002.SZ', '600000.SH', '600036.SH']
         current = api.get_current_price(codes)
@@ -250,7 +413,7 @@ def lesson_05_current_price():
                 current = api.mock_get_current_price(codes)
             else:
                 raise Exception("无法获取实时价格")
-        
+
         if not current.empty:
             print("✓ 多股票实时价格获取成功")
             print("实时价格数据:")
@@ -258,7 +421,7 @@ def lesson_05_current_price():
             available_columns = ['code', 'price', 'open', 'high', 'low', 'pre_close']
             display_columns = [col for col in available_columns if col in current.columns]
             print(current[display_columns].to_string())
-            
+
             # 计算涨跌幅
             if 'price' in current.columns and 'pre_close' in current.columns:
                 print("\n涨跌幅计算:")
@@ -373,6 +536,195 @@ def lesson_07_trading_dates():
     except Exception as e:
         print(f"✗ 获取交易日失败: {e}")
 
+def lesson_08_split_order():
+    """第8课：拆单交易（高级功能）"""
+    print("\n" + "=" * 60)
+    print("第8课：拆单交易（高级功能）")
+    print("=" * 60)
+    print("💡 拆单交易：将大额订单拆分成多个小单，降低市场冲击")
+
+    # 拆单函数示例
+    def split_order(volume: int, max_single_volume: int = 10000,
+                   split_strategy: str = 'equal') -> list:
+        """
+        拆单函数
+
+        Args:
+            volume: 总数量
+            max_single_volume: 单笔最大数量
+            split_strategy: 拆单策略
+                - 'equal': 平均拆分
+                - 'decreasing': 递减拆分（大单在前）
+                - 'increasing': 递增拆分（小单在前）
+
+        Returns:
+            list: 拆分后的数量列表
+        """
+        if volume <= max_single_volume:
+            return [volume]
+
+        num_splits = (volume + max_single_volume - 1) // max_single_volume
+
+        if split_strategy == 'equal':
+            # 平均拆分
+            base_volume = volume // num_splits
+            remainder = volume % num_splits
+            result = [base_volume + 1] * remainder + [base_volume] * (num_splits - remainder)
+            return result
+
+        elif split_strategy == 'decreasing':
+            # 递减拆分（大单在前）
+            result = []
+            remaining = volume
+            while remaining > 0:
+                current = min(max_single_volume, remaining)
+                result.append(current)
+                remaining -= current
+            return result
+
+        elif split_strategy == 'increasing':
+            # 递增拆分（小单在前）
+            result = []
+            remaining = volume
+            while remaining > 0:
+                current = min(max_single_volume, remaining)
+                result.insert(0, current)  # 插入到前面
+                remaining -= current
+            return result
+
+        else:
+            # 默认平均拆分
+            return split_order(volume, max_single_volume, 'equal')
+
+    # 演示1：基础拆单
+    print("\n1. 基础拆单示例")
+    print("-" * 40)
+
+    total_volume = 50000  # 50000股
+    max_single = 10000    # 单笔最大10000股
+
+    print(f"总数量: {total_volume} 股")
+    print(f"单笔最大: {max_single} 股")
+
+    # 不同策略拆分
+    strategies = ['equal', 'decreasing', 'increasing']
+    strategy_names = {
+        'equal': '平均拆分',
+        'decreasing': '递减拆分（大单在前）',
+        'increasing': '递增拆分（小单在前）'
+    }
+
+    for strategy in strategies:
+        splits = split_order(total_volume, max_single, strategy)
+        print(f"\n{strategy_names[strategy]}:")
+        print(f"  拆分数: {len(splits)} 笔")
+        print(f"  拆分明细: {splits}")
+
+    # 演示2：实际交易拆单
+    print("\n\n2. 实际交易拆单应用")
+    print("-" * 40)
+    print("假设场景：买入 100000 股，单笔最大 5000 股")
+
+    api = easy_xt.get_api()
+
+    # 初始化交易服务（示例，实际使用时需要配置）
+    print("\n⚠️ 注意：以下为示例代码，实际交易需要：")
+    print("   1. 初始化交易服务: api.init_trade(userdata_path, session_id)")
+    print("   2. 添加账户: api.add_account(account_id)")
+    print("   3. 确认账户资金充足")
+
+    example_code = '''
+# 示例代码：拆单买入
+def split_and_buy(api, account_id, code, total_volume, max_single=5000):
+    """拆单买入函数"""
+
+    # 1. 拆分订单
+    splits = split_order(total_volume, max_single, 'equal')
+    print(f"总数量: {total_volume}, 拆分为 {len(splits)} 笔")
+
+    # 2. 逐笔下单
+    order_ids = []
+    for i, volume in enumerate(splits, 1):
+        print(f"下单第 {i}/{len(splits)} 笔: {volume} 股")
+
+        # 调用买入接口
+        order_id = api.buy(
+            account_id=account_id,
+            code=code,
+            volume=volume,
+            price=0,  # 市价单
+            price_type='market'
+        )
+
+        if order_id:
+            order_ids.append(order_id)
+            print(f"  ✓ 下单成功，委托号: {order_id}")
+        else:
+            print(f"  ✗ 下单失败")
+
+        # 避免下单过快
+        import time
+        time.sleep(0.5)  # 间隔0.5秒
+
+    return order_ids
+
+# 使用示例
+# order_ids = split_and_buy(api, '你的账户ID', '000001.SZ', 100000, 5000)
+# print(f"拆单完成，共 {len(order_ids)} 笔委托")
+'''
+
+    print(example_code)
+
+    # 演示3：智能拆单策略
+    print("\n\n3. 智能拆单策略")
+    print("-" * 40)
+
+    def smart_split_order(volume, max_single, current_price=10,
+                          market_impact_threshold=0.001):
+        """
+        智能拆单：考虑市场冲击的拆单策略
+
+        Args:
+            volume: 总数量
+            max_single: 单笔最大数量
+            current_price: 当前价格
+            market_impact_threshold: 市场冲击阈值（比例）
+
+        Returns:
+            list: 拆分后的订单列表，每个订单包含数量和时间间隔
+        """
+        # 计算单笔最大金额
+        max_amount = max_single * current_price
+
+        # 计算拆分数
+        num_splits = max(3, (volume + max_single - 1) // max_single)
+
+        # 平均拆分
+        volumes = split_order(volume, volume // num_splits, 'equal')
+
+        # 生成订单列表（包含时间间隔）
+        orders = []
+        for i, vol in enumerate(volumes):
+            orders.append({
+                'volume': vol,
+                'delay': i * 1.0  # 每笔间隔1秒
+            })
+
+        return orders
+
+    # 演示智能拆单
+    print("智能拆单示例:")
+    smart_orders = smart_split_order(100000, 5000, current_price=15)
+    print(f"总数量: 100000 股，当前价格: 15 元")
+    print(f"拆分结果:")
+    for i, order in enumerate(smart_orders, 1):
+        print(f"  第{i}笔: {order['volume']} 股，间隔 {order['delay']} 秒")
+
+    print("\n💡 智能拆单优势:")
+    print("  - 降低市场冲击成本")
+    print("  - 提高成交概率")
+    print("  - 减少滑点影响")
+
 def main():
     """主函数：运行所有基础学习课程"""
     print("🎓 EasyXT基础入门学习课程")
@@ -387,7 +739,8 @@ def main():
         lesson_04_date_range_data,
         lesson_05_current_price,
         lesson_06_stock_list,
-        lesson_07_trading_dates
+        lesson_07_trading_dates,
+        lesson_08_split_order
     ]
     
     for lesson in lessons:
@@ -405,10 +758,20 @@ def main():
             input("按回车键继续...")
     
     print("\n🎉 基础入门课程完成！")
-    print("接下来可以学习：")
+    print("\n已学习内容:")
+    print("✓ 第1课: 基础设置和初始化")
+    print("✓ 第2课: 获取股票数据")
+    print("✓ 第3课: 获取不同周期数据")
+    print("✓ 第4课: 按日期范围获取数据")
+    print("✓ 第5课: 实时价格和五档行情")
+    print("✓ 第6课: 获取股票列表")
+    print("✓ 第7课: 获取交易日历")
+    print("✓ 第8课: 拆单交易（高级功能）")
+
+    print("\n接下来可以学习：")
     print("- 02_交易基础.py - 学习基础交易功能")
     print("- 03_高级交易.py - 学习高级交易功能")
-    print("- 04_策略开发.py - 学习策略开发")
+    print("- 04_策略回测.py - 学习策略回测")
 
 if __name__ == "__main__":
     main()

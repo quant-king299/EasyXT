@@ -202,6 +202,11 @@ comprehensive_*.py
 !strategies/jq2qmt/qmt_signal_client.py
 !strategies/jq2qmt/qmt_client_mini.py
 
+# tools目录下的重要工具和测试脚本
+!tools/测试订阅接口.py
+!tools/诊断tick字段.py
+!tools/检查qstock状态.py
+
 # 文档和总结文件
 *总结.md
 *完成*.md

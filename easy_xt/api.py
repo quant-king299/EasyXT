@@ -108,7 +108,52 @@ class EasyXT:
             DataFrame: 实时价格数据
         """
         return self.data.get_current_price(codes)
-    
+
+    def get_order_book(self, codes: Union[str, List[str]]) -> pd.DataFrame:
+        """
+        获取五档行情数据（买卖盘口）
+
+        Args:
+            codes: 股票代码
+
+        Returns:
+            DataFrame: 包含五档买卖价和量的数据
+            字段包括：
+            - code: 股票代码
+            - lastPrice: 最新价
+            - bid1-bid5: 买一到买五价格
+            - ask1-ask5: 卖一到卖五价格
+            - bidVol1-bidVol5: 买一到买五量
+            - askVol1-askVol5: 卖一到卖五量
+
+        Example:
+            >>> # 获取单只股票五档行情
+            >>> order_book = api.get_order_book('000001.SZ')
+            >>> print(order_book)
+            >>> # 获取多只股票五档行情
+            >>> order_book = api.get_order_book(['000001.SZ', '600000.SH'])
+        """
+        return self.data.get_order_book(codes)
+
+    def get_l2_quote(self, codes: Union[str, List[str]]) -> Dict[str, Dict]:
+        """
+        获取Level2五档行情数据（专用接口，返回原始数据）
+
+        Args:
+            codes: 股票代码
+
+        Returns:
+            Dict: {股票代码: {字段: 值}}
+            包含完整的五档买卖价量等Level2数据
+
+        Example:
+            >>> # 获取Level2行情
+            >>> l2_data = api.get_l2_quote('000001.SZ')
+            >>> for code, data in l2_data.items():
+            ...     print(f"{code}: 买一 {data.get('bid1')} 卖一 {data.get('ask1')}")
+        """
+        return self.data.get_l2_quote(codes)
+
     def get_financial_data(self, 
                           codes: Union[str, List[str]], 
                           tables: Optional[List[str]] = None,
@@ -198,7 +243,107 @@ class EasyXT:
             Dict[str, bool]: 每只股票的下载结果 {股票代码: 是否成功}
         """
         return self.data.download_history_data_batch(stock_list, period, start_time, end_time)
-    
+
+    # ==================== 订阅接口 ====================
+
+    def subscribe(self,
+                  codes: Union[str, List[str]],
+                  period: str = 'tick',
+                  callback: Optional[callable] = None) -> int:
+        """
+        订阅行情数据
+
+        Args:
+            codes: 股票代码，支持单个或列表
+            period: 数据周期，'tick'分笔, '1m'1分钟, '1d'日线等
+            callback: 回调函数，接收推送数据
+
+        Returns:
+            int: 订阅号，成功返回>0，失败返回-1
+
+        Example:
+            >>> # 定义回调函数
+            >>> def on_tick(data):
+            ...     for code, tick in data.items():
+            ...         print(f"{code}: {tick.get('lastPrice')}")
+            ...
+            >>> # 订阅
+            >>> seq = api.subscribe('000001.SZ', callback=on_tick)
+            >>> # 持续运行接收推送
+            >>> api.run_forever()
+        """
+        if not self._data_connected:
+            print("⚠️ 数据服务未连接，正在尝试连接...")
+            self._data_connected = self.data.connect()
+            if not self._data_connected:
+                print("❌ 数据服务连接失败")
+                return -1
+
+        return self.data.subscribe_quote(codes, period, callback)
+
+    def subscribe_whole(self,
+                        codes: Union[str, List[str]],
+                        callback: Optional[callable] = None) -> int:
+        """
+        订阅全推行情数据（推荐用于多股票订阅）
+
+        与subscribe的区别：
+        - subscribe_whole订阅全市场或指定股票的tick数据
+        - 更适合订阅数量较多的场景（>50只股票）
+        - 只支持tick周期
+
+        Args:
+            codes: 股票代码列表
+            callback: 回调函数，接收推送数据
+
+        Returns:
+            int: 订阅号，成功返回>0，失败返回-1
+
+        Example:
+            >>> def on_tick(data):
+            ...     for code, tick in data.items():
+            ...         print(f"{code}: {tick.get('lastPrice')}")
+            ...
+            >>> codes = ['000001.SZ', '000002.SZ', '600000.SH']
+            >>> seq = api.subscribe_whole(codes, callback=on_tick)
+            >>> api.run_forever()
+        """
+        if not self._data_connected:
+            print("⚠️ 数据服务未连接，正在尝试连接...")
+            self._data_connected = self.data.connect()
+            if not self._data_connected:
+                print("❌ 数据服务连接失败")
+                return -1
+
+        return self.data.subscribe_whole_quote(codes, callback)
+
+    def unsubscribe(self, seq_id: int) -> bool:
+        """
+        取消订阅
+
+        Args:
+            seq_id: 订阅号（subscribe或subscribe_whole的返回值）
+
+        Returns:
+            bool: 是否成功
+        """
+        return self.data.unsubscribe_quote(seq_id)
+
+    def run_forever(self, check_interval: float = 1.0):
+        """
+        阻塞当前线程，持续接收行情推送
+
+        通常与subscribe配合使用，保持程序运行以接收推送数据
+
+        Args:
+            check_interval: 检查连接状态的间隔时间（秒）
+
+        Example:
+            >>> api.subscribe('000001.SZ', callback=on_tick)
+            >>> api.run_forever()  # 阻塞运行，按Ctrl+C退出
+        """
+        self.data.run_forever(check_interval)
+
     # ==================== 交易接口 ====================
     
     def buy(self, 
