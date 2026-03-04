@@ -436,9 +436,9 @@ def lesson_06_stock_list():
     print("\n" + "=" * 60)
     print("第6课：获取股票列表")
     print("=" * 60)
-    
+
     api = easy_xt.get_api()
-    
+
     # 1. 获取所有A股列表
     print("1. 获取A股列表")
     try:
@@ -451,7 +451,6 @@ def lesson_06_stock_list():
         else:
             print("✗ 未获取到股票列表")
     except Exception as e:
-        
         print(f"✗ 获取股票列表失败: {e}")
     
     # 2. 获取沪深300列表
