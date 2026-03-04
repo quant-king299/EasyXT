@@ -35,6 +35,7 @@ try:
     from code_converter.converters.jq_to_ptrade_factors import JQToPtradeFactorsConverter
     from code_converter.converters.jq_to_ptrade_current_data import JQToPtradeCurrentDataConverter
     from code_converter.converters.jq_to_ptrade_enhanced import JQToPtradeEnhancedConverter
+    from code_converter.converters.jq_to_ptrade_unified_v3 import JQToPtradeUnifiedConverter
     CONVERTER_AVAILABLE = True
 except ImportError:
     CONVERTER_AVAILABLE = False
@@ -44,6 +45,7 @@ except ImportError:
     JQToPtradeFactorsConverter = None
     JQToPtradeCurrentDataConverter = None
     JQToPtradeEnhancedConverter = None
+    JQToPtradeUnifiedConverter = None
     print("⚠️ 代码转换器不可用")
 
 
@@ -94,10 +96,13 @@ class CodeConversionWorker(QThread):
     def run(self):
         try:
             self.progress_updated.emit(10, "初始化转换器...")
-            
+
             # 创建转换器
             if CONVERTER_AVAILABLE:
-                if self.converter_type == "backtest" and JQToPtradeBacktestConverter:
+                if self.converter_type == "unified" and JQToPtradeUnifiedConverter:
+                    converter = JQToPtradeUnifiedConverter(verbose=False)
+                    self.progress_updated.emit(50, "正在使用统一转换器转换（v3.10最新版）...")
+                elif self.converter_type == "backtest" and JQToPtradeBacktestConverter:
                     converter = JQToPtradeBacktestConverter()
                     self.progress_updated.emit(50, "正在转换为回测版本...")
                 elif self.converter_type == "enhanced" and JQToPtradeEnhancedConverter:
@@ -117,11 +122,11 @@ class CodeConversionWorker(QThread):
                     self.progress_updated.emit(50, "正在转换代码...")
                 else:
                     raise ImportError("代码转换器不可用")
-                
+
                 # 执行转换
                 output_code = converter.convert(self.input_code)
                 self.progress_updated.emit(90, "转换完成...")
-                
+
                 self.conversion_finished.emit(True, self.input_code, output_code)
             else:
                 raise ImportError("代码转换器不可用")
@@ -154,15 +159,16 @@ class JQToPtradeWidget(QWidget):
         layout.addWidget(title_label)
         
         # 版本说明标签
-        self.version_info_label = QLabel("标准版本：通用转换版本，适用于大多数场景。")
+        self.version_info_label = QLabel("🌟 统一转换器v3.10：修复get_Ashares().index.tolist()错误，证券代码后缀可选转换，新增get_factor_values兼容，完善get_fundamentals转换，所有已知问题已修复。")
         self.version_info_label.setWordWrap(True)
         self.version_info_label.setStyleSheet("""
             QLabel {
-                background-color: #e3f2fd;
-                border: 1px solid #2196F3;
-                border-radius: 4px;
-                padding: 8px;
-                font-size: 12px;
+                background-color: #fff3e0;
+                border: 2px solid #ff9800;
+                border-radius: 6px;
+                padding: 10px;
+                font-size: 13px;
+                font-weight: bold;
             }
         """)
         layout.addWidget(self.version_info_label)
@@ -224,13 +230,14 @@ class JQToPtradeWidget(QWidget):
         converter_type_layout = QHBoxLayout()
         converter_type_label = QLabel("转换版本:")
         self.converter_type_combo = QComboBox()
+        self.converter_type_combo.addItem("🌟 统一转换器 v3.10 (推荐)", "unified")  # 最新版：修复get_Ashares返回值
         self.converter_type_combo.addItem("标准版本", "default")
         self.converter_type_combo.addItem("回测版本", "backtest")
         self.converter_type_combo.addItem("增强回测版本", "enhanced")
         self.converter_type_combo.addItem("实盘版本", "live")
         self.converter_type_combo.addItem("因子转换", "factors")
         self.converter_type_combo.addItem("实时数据转换", "current_data")
-        self.converter_type_combo.setCurrentIndex(0)
+        self.converter_type_combo.setCurrentIndex(0)  # 默认选择统一转换器
         self.converter_type_combo.currentIndexChanged.connect(self.on_converter_type_changed)
         converter_type_layout.addWidget(converter_type_label)
         converter_type_layout.addWidget(self.converter_type_combo)
@@ -501,23 +508,92 @@ class JQToPtradeWidget(QWidget):
         """转换器类型改变"""
         converter_type = self.converter_type_combo.currentData()
         self.converter_type = converter_type
-        
+
         # 更新版本说明
         info_text = ""
-        if converter_type == "backtest":
+        style_sheet = ""
+
+        if converter_type == "unified":
+            info_text = "🌟 统一转换器v3.10（推荐）：修复get_Ashares().index.tolist()错误（改为list(get_Ashares())）。基于Ptrade实际Demo策略验证。证券代码后缀默认不转换。新增get_factor_values兼容函数。完善get_fundamentals转换。所有已知问题已修复！"
+            style_sheet = """
+                QLabel {
+                    background-color: #fff3e0;
+                    border: 2px solid #ff9800;
+                    border-radius: 6px;
+                    padding: 10px;
+                    font-size: 13px;
+                    font-weight: bold;
+                }
+            """
+        elif converter_type == "backtest":
             info_text = "回测版本：针对Ptrade回测环境优化，删除所有实盘专用API调用（如get_snapshot、set_option等），提供备选实现方案，确保代码能在回测环境中完整运行。"
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
         elif converter_type == "enhanced":
             info_text = "增强回测版本：修复了所有已知问题的回测版本，包括函数重复定义、缺少导入库等问题，确保生成的代码能在Ptrade回测环境中正常运行。"
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
         elif converter_type == "live":
             info_text = "实盘版本：充分利用Ptrade实盘环境的实时数据API，保留所有实盘专用功能（如get_snapshot、实时行情检查等），提供最佳的实盘交易体验。"
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
         elif converter_type == "factors":
             info_text = "因子转换：专门处理聚宽因子库调用转换，将MACD、RSI等因子调用转换为Ptrade自定义计算函数，自动生成必要的因子计算实现。"
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
         elif converter_type == "current_data":
             info_text = "实时数据转换：处理聚宽get_current_data()调用转换，自动生成Ptrade版本的实时数据获取函数，替代聚宽的实时数据API。"
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
         else:
             info_text = "标准版本：通用转换版本，适用于大多数场景。"
-        
+            style_sheet = """
+                QLabel {
+                    background-color: #e3f2fd;
+                    border: 1px solid #2196F3;
+                    border-radius: 4px;
+                    padding: 8px;
+                    font-size: 12px;
+                }
+            """
+
         self.version_info_label.setText(info_text)
+        self.version_info_label.setStyleSheet(style_sheet)
     
     def update_ui_state(self):
         """更新UI状态"""

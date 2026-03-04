@@ -773,35 +773,55 @@ class DataAPI:
     def get_stock_list(self, sector: Optional[str] = None) -> List[str]:
         """
         获取股票列表
-        
+
         Args:
-            sector: 板块名称，如'沪深300', 'A股'等
-            
+            sector: 板块名称，如:
+                - 'A股' (SH+SZ，所有A股)
+                - 'SH' (上海市场)
+                - 'SZ' (深圳市场)
+                - '沪深300' (沪深300成分股)
+                - '中证500' (中证500成分股)
+                - 等等...
+
         Returns:
             List[str]: 股票代码列表
-            
+
         Raises:
             ConnectionError: 连接失败
             DataError: 数据获取失败
+
+        Examples:
+            >>> # 获取所有A股
+            >>> stocks = api.get_stock_list('A股')
+            >>> # 获取沪深300
+            >>> stocks = api.get_stock_list('沪深300')
+            >>> # 获取上海市场
+            >>> stocks = api.get_stock_list('SH')
         """
         if not self.xt:
             raise ConnectionError("xtquant未正确导入，无法获取数据")
-        
+
         if not self._connected:
             raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
-        
+
         try:
             if sector:
-                stock_list = self.xt.get_stock_list_in_sector(sector)
+                # 特殊处理：A股 = SH + SZ（使用市场代码）
+                if sector == 'A股':
+                    sh_stocks = self.xt.get_stock_list_in_sector('SH')
+                    sz_stocks = self.xt.get_stock_list_in_sector('SZ')
+                    stock_list = (sh_stocks or []) + (sz_stocks or [])
+                else:
+                    stock_list = self.xt.get_stock_list_in_sector(sector)
             else:
-                # 获取所有A股
-                sh_stocks = self.xt.get_stock_list_in_sector('沪A')
-                sz_stocks = self.xt.get_stock_list_in_sector('深A')
+                # 默认获取所有A股
+                sh_stocks = self.xt.get_stock_list_in_sector('SH')
+                sz_stocks = self.xt.get_stock_list_in_sector('SZ')
                 stock_list = (sh_stocks or []) + (sz_stocks or [])
-            
+
             if not stock_list:
                 raise DataError(f"未获取到股票列表，板块: {sector}")
-            
+
             return stock_list
         
         except Exception as e:
