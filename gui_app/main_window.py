@@ -68,6 +68,7 @@ from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
 from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
 from gui_app.widgets.advanced_data_viewer_widget import AdvancedDataViewerWidget
+from gui_app.widgets.tushare_data_widget import TushareDataWidget
 
 
 class MainWindow(QMainWindow):
@@ -151,6 +152,13 @@ class MainWindow(QMainWindow):
         self.advanced_data_viewer_widget = AdvancedDataViewerWidget()
         advanced_viewer_layout.addWidget(self.advanced_data_viewer_widget)
         self.tab_widget.addTab(advanced_viewer_tab, "📈 数据查看器")
+
+        # Tushare数据下载标签页
+        tushare_data_tab = QWidget()
+        tushare_data_layout = QVBoxLayout(tushare_data_tab)
+        self.tushare_data_widget = TushareDataWidget()
+        tushare_data_layout.addWidget(self.tushare_data_widget)
+        self.tab_widget.addTab(tushare_data_tab, "📥 Tushare下载")
         
     def create_status_bar(self):
         """创建状态栏"""

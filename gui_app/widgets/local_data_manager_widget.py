@@ -92,17 +92,40 @@ class DataDownloadThread(QThread):
             manager = LocalDataManager()
             self.log_signal.emit("✅ 数据管理器初始化成功")
 
-            # 如果没有指定股票列表，获取全部A股
+            # 如果没有指定股票列表，获取全部A股（排除ETF）
             if not self.symbols:
-                self.log_signal.emit("📊 正在获取A股列表...")
-                self.symbols = manager.get_all_stocks_list(
+                self.log_signal.emit("📊 正在获取A股列表（排除ETF）...")
+                all_stocks = manager.get_all_stocks_list(
                     include_st=True,
                     include_sz=True,
                     include_bj=True,
                     exclude_st=True,
                     exclude_delisted=True
                 )
-                self.log_signal.emit(f"✅ 获取到 {len(self.symbols)} 只A股")
+
+                # 过滤掉ETF和基金
+                etf_patterns = [
+                    '51',      # 上海ETF：510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx
+                    '159',     # 深圳ETF：159xxx
+                    '150',     # 深圳基金：150xxx
+                    '588',     # 上海ETF：588xxx
+                    '50',      # 上海50开头基金
+                    '56',      # 上海56开头基金
+                    '58',      # 上海58开头基金
+                ]
+
+                self.symbols = []
+                for stock in all_stocks:
+                    is_etf = False
+                    for pattern in etf_patterns:
+                        if stock.startswith(pattern):
+                            is_etf = True
+                            break
+
+                    if not is_etf:
+                        self.symbols.append(stock)
+
+                self.log_signal.emit(f"✅ 获取到 {len(self.symbols)} 只A股（已排除ETF和基金）")
 
             total = len(self.symbols)
             success_count = 0
@@ -480,7 +503,7 @@ class DataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def _backfill_history(self):
-        """补充历史数据（从2018年开始）"""
+        """补充历史数据（根据用户填写的日期范围）"""
         try:
             from data_manager.duckdb_connection_pool import get_db_manager
             from xtquant import xtdata
@@ -488,16 +511,34 @@ class DataDownloadThread(QThread):
 
             self.log_signal.emit("✅ 数据管理器初始化成功")
 
+            # 获取用户填写的日期参数
+            start_date = self.start_date if self.start_date else '20180101'
+            end_date = self.end_date if self.end_date else datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit(f"📅 补充日期范围: {start_date} ~ {end_date}")
+
+            # 转换日期格式
+            start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+            end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+
             # 获取DuckDB管理器
             manager = get_db_manager(r'D:/StockData/stock_data.ddb')
 
-            # 查询所有股票及其最早日期
+            # 查询所有股票及其最早日期（排除ETF和基金）
             query = """
                 SELECT
                     stock_code,
                     MIN(date) as earliest_date,
                     MAX(date) as latest_date
                 FROM stock_daily
+                WHERE symbol_type = 'stock'
+                  AND stock_code NOT LIKE '51%.SH'  -- 排除上海ETF
+                  AND stock_code NOT LIKE '159%.SZ'  -- 排除深圳ETF
+                  AND stock_code NOT LIKE '150%.SZ'  -- 排除深圳ETF
+                  AND stock_code NOT LIKE '588%.SH'  -- 排除上海ETF
+                  AND stock_code NOT LIKE '50%.SH'   -- 排除上海50开头基金
+                  AND stock_code NOT LIKE '56%.SH'   -- 排除上海56开头基金
+                  AND stock_code NOT LIKE '58%.SH'   -- 排除上海58开头基金
                 GROUP BY stock_code
                 ORDER BY stock_code
             """
@@ -509,22 +550,21 @@ class DataDownloadThread(QThread):
                 self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
                 return
 
-            # 筛选需要补充历史的股票（最早日期晚于2018-06-01）
-            cutoff_date = pd.to_datetime('2018-06-01')
-            needs_backfill = df_stocks[df_stocks['earliest_date'] > cutoff_date]
+            # 筛选需要补充历史的股票（最早日期晚于用户指定的开始日期）
+            needs_backfill = df_stocks[df_stocks['earliest_date'] > start_dt].copy()
+
+            # 为每只股票计算需要补充的日期范围
+            needs_backfill['need_start'] = start_dt.strftime('%Y%m%d')
+            needs_backfill['need_end'] = (needs_backfill['earliest_date'] - timedelta(days=1)).dt.strftime('%Y%m%d')
 
             if needs_backfill.empty:
-                self.log_signal.emit("✅ 所有股票都有完整历史数据")
+                self.log_signal.emit(f"✅ 所有股票在 {start_date} 之后的数据都完整")
                 self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
                 return
 
             stock_codes = needs_backfill['stock_code'].tolist()
-            self.log_signal.emit(f"📊 发现 {len(stock_codes)} 只股票需要补充历史数据")
-
-            # 从QMT获取完整历史数据（使用较大count值）
-            # 2018-06到2026年约2000个交易日
-            count = 2500
-            self.log_signal.emit(f"📡 将获取每只股票的最近 {count} 条数据...")
+            self.log_signal.emit(f"📊 发现 {len(stock_codes)} 只股票需要补充历史数据（已排除ETF和基金）")
+            self.log_signal.emit(f"📅 补充范围: {start_date} ~ 各股票最早数据日期的前一天")
 
             total = len(stock_codes)
             success_count = 0
@@ -538,14 +578,49 @@ class DataDownloadThread(QThread):
                     if (i + 1) % 100 == 0:
                         self.log_signal.emit(f"📊 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
 
-                    # 从QMT获取数据
-                    data = xtdata.get_market_data_ex(
-                        stock_list=[stock_code],
-                        period='1d',
-                        count=count
-                    )
+                    # 获取该股票需要补充的日期范围
+                    stock_info = needs_backfill[needs_backfill['stock_code'] == stock_code].iloc[0]
+                    need_start = stock_info['need_start']
+                    need_end = stock_info['need_end']
 
-                    if isinstance(data, dict) and stock_code in data:
+                    # 跳过不合理的日期范围（可能是新股）
+                    if need_start > need_end:
+                        # 该股票在开始日期之后才上市，无需补充历史数据
+                        failed_count += 1
+                        failed_list.append(f"{stock_code} - 新股（上市时间晚于{need_start}）")
+                        continue
+
+                    # ===== 方案1: 先尝试从QMT下载到本地，再读取 =====
+                    data = None
+                    data_source = None
+
+                    try:
+                        # 步骤1: 触发QMT下载历史数据到本地
+                        self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: 步骤1/2 触发QMT下载...")
+                        xtdata.download_history_data(
+                            stock_code=stock_code,
+                            period='1d',
+                            start_time=need_start,
+                            end_time=need_end
+                        )
+
+                        # 步骤2: 从QMT本地读取数据
+                        data = xtdata.get_market_data_ex(
+                            stock_list=[stock_code],
+                            period='1d',
+                            start_time=need_start,
+                            end_time=need_end
+                        )
+
+                        if isinstance(data, dict) and stock_code in data:
+                            df = data[stock_code]
+                            if not df.empty:
+                                data_source = 'QMT'
+                    except Exception as qmt_err:
+                        self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: QMT下载/读取失败 - {str(qmt_err)[:30]}")
+
+                    # ===== 处理获取到的数据 =====
+                    if data_source and isinstance(data, dict) and stock_code in data:
                         df = data[stock_code]
                         if not df.empty:
                             # 转换数据格式
@@ -566,32 +641,52 @@ class DataDownloadThread(QThread):
                                 'updated_at': datetime.now()
                             })
 
-                            # 填充复权数据
-                            for col in ['open', 'high', 'low', 'close']:
-                                df_processed[f'{col}_front'] = df_processed[col]
-                                df_processed[f'{col}_back'] = df_processed[col]
-                                df_processed[f'{col}_geometric_front'] = df_processed[col]
-                                df_processed[f'{col}_geometric_back'] = df_processed[col]
+                            # 过滤：确保日期在补充范围内
+                            df_processed['date_dt'] = pd.to_datetime(df_processed['date'])
+                            df_processed = df_processed[
+                                (df_processed['date_dt'] >= start_dt) &
+                                (df_processed['date_dt'] < needs_backfill[needs_backfill['stock_code'] == stock_code]['earliest_date'].iloc[0])
+                            ]
+                            df_processed = df_processed.drop(columns=['date_dt'])
 
-                            backfill_data.append(df_processed)
-                            success_count += 1
+                            if not df_processed.empty:
+                                # 填充复权数据
+                                for col in ['open', 'high', 'low', 'close']:
+                                    df_processed[f'{col}_front'] = df_processed[col]
+                                    df_processed[f'{col}_back'] = df_processed[col]
+                                    df_processed[f'{col}_geometric_front'] = df_processed[col]
+                                    df_processed[f'{col}_geometric_back'] = df_processed[col]
+
+                                backfill_data.append(df_processed)
+                                self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: [{data_source}] 成功获取{len(df_processed)}条")
+                                success_count += 1
+                            else:
+                                failed_count += 1
+                                failed_list.append(f"{stock_code} - [{data_source}] 过滤后无数据（{need_start}~{need_end}）")
                         else:
                             failed_count += 1
-                            failed_list.append(f"{stock_code} - 数据为空")
+                            failed_list.append(f"{stock_code} - [{data_source}] 返回空数据（{need_start}~{need_end}）")
                     else:
                         failed_count += 1
-                        failed_list.append(f"{stock_code} - 获取失败")
+                        failed_list.append(f"{stock_code} - 所有数据源均失败（{need_start}~{need_end}）")
 
                 except Exception as e:
-                    self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: ✗ 错误 - {str(e)[:50]}")
+                    self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: 异常 - {str(e)[:50]}")
                     failed_count += 1
                     failed_list.append(f"{stock_code} - {str(e)[:30]}")
 
             self.log_signal.emit(f"📥 历史数据收集完成: {success_count} 只股票成功")
 
-            # 批量写入DuckDB（替换旧数据）
+            # 统计失败原因
+            new_stock_count = sum(1 for item in failed_list if '新股' in item)
+            no_data_count = sum(1 for item in failed_list if '无数据' in item or '空数据' in item)
+            error_count = sum(1 for item in failed_list if '获取失败' in item or '错误' in item)
+
+            self.log_signal.emit(f"📊 失败统计: 总数{failed_count}, 新股{new_stock_count}, 无数据{no_data_count}, 错误{error_count}")
+
+            # 批量写入DuckDB（只插入缺失数据，不删除已有数据）
             if backfill_data:
-                self.log_signal.emit("💾 正在写入数据库...")
+                self.log_signal.emit("💾 正在写入数据库（只插入缺失部分）...")
                 import time
                 time.sleep(2)
 
@@ -599,20 +694,23 @@ class DataDownloadThread(QThread):
                     # 合并所有数据
                     df_all = pd.concat(backfill_data, ignore_index=True)
 
-                    # 获取涉及的股票列表
-                    stocks_to_update = df_all['stock_code'].unique().tolist()
-
                     with manager.get_write_connection() as con:
-                        # 先删除这些股票的旧数据
-                        for stock in stocks_to_update:
-                            con.execute(f"DELETE FROM stock_daily WHERE stock_code = '{stock}'")
-
-                        # 插入新的完整数据
+                        # 直接插入缺失数据（不删除已有数据）
                         con.register('temp_backfill', df_all)
-                        con.execute("INSERT INTO stock_daily SELECT * FROM temp_backfill")
+                        con.execute("""
+                            INSERT INTO stock_daily
+                            SELECT * FROM temp_backfill
+                            WHERE NOT EXISTS (
+                                SELECT 1 FROM stock_daily sd
+                                WHERE sd.stock_code = temp_backfill.stock_code
+                                AND sd.date = temp_backfill.date
+                                AND sd.period = temp_backfill.period
+                            )
+                        """)
                         con.unregister('temp_backfill')
 
-                    self.log_signal.emit(f"✅ 成功保存 {len(df_all)} 条记录")
+                    inserted_count = len(df_all)
+                    self.log_signal.emit(f"✅ 成功插入 {inserted_count} 条新记录（已有数据保留）")
                 except Exception as e:
                     self.log_signal.emit(f"❌ 写入失败: {str(e)}")
 
@@ -627,13 +725,58 @@ class DataDownloadThread(QThread):
             self.finished_signal.emit(result)
             self.log_signal.emit(f"✅ 历史数据补充完成! 总数: {total}, 成功: {success_count}, 失败: {failed_count}")
 
-            # 输出失败清单
+            # 输出失败清单（分类显示）
             if failed_list:
                 self.log_signal.emit("")
                 self.log_signal.emit("=" * 70)
-                self.log_signal.emit("  失败清单:")
-                for failed_item in failed_list:
-                    self.log_signal.emit(f"    ✗ {failed_item}")
+                self.log_signal.emit("  失败分类:")
+
+                # 新股
+                new_stocks = [item for item in failed_list if '新股' in item]
+                if new_stocks:
+                    self.log_signal.emit(f"\n  [INFO] 新股（上市时间晚于开始日期）: {len(new_stocks)} 只")
+                    for item in new_stocks[:10]:  # 只显示前10个
+                        self.log_signal.emit(f"    - {item}")
+                    if len(new_stocks) > 10:
+                        self.log_signal.emit(f"    ... 省略 {len(new_stocks)-10} 只")
+
+                # 过滤后无数据
+                no_data_after_filter = [item for item in failed_list if '过滤后无数据' in item]
+                if no_data_after_filter:
+                    self.log_signal.emit(f"\n  [WARNING] 过滤后无数据: {len(no_data_after_filter)} 只")
+                    for item in no_data_after_filter[:5]:
+                        self.log_signal.emit(f"    - {item}")
+                    if len(no_data_after_filter) > 5:
+                        self.log_signal.emit(f"    ... 省略 {len(no_data_after_filter)-5} 只")
+
+                # 返回空数据（QMT/Tushare都获取到了但为空）
+                empty_data = [item for item in failed_list if '返回空数据' in item]
+                if empty_data:
+                    self.log_signal.emit(f"\n  [WARNING] 数据源返回空: {len(empty_data)} 只")
+                    for item in empty_data[:5]:
+                        self.log_signal.emit(f"    - {item}")
+                    if len(empty_data) > 5:
+                        self.log_signal.emit(f"    ... 省略 {len(empty_data)-5} 只")
+
+                # 所有数据源均失败
+                all_failed = [item for item in failed_list if '所有数据源均失败' in item]
+                if all_failed:
+                    self.log_signal.emit(f"\n  [ERROR] QMT和Tushare都失败: {len(all_failed)} 只")
+                    for item in all_failed[:5]:
+                        self.log_signal.emit(f"    - {item}")
+                    if len(all_failed) > 5:
+                        self.log_signal.emit(f"    ... 省略 {len(all_failed)-5} 只")
+
+                # 其他异常
+                others = [item for item in failed_list if item not in new_stocks + no_data_after_filter + empty_data + all_failed]
+                if others:
+                    self.log_signal.emit(f"\n  [ERROR] 其他异常: {len(others)} 只")
+                    for item in others[:5]:
+                        self.log_signal.emit(f"    - {item}")
+                    if len(others) > 5:
+                        self.log_signal.emit(f"    ... 省略 {len(others)-5} 只")
+
+                self.log_signal.emit(f"\n  总计: {len(failed_list)} 只失败")
                 self.log_signal.emit("=" * 70)
 
         except Exception as e:
@@ -1449,7 +1592,8 @@ class LocalDataManagerWidget(QWidget):
         """)
         btn_layout.addWidget(self.download_bonds_btn)
 
-        self.update_data_btn = QPushButton("🔄 一键补充数据")
+        self.update_data_btn = QPushButton("🔄 更新最近数据")
+        self.update_data_btn.setToolTip("更新最近1-30天的缺失数据\n用于日常数据维护，保持数据库最新")
         self.update_data_btn.clicked.connect(self.update_data)
         self.update_data_btn.setStyleSheet("""
             QPushButton {
@@ -1470,7 +1614,8 @@ class LocalDataManagerWidget(QWidget):
         btn_layout.addWidget(self.update_data_btn)
 
         # 补充历史数据按钮
-        self.backfill_data_btn = QPushButton("📜 补充历史数据")
+        self.backfill_data_btn = QPushButton("📜 补全历史数据")
+        self.backfill_data_btn.setToolTip("补充指定日期之前的历史空白\n用于首次使用或发现历史数据缺失时")
         self.backfill_data_btn.clicked.connect(self.backfill_historical_data)
         self.backfill_data_btn.setStyleSheet("""
             QPushButton {
@@ -1645,104 +1790,6 @@ class LocalDataManagerWidget(QWidget):
         financial_note.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
         financial_layout.addWidget(financial_note, 3, 0, 1, 4)
 
-        # ========== Tushare数据下载区域 ==========
-        tushare_group = QGroupBox("🌐 Tushare数据下载（财务、分红、股东等）")
-        tushare_layout = QGridLayout()
-        tushare_group.setLayout(tushare_layout)
-        left_layout.addWidget(tushare_group)
-
-        # Token配置 - 从环境变量读取
-        tushare_layout.addWidget(QLabel("Token:"), 0, 0)
-        self.tushare_token_input = QLineEdit()
-        self.tushare_token_input.setPlaceholderText("未配置 Token，请在 .env 文件中设置")
-        self.tushare_token_input.setReadOnly(True)
-
-        # 尝试从环境变量读取 Token（不显示具体值）
-        try:
-            from config import get_env_config
-            env_config = get_env_config()
-            token = env_config.tushare_token
-            if token:
-                # 只显示 Token 的前8位和后4位，中间用***代替
-                if len(token) > 12:
-                    masked_token = f"{token[:8]}...{token[-4:]}"
-                else:
-                    masked_token = "*** 已配置 ***"
-                self.tushare_token_input.setText(masked_token)
-                self.tushare_token_input.setStyleSheet("background-color: #e8f5e9; color: #2e7d32;")
-            else:
-                self.tushare_token_input.setText("未配置")
-                self.tushare_token_input.setStyleSheet("background-color: #ffebee; color: #c62828;")
-        except:
-            self.tushare_token_input.setText("配置读取失败")
-            self.tushare_token_input.setStyleSheet("background-color: #fff3e0; color: #ef6c00;")
-
-        tushare_layout.addWidget(self.tushare_token_input, 0, 1)
-
-        self.tushare_test_btn = QPushButton("测试")
-        self.tushare_test_btn.setMaximumWidth(60)
-        self.tushare_test_btn.clicked.connect(self.test_tushare_connection)
-        tushare_layout.addWidget(self.tushare_test_btn, 0, 2)
-
-        # 数据类型选择（使用复选框）
-        tushare_data_layout = QHBoxLayout()
-
-        self.tushare_chk_financial = QCheckBox("财务数据")
-        self.tushare_chk_financial.setChecked(True)
-        self.tushare_chk_financial.setToolTip("下载利润表、资产负债表、现金流量表")
-        tushare_data_layout.addWidget(self.tushare_chk_financial)
-
-        self.tushare_chk_dividend = QCheckBox("分红数据")
-        self.tushare_chk_dividend.setChecked(True)
-        self.tushare_chk_dividend.setToolTip("下载分红送股数据")
-        tushare_data_layout.addWidget(self.tushare_chk_dividend)
-
-        self.tushare_chk_moneyflow = QCheckBox("资金流向")
-        self.tushare_chk_moneyflow.setToolTip("下载个股资金流向数据")
-        tushare_data_layout.addWidget(self.tushare_chk_moneyflow)
-
-        self.tushare_chk_holders = QCheckBox("股东数据")
-        self.tushare_chk_holders.setToolTip("下载前十大股东数据")
-        tushare_data_layout.addWidget(self.tushare_chk_holders)
-
-        tushare_data_layout.addStretch()
-        tushare_layout.addLayout(tushare_data_layout, 1, 0, 1, 3)
-
-        # 数据范围设置
-        tushare_layout.addWidget(QLabel("数据年份:"), 2, 0)
-        self.tushare_years_spinbox = QSpinBox()
-        self.tushare_years_spinbox.setRange(1, 20)
-        self.tushare_years_spinbox.setValue(5)
-        self.tushare_years_spinbox.setSuffix(" 年")
-        tushare_layout.addWidget(self.tushare_years_spinbox, 2, 1)
-
-        # 下载按钮
-        self.tushare_download_btn = QPushButton("🌐 从Tushare下载")
-        self.tushare_download_btn.clicked.connect(self.download_from_tushare)
-        self.tushare_download_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #9C27B0;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7B1FA2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        tushare_layout.addWidget(self.tushare_download_btn, 2, 2)
-
-        # 说明标签
-        tushare_note = QLabel("💡 Tushare提供财务数据、分红、股东等补充数据，可与QMT数据配合使用")
-        tushare_note.setStyleSheet("color: #666; font-size: 9pt; padding: 5px;")
-        tushare_layout.addWidget(tushare_note, 3, 0, 1, 3)
-
-
         # ========== 手动下载单个标的区域 ==========
         manual_group = QGroupBox("🎯 手动下载单个标的（支持分钟线）")
         manual_layout = QGridLayout()
@@ -1809,19 +1856,19 @@ class LocalDataManagerWidget(QWidget):
         manual_layout.addWidget(QLabel("日期范围:"), 2, 2)
         date_range_layout = QHBoxLayout()
 
-        self.start_date_edit = QDateEdit()
-        self.start_date_edit.setCalendarPopup(True)
-        self.start_date_edit.setDate(QDate.currentDate().addMonths(-3))
-        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
-        date_range_layout.addWidget(self.start_date_edit)
+        self.manual_start_date_edit = QDateEdit()
+        self.manual_start_date_edit.setCalendarPopup(True)
+        self.manual_start_date_edit.setDate(QDate.currentDate().addMonths(-3))
+        self.manual_start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_range_layout.addWidget(self.manual_start_date_edit)
 
         date_range_layout.addWidget(QLabel("~"))
 
-        self.end_date_edit = QDateEdit()
-        self.end_date_edit.setCalendarPopup(True)
-        self.end_date_edit.setDate(QDate.currentDate())
-        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
-        date_range_layout.addWidget(self.end_date_edit)
+        self.manual_end_date_edit = QDateEdit()
+        self.manual_end_date_edit.setCalendarPopup(True)
+        self.manual_end_date_edit.setDate(QDate.currentDate())
+        self.manual_end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        date_range_layout.addWidget(self.manual_end_date_edit)
 
         manual_layout.addLayout(date_range_layout, 2, 3)
 
@@ -1976,8 +2023,8 @@ class LocalDataManagerWidget(QWidget):
                 stock_code = stock_code + '.SZ'
 
         # 获取日期范围
-        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
-        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+        start_date = self.manual_start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.manual_end_date_edit.date().toString("yyyy-MM-dd")
 
         # 获取数据类型
         data_type_text = self.data_type_combo.currentText()
@@ -2481,10 +2528,15 @@ class LocalDataManagerWidget(QWidget):
         self._set_download_state(True)
 
     def backfill_historical_data(self):
-        """补充历史数据（获取2018年以来的完整数据）"""
+        """补充历史数据（获取指定日期范围的完整数据）"""
+        # 获取用户选择的日期
+        start_date = self.start_date_edit.date().toString('yyyy-MM-dd')
+        end_date = self.end_date_edit.date().toString('yyyy-MM-dd')
+
         reply = QMessageBox.question(
             self, "确认操作",
-            "此操作将为所有股票补充2018年以来的完整历史数据。\n\n"
+            f"此操作将为缺失历史数据的股票补充 {start_date} 起至 {end_date} 的数据。\n\n"
+            f"只会补充数据库中缺失的部分，已有数据不会被删除。\n\n"
             "可能需要较长时间，确定要继续吗？",
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.No
@@ -2497,13 +2549,17 @@ class LocalDataManagerWidget(QWidget):
             QMessageBox.warning(self, "提示", "已有下载任务正在运行")
             return
 
-        self.log("📜 开始补充历史数据（2018年起）...")
+        # 获取用户输入的日期
+        start_date = self.start_date_edit.date().toString('yyyyMMdd')
+        end_date = self.end_date_edit.date().toString('yyyyMMdd')
+
+        self.log(f"📜 开始补充历史数据（{start_date} ~ {end_date}）...")
 
         self.download_thread = DataDownloadThread(
             task_type='backfill_history',
             symbols=None,
-            start_date='20180101',
-            end_date=None
+            start_date=start_date,
+            end_date=end_date
         )
         self.download_thread.log_signal.connect(self.log)
         self.download_thread.progress_signal.connect(self.update_progress)
@@ -2633,133 +2689,6 @@ class LocalDataManagerWidget(QWidget):
             QMessageBox.information(self, "验证完成", msg)
         else:
             QMessageBox.warning(self, "验证完成", msg + "\n⚠️ 该股票没有本地数据，请先下载")
-
-    # ========== Tushare相关方法 ==========
-
-    def test_tushare_connection(self):
-        """测试Tushare连接"""
-        # 从环境变量读取 Token（不从输入框读取，因为输入框显示的是掩码）
-        try:
-            from config import get_env_config
-            env_config = get_env_config()
-            token = env_config.tushare_token
-        except:
-            token = None
-
-        if not token:
-            QMessageBox.warning(self, "警告", "未检测到 Token，请先配置 .env 文件")
-            self.log("❌ Token 未配置")
-            return
-
-        self.log("正在测试Tushare连接...")
-
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-
-            # 测试API调用
-            df = pro.trade_cal(exchange='SSE', start_date='20240101', end_date='20240110')
-
-            if df is not None and len(df) > 0:
-                QMessageBox.information(self, "成功", f"✅ Tushare连接成功！\n\n获取到 {len(df)} 条交易日历数据")
-                self.log("✅ Tushare连接测试成功")
-            else:
-                QMessageBox.warning(self, "警告", "连接失败，请检查Token是否正确")
-
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"连接失败：\n{str(e)}")
-            self.log(f"❌ Tushare连接测试失败: {e}")
-
-    def download_from_tushare(self):
-        """从Tushare下载数据"""
-        # 从环境变量读取 Token（不从输入框读取）
-        try:
-            from config import get_env_config
-            env_config = get_env_config()
-            token = env_config.tushare_token
-        except:
-            token = None
-
-        if not token:
-            QMessageBox.warning(self, "警告", "未检测到 Token，请先配置 .env 文件")
-            self.log("❌ Token 未配置，无法下载")
-            return
-
-        # 确定下载类型
-        data_types = []
-        if self.tushare_chk_financial.isChecked():
-            data_types.append('financial')
-        if self.tushare_chk_dividend.isChecked():
-            data_types.append('dividend')
-        if self.tushare_chk_moneyflow.isChecked():
-            data_types.append('moneyflow')
-        if self.tushare_chk_holders.isChecked():
-            data_types.append('holders')
-
-        if not data_types:
-            QMessageBox.warning(self, "警告", "请选择至少一种数据类型")
-            return
-
-        # 获取参数
-        years = self.tushare_years_spinbox.value()
-
-        self.log(f"🌐 开始从Tushare下载数据...")
-        self.log(f"   数据类型: {', '.join(data_types)}")
-        self.log(f"   数据年份: {years}年")
-
-        # 禁用下载按钮
-        self.tushare_download_btn.setEnabled(False)
-
-        # 创建下载线程
-        try:
-            from gui_app.widgets.tushare_download_widget import TushareDownloadThread
-
-            # 只下载第一种类型（避免复杂的多任务处理）
-            task_type = data_types[0]
-
-            self.tushare_download_thread = TushareDownloadThread(
-                task_type=task_type,
-                years=years,
-                db_path='D:/StockData/stock_data.ddb'
-            )
-
-            self.tushare_download_thread.log_signal.connect(self.log)
-            self.tushare_download_thread.progress_signal.connect(self.update_progress)
-            self.tushare_download_thread.finished_signal.connect(self.on_tushare_download_finished)
-            self.tushare_download_thread.error_signal.connect(self.on_tushare_download_error)
-
-            self.tushare_download_thread.start()
-
-        except ImportError as e:
-            self.log(f"❌ 导入Tushare模块失败: {e}")
-            self.log("提示: 请确保tushare_manager模块已正确安装")
-            self.tushare_download_btn.setEnabled(True)
-
-    def on_tushare_download_finished(self, result: dict):
-        """Tushare下载完成"""
-        self.tushare_download_btn.setEnabled(True)
-        self.progress_bar.setVisible(False)
-        self.progress_label.setVisible(False)
-
-        total = result.get('total', 0)
-        success = result.get('success', 0)
-        failed = result.get('failed', 0)
-
-        QMessageBox.information(
-            self, "完成",
-            f"Tushare下载完成！\n\n总数: {total}\n成功: {success}\n失败: {failed}"
-        )
-
-        # 刷新统计数据
-        self.load_duckdb_statistics()
-
-    def on_tushare_download_error(self, error: str):
-        """Tushare下载错误"""
-        self.tushare_download_btn.setEnabled(True)
-        self.progress_bar.setVisible(False)
-        self.progress_label.setVisible(False)
-        QMessageBox.critical(self, "错误", error)
 
 
 class DataViewerDialog(QDialog):

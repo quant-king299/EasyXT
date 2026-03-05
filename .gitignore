@@ -322,3 +322,8 @@ strategies/小市值基础策略V2_QMT版.py
 strategies/小市值基础策略V2.py
 tools/diagnose_front_adjust_null.py
 tools/restore_widget_from_github.py
+easyxt_backtest/PROJECT_SUMMARY.md
+easyxt_backtest/output/
+gui_app/widgets/README_TUSHARE.md
+strategies/小市值基础策略V2_EasyXT版.py
+strategies/小市值基础策略V2_EasyXT实盘专用版.py

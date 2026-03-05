@@ -27,17 +27,21 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'code_converter'))
 
-# 尝试导入转换器
+# 尝试导入转换器（使用统一转换器v3）
 try:
-    from code_converter.converters.jq_to_ptrade import JQToPtradeConverter
-    from code_converter.converters.jq_to_ptrade_monthly import JQToPtradeMonthlyConverter as JQToPtradeBacktestConverter
-    from code_converter.converters.jq_to_ptrade_live import JQToPtradeLiveConverter
-    from code_converter.converters.jq_to_ptrade_factors import JQToPtradeFactorsConverter
-    from code_converter.converters.jq_to_ptrade_current_data import JQToPtradeCurrentDataConverter
-    from code_converter.converters.jq_to_ptrade_enhanced import JQToPtradeEnhancedConverter
     from code_converter.converters.jq_to_ptrade_unified_v3 import JQToPtradeUnifiedConverter
+
+    # 为兼容性创建别名
+    JQToPtradeConverter = JQToPtradeUnifiedConverter
+    JQToPtradeBacktestConverter = JQToPtradeUnifiedConverter
+    JQToPtradeLiveConverter = JQToPtradeUnifiedConverter
+    JQToPtradeFactorsConverter = JQToPtradeUnifiedConverter
+    JQToPtradeCurrentDataConverter = JQToPtradeUnifiedConverter
+    JQToPtradeEnhancedConverter = JQToPtradeUnifiedConverter
+
     CONVERTER_AVAILABLE = True
-except ImportError:
+    print("[OK] 代码转换器已加载（统一转换器v3）")
+except ImportError as e:
     CONVERTER_AVAILABLE = False
     JQToPtradeConverter = None
     JQToPtradeBacktestConverter = None
@@ -46,7 +50,7 @@ except ImportError:
     JQToPtradeCurrentDataConverter = None
     JQToPtradeEnhancedConverter = None
     JQToPtradeUnifiedConverter = None
-    print("⚠️ 代码转换器不可用")
+    print(f"[WARNING] 代码转换器不可用: {e}")
 
 
 class PasteInputDialog(QDialog):
