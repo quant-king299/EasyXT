@@ -31,6 +31,7 @@ class SmallCapStrategy(StrategyBase):
     def __init__(self,
                  index_code: str = '399101.SZ',
                  select_num: int = 5,
+                 universe_size: int = None,
                  rebalance_freq: str = 'monthly',
                  data_manager: DataManager = None):
         """
@@ -38,7 +39,9 @@ class SmallCapStrategy(StrategyBase):
 
         Args:
             index_code: 指数代码
-            select_num: 选中股票数量
+            select_num: 选中股票数量（最终持仓）
+            universe_size: 股票池大小（从多少只小市值股票中筛选）
+                          None表示使用所有成分股
             rebalance_freq: 调仓频率 ('monthly' 或 'weekly')
             data_manager: 数据管理器
         """
@@ -46,11 +49,14 @@ class SmallCapStrategy(StrategyBase):
 
         self.index_code = index_code
         self.select_num = select_num
+        self.universe_size = universe_size
         self.rebalance_freq = rebalance_freq
 
         print(f"\n[小市值策略] 参数配置:")
         print(f"  指数代码: {index_code}")
         print(f"  选股数量: {select_num}")
+        if universe_size:
+            print(f"  股票池大小: {universe_size} 只")
         print(f"  调仓频率: {rebalance_freq}")
 
     def select_stocks(self, date: str) -> List[str]:
@@ -113,7 +119,13 @@ class SmallCapStrategy(StrategyBase):
                 print(f"    [WARNING] 过滤后无有效市值数据")
                 return []
 
-            print(f"    有效市值数据: {len(df_mv)} 只")
+            # 如果指定了股票池大小，先筛选出市值最小的universe_size只
+            if self.universe_size and len(df_mv) > self.universe_size:
+                df_mv = df_mv.sort_values('circ_mv', ascending=True).head(self.universe_size)
+                print(f"    股票池筛选: 从全市场筛选出市值最小的 {self.universe_size} 只")
+                print(f"    有效市值数据（筛选后）: {len(df_mv)} 只")
+            else:
+                print(f"    有效市值数据: {len(df_mv)} 只")
 
         except Exception as e:
             print(f"    [ERROR] 获取市值数据失败: {e}")
@@ -122,7 +134,48 @@ class SmallCapStrategy(StrategyBase):
         # 3. 按市值排序，选择最小的N只
         df_mv_sorted = df_mv.sort_values('circ_mv', ascending=True)
 
-        selected = df_mv_sorted.head(self.select_num).index.tolist()
+        # ✨ 新增：验证价格数据可用性，过滤掉无价格数据和退市股票
+        valid_stocks = []
+        delisted_stocks = []
+
+        for stock in df_mv_sorted.index:
+            price = self.data_manager.get_nearest_price(stock, date)
+
+            if price is not None and price > 0:
+                # 有价格，正常股票
+                valid_stocks.append(stock)
+            else:
+                # 无价格，检查是否退市
+                last_trade_info = self.data_manager.get_last_trade_date_and_price(stock, date)
+
+                if last_trade_info is not None:
+                    last_date, last_price = last_trade_info
+                    mv = df_mv_sorted.loc[stock, 'circ_mv']
+
+                    if last_price is not None:
+                        # 已退市，记录退市信息
+                        delisted_stocks.append((stock, last_date, last_price, mv))
+                        print(f"    [FILTER] {stock} 市值:{mv:,.0f}万元 - 已退市({last_date}最后价格{last_price:.2f})，已过滤")
+                    else:
+                        # 无历史价格，数据缺失
+                        print(f"    [FILTER] {stock} 市值:{mv:,.0f}万元 - 无历史价格数据，已过滤")
+                else:
+                    # 完全无法获取信息
+                    mv = df_mv_sorted.loc[stock, 'circ_mv']
+                    print(f"    [FILTER] {stock} 市值:{mv:,.0f}万元 - 无价格数据，已过滤")
+
+        # 显示退市股票统计
+        if delisted_stocks:
+            print(f"    ⚠️  检测到 {len(delisted_stocks)} 只退市股票已过滤")
+
+        # 如果有效股票不足select_num，则使用全部有效股票
+        if len(valid_stocks) < self.select_num:
+            print(f"    ⚠️  警告: 有效股票({len(valid_stocks)})少于选股数量({self.select_num})")
+            selected = valid_stocks
+        else:
+            # 从有效股票中选择市值最小的select_num只
+            df_valid = df_mv_sorted.loc[valid_stocks]
+            selected = df_valid.head(self.select_num).index.tolist()
 
         print(f"    选中股票: {len(selected)} 只")
         for i, stock in enumerate(selected, 1):

@@ -1071,6 +1071,44 @@ class WorkflowUIEnhanced:
                                                 else:
                                                     st.metric(metric_name, f"{value:.4f}")
 
+                                # ✨ 显示退市损失统计
+                                if 'delisted_stocks_count' in ls_results and ls_results['delisted_stocks_count'] > 0:
+                                    st.markdown("---")
+                                    st.markdown("##### ⚠️ 退市股票统计")
+                                    delisted_cols = st.columns(3)
+                                    with delisted_cols[0]:
+                                        st.metric("退市股票数量", f"{ls_results['delisted_stocks_count']} 只")
+                                    with delisted_cols[1]:
+                                        loss = ls_results.get('delisted_total_loss', 0)
+                                        st.metric("退市总损失", f"{loss:,.2f} 元")
+                                    with delisted_cols[2]:
+                                        initial_cash = ls_results.get('initial_cash', 1000000)
+                                        loss_pct = (loss / initial_cash * 100) if initial_cash > 0 else 0
+                                        st.metric("损失占比", f"{loss_pct:.2f}%")
+
+                                    # 显示退市股票详情
+                                    if 'delisted_stocks' in ls_results and ls_results['delisted_stocks']:
+                                        with st.expander("📋 查看退市股票详情"):
+                                            delisted_df = pd.DataFrame([
+                                                {
+                                                    '股票代码': symbol,
+                                                    '买入均价': f"{info['buy_avg_price']:.2f}",
+                                                    '卖出日期': info['sell_date'],
+                                                    '卖出价格': f"{info['sell_price']:.2f}",
+                                                    '亏损金额': f"{info['loss']:,.2f}",
+                                                    '亏损比例': f"{info['loss_pct']:.1f}%"
+                                                }
+                                                for symbol, info in ls_results['delisted_stocks'].items()
+                                            ])
+                                            st.dataframe(delisted_df, width="stretch", use_container_width=True)
+
+                                            st.warning("""
+                                            💡 **提示**：
+                                            - 退市股票已使用最后交易日价格强制卖出
+                                            - 损失已计入回测收益
+                                            - 建议在选股时过滤退市股票或设置止损策略
+                                            """)
+
                                 # 显示交易明细预览
                                 if 'trade_details' in ls_results:
                                     trade_details = ls_results['trade_details']

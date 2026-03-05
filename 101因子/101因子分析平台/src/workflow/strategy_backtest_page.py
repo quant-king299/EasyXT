@@ -33,9 +33,94 @@ def load_module_from_file(module_name, file_path):
     """直接从文件加载模块，绕过__init__.py避免相对导入错误"""
     spec = importlib.util.spec_from_file_location(module_name, file_path)
     module = importlib.util.module_from_spec(spec)
+
+    # 设置__package__属性，支持相对导入
+    # 根据文件路径确定包名
+    if 'strategies' in str(file_path):
+        module.__package__ = 'easyxt_backtest.strategies'
+    elif 'easyxt_backtest' in str(file_path) and module_name != 'strategy_base':
+        # 如果是easyxt_backtest下的文件（但不是strategy_base）
+        module.__package__ = 'easyxt_backtest'
+
     sys.modules[module_name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def check_market_cap_data(data_manager, start_date, end_date):
+    """
+    检查市值数据是否完整
+
+    Returns:
+        dict: {
+            'needs_download': bool,  # 是否需要下载数据
+            'message': str,          # 提示信息
+            'missing_range': str     # 缺失的日期范围
+        }
+    """
+    try:
+        if not data_manager.duckdb_con:
+            return {
+                'needs_download': True,
+                'message': 'DuckDB数据库未连接',
+                'missing_range': f'{start_date.strftime("%Y%m%d")} ~ {end_date.strftime("%Y%m%d")}'
+            }
+
+        # 检查stock_market_cap表是否存在
+        try:
+            data_manager.duckdb_con.execute("SELECT COUNT(*) FROM stock_market_cap LIMIT 1").fetchone()
+        except:
+            return {
+                'needs_download': True,
+                'message': '**stock_market_cap表不存在**，请先下载市值数据',
+                'missing_range': f'{start_date.strftime("%Y%m%d")} ~ {end_date.strftime("%Y%m%d")}'
+            }
+
+        # 检查日期范围
+        start_str = start_date.strftime('%Y-%m-%d')
+        end_str = end_date.strftime('%Y-%m-%d')
+
+        result = data_manager.duckdb_con.execute(f"""
+            SELECT
+                COUNT(DISTINCT date) as date_count,
+                MIN(date) as min_date,
+                MAX(date) as max_date
+            FROM stock_market_cap
+            WHERE date BETWEEN '{start_str}' AND '{end_str}'
+        """).fetchone()
+
+        date_count = result[0] if result else 0
+
+        # 计算应该有的交易日数量（粗略估算：每周5天）
+        days_diff = (end_date - start_date).days
+        expected_trading_days = days_diff * 5 / 7  # 约每周5个交易日
+
+        # 如果数据覆盖度低于50%，提示下载
+        coverage = date_count / max(expected_trading_days, 1)
+        needs_download = coverage < 0.5
+
+        if date_count == 0:
+            message = f'**完全没有市值数据** ({start_str} ~ {end_str})'
+        elif coverage < 0.3:
+            message = f'**市值数据严重不足**：仅有 {date_count} 天数据，预计需要约 {int(expected_trading_days)} 天'
+        elif coverage < 0.5:
+            message = f'**市值数据不足**：仅有 {date_count} 天数据，预计需要约 {int(expected_trading_days)} 天（覆盖率 {coverage*100:.1f}%）'
+        else:
+            message = f'市值数据良好：{date_count} 天数据（覆盖率 {coverage*100:.1f}%）'
+
+        return {
+            'needs_download': needs_download,
+            'message': message,
+            'missing_range': f'{start_str} ~ {end_str}'
+        }
+
+    except Exception as e:
+        # 检查失败，保守提示
+        return {
+            'needs_download': False,  # 检查失败不阻止回测
+            'message': f'数据检查失败: {e}',
+            'missing_range': ''
+        }
 
 
 def render_header():
@@ -124,7 +209,19 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
     try:
         backtest_path = Path(r"C:\Users\Administrator\Desktop\miniqmt扩展\easyxt_backtest")
 
-        # 使用importlib直接加载模块文件，绕过包的__init__.py
+        # 首先创建父包模块，确保相对导入能找到父包
+        # 关键：添加__path__属性，让Python识别这是一个包
+        import types
+        if 'easyxt_backtest' not in sys.modules:
+            easyxt_backtest_pkg = types.ModuleType('easyxt_backtest')
+            easyxt_backtest_pkg.__path__ = [str(backtest_path)]
+            sys.modules['easyxt_backtest'] = easyxt_backtest_pkg
+
+        if 'easyxt_backtest.strategies' not in sys.modules:
+            strategies_pkg = types.ModuleType('easyxt_backtest.strategies')
+            strategies_pkg.__path__ = [str(backtest_path / 'strategies')]
+            sys.modules['easyxt_backtest.strategies'] = strategies_pkg
+
         # 按照依赖顺序加载：strategy_base -> data_manager -> performance -> engine
         load_module_from_file('strategy_base', backtest_path / 'strategy_base.py')
 
@@ -142,9 +239,12 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
         )
         BacktestEngine = engine_module.BacktestEngine
 
-        # 使用wrapper获取策略类
-        from strategy_wrapper import get_small_cap_strategy_class
-        SmallCapStrategy = get_small_cap_strategy_class()
+        # 使用importlib直接加载策略模块，绕过相对导入
+        strategies_module = load_module_from_file(
+            'strategies',
+            backtest_path / 'strategies' / 'small_cap_strategy.py'
+        )
+        SmallCapStrategy = strategies_module.SmallCapStrategy
 
         # 显示进度
         progress_bar = st.progress(0)
@@ -156,33 +256,96 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
         # 初始化
         dm = DataManager()
 
+        # 检查市值数据是否完整
+        status_text.text("检查市值数据...")
+        progress_bar.progress(15)
+
+        data_check_info = check_market_cap_data(dm, start_date, end_date)
+        if data_check_info['needs_download']:
+            st.warning(f"""
+            ⚠️ **市值数据不完整**
+
+            {data_check_info['message']}
+
+            **📥 从GUI下载数据（推荐）：**
+
+            1️⃣ **启动主GUI**（新窗口）
+            ```bash
+            cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+            python run_gui.py
+            ```
+
+            2️⃣ **进入下载页面**
+            - 点击 **"📥 Tushare数据下载"** 标签页
+            - 选择 **"💰 市值数据"** 子标签页
+
+            3️⃣ **快速下载**
+            - ✅ Token会自动读取（从 .env 文件）
+            - 点击 **"2024年全年"** 快速按钮
+            - 点击 **"🚀 开始下载全A股市值数据"**
+            - 等待5-10分钟完成下载
+
+            4️⃣ **返回回测**
+            - 下载完成后回到此页面
+            - 重新运行回测即可
+
+            **🔄 或者继续回测：**
+            系统会自动使用Tushare API在线获取（速度较慢，每次调仓都需查询）
+            """)
+
+            if not st.checkbox("数据不完整，但我仍要继续回测（使用Tushare API）", value=False, key="continue_without_data"):
+                return None, "用户取消回测"
+
+            st.info("⏳ 将使用Tushare API在线获取数据，速度可能较慢...")
+
         status_text.text("创建策略实例...")
         progress_bar.progress(20)
 
-        strategy = SmallCapStrategy(
-            index_code='399101.SZ',  # 中小100指数
-            select_num=num_stocks
-        )
-        strategy.data_manager = dm
+        try:
+            strategy = SmallCapStrategy(
+                index_code='399101.SZ',  # 中小板综指
+                select_num=num_stocks,
+                universe_size=universe_size if universe_size > 0 else None
+            )
+            strategy.data_manager = dm
+            status_text.text("策略实例创建成功")
+        except Exception as e:
+            import traceback
+            error_msg = f"创建策略实例失败: {e}\n\n{traceback.format_exc()}"
+            status_text.text("策略实例创建失败")
+            return None, error_msg
+
+        progress_bar.progress(25)
 
         status_text.text("初始化回测引擎...")
         progress_bar.progress(30)
 
-        # 运行回测
-        engine = BacktestEngine(data_manager=dm, initial_cash=initial_cash)
+        try:
+            # 运行回测
+            engine = BacktestEngine(data_manager=dm, initial_cash=initial_cash)
+            status_text.text("回测引擎初始化成功")
+        except Exception as e:
+            import traceback
+            error_msg = f"初始化回测引擎失败: {e}\n\n{traceback.format_exc()}"
+            status_text.text("回测引擎初始化失败")
+            return None, error_msg
 
         start_str = start_date.strftime("%Y%m%d")
         end_str = end_date.strftime("%Y%m%d")
 
-        status_text.text("运行回测...")
+        status_text.text(f"运行回测: {start_str} ~ {end_str}...")
         progress_bar.progress(40)
 
-        results = engine.run_backtest(strategy, start_str, end_str)
-
-        progress_bar.progress(100)
-        status_text.text("✅ 回测完成！")
-
-        return results, None
+        try:
+            results = engine.run_backtest(strategy, start_str, end_str)
+            progress_bar.progress(100)
+            status_text.text("✅ 回测完成！")
+            return results, None
+        except Exception as e:
+            import traceback
+            error_msg = f"回测执行失败: {e}\n\n{traceback.format_exc()}"
+            status_text.text("回测执行失败")
+            return None, error_msg
 
     except Exception as e:
         import traceback
@@ -435,8 +598,14 @@ def render_backtest_summary(results, initial_cash):
         st.markdown("#### ⏱️ 时间统计")
         # 使用真实的returns数据
         if hasattr(results, 'returns') and results.returns is not None and not results.returns.empty:
-            start = results.returns.index[0]
-            end = results.returns.index[-1]
+            # 处理字符串格式的日期索引（YYYYMMDD格式）
+            start_str = results.returns.index[0]
+            end_str = results.returns.index[-1]
+
+            # 转换为datetime对象以便计算天数
+            start = pd.to_datetime(start_str, format='%Y%m%d')
+            end = pd.to_datetime(end_str, format='%Y%m%d')
+
             days = (end - start).days
             years = days / 365.25
 
@@ -464,6 +633,113 @@ def render_strategy_backtest_page():
 
     # 配置面板
     start_date, end_date, num_stocks, universe_size, initial_cash = render_config_panel()
+
+    # 数据准备提示
+    with st.expander("💡 **数据准备提示**（首次使用必读）", expanded=False):
+        st.markdown("""
+        ### 📥 市值数据下载（全市场数据）
+
+        **为什么需要下载市值数据？**
+        - 小市值策略需要按市值排序选股
+        - DuckDB本地数据最快（秒级响应）
+        - 在线API较慢且可能不稳定
+
+        **🌟 推荐方式：从GUI下载（简单快捷）⭐**
+
+        #### 步骤：
+        1. **启动主GUI**
+           ```bash
+           cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+           python run_gui.py
+           ```
+
+        2. **进入下载页面**
+           - 在GUI主窗口中找到 **"📥 Tushare数据下载"** 标签页
+           - 点击 **"💰 市值数据"** 子标签页
+
+        3. **配置下载参数**
+           - ✅ **Token自动读取**：GUI会自动读取 .env 文件中的 TUSHARE_TOKEN
+           - 点击 **"2024年全年"** 快速按钮
+           - 或者手动设置日期范围（如 2024-01-01 ~ 2024-12-31）
+
+        4. **开始下载**
+           - 点击 **"🚀 开始下载全A股市值数据"** 按钮
+           - 等待5-10分钟，下载约5000只股票 × 243个交易日
+
+        **优点：**
+        - ✅ 图形界面，操作简单
+        - ✅ Token自动读取（.env配置）
+        - ✅ 实时进度显示
+        - ✅ 可视化日志输出
+        - ✅ 自动处理错误和重试
+
+        **参数说明：**
+        - **选股数量**：最终持仓的股票数（如5只）
+        - **股票池大小**：从多少只小市值股票中筛选（如500只）
+          - 例如：从全市场筛选市值最小的500只，再从中选5只持仓
+          - 股票池越大，选股范围越广，但可能风险更高
+
+        **数据源优先级（自动切换）：**
+        1. ⭐ **DuckDB**（本地，最快）- 从GUI下载后
+        2. ⚡ **Tushare**（在线，准确）- 自动fallback
+        3. ⚠️ **QMT**（本地，仅供参考）- 可能不准确
+
+        **检查当前数据状态：**
+        """, unsafe_allow_html=True)
+
+        # 添加快速检查按钮
+        if st.button("🔍 检查市值数据", use_container_width=True):
+            try:
+                import sys
+                import os
+                sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+                from easyxt_backtest.data_manager import DataManager
+
+                with st.spinner("检查数据中..."):
+                    dm = DataManager()
+                    info = check_market_cap_data(dm, start_date, end_date)
+
+                    if info['needs_download']:
+                        st.error(f"""
+                        ⚠️ {info['message']}
+
+                        **📥 下载数据步骤：**
+
+                        1️⃣ **启动主GUI**（如果未打开）
+                        ```bash
+                        cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+                        python run_gui.py
+                        ```
+
+                        2️⃣ **进入下载页面**
+                        - 点击 **"📥 Tushare数据下载"** 标签页
+                        - 选择 **"💰 市值数据"** 子标签页
+
+                        3️⃣ **配置并下载**
+                        - Token自动读取（.env配置）
+                        - 点击 **"2024年全年"** 快速按钮
+                        - 点击 **"🚀 开始下载全A股市值数据"**
+
+                        💡 下载约需5-10分钟，完成后即可回测
+                        """)
+                    else:
+                        st.success(f"""
+                        ✅ {info['message']}
+
+                        数据充足，可以开始回测！
+                        """)
+            except Exception as e:
+                st.warning(f"数据检查失败: {e}")
+                st.info("""
+                💡 **提示：** 如果尚未下载市值数据，建议：
+
+                1. 启动主GUI：`python run_gui.py`
+                2. 进入 **"📥 Tushare数据下载"** → **"💰 市值数据"**
+                3. Token自动读取（.env配置），点击 **"2024年全年"** 快速下载
+                4. 等待5-10分钟完成下载
+
+                下载完成后即可快速回测！
+                """)
 
     # 运行按钮
     st.markdown("---")

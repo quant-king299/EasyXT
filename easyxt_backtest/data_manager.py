@@ -91,7 +91,8 @@ class DataManager:
 
         # 缓存
         self.price_cache = {}  # {(date, symbol): price}
-        self.fundamental_cache = {}  # {(date, symbol): data}
+        self.fundamental_cache = {}  # {(date, symbol): data} - 单个股票缓存
+        self.fundamentals_cache = {}  # {date: DataFrame} - 批量缓存（全市场）
         self.trading_days_cache = None
 
         # 市值缓存（用于QMT失败时的fallback）
@@ -359,26 +360,28 @@ class DataManager:
         Returns:
             DataFrame with index=symbol, columns=fields
 
-        优先级（修复市值显示为0的问题）：
-        1. DuckDB（最快、最可靠）← 优先使用本地市值表
-        2. QMT（需要股本数据，mini版本可能不支持）
-        3. Tushare（在线API，可能不稳定）
+        优先级（优化后的数据源策略）：
+        1. DuckDB（本地，最快）⭐ 推荐优先使用，需先通过GUI下载完整数据
+        2. Tushare（在线，备用）⚡ 自动fallback，实时获取历史市值
+        3. QMT（仅供参考）⚠️ 使用当前股本×历史价格，可能不准确
         """
-        # 优先从DuckDB获取（市值表数据）
+        # 优先级1: 从DuckDB获取（本地市值表，速度最快）
         if self.duckdb_con and ('circ_mv' in fields or 'total_mv' in fields):
             df = self._get_fundamentals_from_duckdb(codes, date, fields)
             if not df.empty:
                 return df
 
-        # 备用：从QMT获取（支持市值计算，但mini版本可能不支持）
-        if self.qmt_connected and ('circ_mv' in fields or 'total_mv' in fields):
-            df = self._get_fundamentals_from_qmt(codes, date, fields)
+        # 优先级2: 从Tushare获取（在线API，真实的市值数据）
+        if self.tushare_pro and ('circ_mv' in fields or 'total_mv' in fields):
+            df = self._get_fundamentals_from_tushare(codes, date, fields)
             if not df.empty:
                 return df
 
-        # 备用：从Tushare获取
-        if self.tushare_pro:
-            df = self._get_fundamentals_from_tushare(codes, date, fields)
+        # 优先级3: 从QMT获取（不准确！使用当前股本×历史价格）
+        # 注意：QMT的股本数据是时点数据，不是历史数据，计算结果仅供参考
+        if self.qmt_connected and ('circ_mv' in fields or 'total_mv' in fields):
+            print("[DataManager] 警告: 使用QMT计算市值可能不准确（股本数据非历史数据）")
+            df = self._get_fundamentals_from_qmt(codes, date, fields)
             if not df.empty:
                 return df
 
@@ -389,52 +392,70 @@ class DataManager:
                                        date: str,
                                        fields: List[str]) -> pd.DataFrame:
         """
-        从Tushare获取基本面数据（改进版）
+        从Tushare获取基本面数据（超高速批量查询版）⚡
 
-        改进：
-        1. 增加日期fallback机制（向前查找最近的数据）
-        2. 更好的错误处理
-        3. 支持部分数据返回（某些股票失败不影响其他股票）
+        优化：
+        1. 批量查询全市场数据（1次API调用 vs 5000次）
+        2. 缓存全市场数据，支持任意股票池查询
+        3. 添加延迟避免限流
         """
         try:
-            all_data = []
-            failed_codes = []
+            import time
 
-            for code in codes:
-                try:
-                    # 尝试获取指定日期的数据
-                    df = self.tushare_pro.daily_basic(
-                        ts_code=code,
-                        trade_date=date,
-                        fields=','.join(['ts_code', 'trade_date'] + fields)
-                    )
+            # 检查缓存（缓存全市场数据，不筛选）
+            cache_key = ('tushare_fundamentals_all', date)
+            if cache_key in self.fundamentals_cache:
+                cached_df = self.fundamentals_cache[cache_key]
+                # 从缓存中筛选需要的股票
+                result = cached_df[cached_df['ts_code'].isin(codes)].copy()
+                if not result.empty:
+                    result.set_index('ts_code', inplace=True)
+                    return result
 
-                    # 如果指定日期没有数据，尝试向前查找
-                    if df is None or df.empty:
-                        df = self._get_tushare_with_fallback(code, date, fields)
+            # ✨ 批量查询全市场数据（不指定ts_code，返回所有股票）
+            df = self.tushare_pro.daily_basic(
+                trade_date=date,
+                fields='ts_code,trade_date,' + ','.join(fields)
+            )
+
+            if df is None or df.empty:
+                # 如果指定日期没有数据，尝试向前查找（最多3天）
+                for i in range(1, 4):
+                    try:
+                        from datetime import datetime, timedelta
+                        date_obj = datetime.strptime(date, '%Y%m%d')
+                        prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+                        df = self.tushare_pro.daily_basic(
+                            trade_date=prev_date,
+                            fields='ts_code,trade_date,' + ','.join(fields)
+                        )
+
                         if df is not None and not df.empty:
-                            all_data.append(df)
-                        else:
-                            failed_codes.append(code)
-                    else:
-                        all_data.append(df)
+                            print(f"[DataManager] {date}使用Tushare{prev_date}数据（批量）")
+                            break
+                    except:
+                        continue
 
-                except Exception as e:
-                    # 单个股票失败不影响其他股票
-                    failed_codes.append(code)
-                    print(f"[DataManager] Tushare查询{code}失败: {e}")
-                    continue
-
-            if all_data:
-                result = pd.concat(all_data, ignore_index=True)
-                result.set_index('ts_code', inplace=True)
-
-                if failed_codes:
-                    print(f"[DataManager] Tushare: 成功{len(all_data)}只，失败{len(failed_codes)}只")
-
-                return result
-            else:
+            if df is None or df.empty:
+                print(f"[DataManager] Tushare批量查询{date}失败：无数据")
                 return pd.DataFrame()
+
+            # 缓存全市场数据（不筛选，方便后续复用）
+            self.fundamentals_cache[cache_key] = df.copy()
+
+            # 筛选需要的股票
+            df_filtered = df[df['ts_code'].isin(codes)].copy()
+            df_filtered.set_index('ts_code', inplace=True)
+
+            # 添加延迟避免限流（每次查询间隔0.3秒）
+            time.sleep(0.3)
+
+            return df_filtered
+
+        except Exception as e:
+            print(f"[DataManager] Tushare批量查询{date}失败: {e}")
+            return pd.DataFrame()
 
         except Exception as e:
             print(f"[DataManager] Tushare基本面查询失败: {e}")
@@ -513,19 +534,9 @@ class DataManager:
                 close_price = self._get_close_price_with_fallback(code, date)
 
                 if close_price is None:
-                    # 尝试使用缓存的历史市值
-                    if code in self.market_value_cache:
-                        cached_date, cached_mv = self.market_value_cache[code]
-                        print(f"[DataManager] {code} 使用缓存市值 ({cached_date}): {cached_mv:,.0f} 万元")
-
-                        if 'circ_mv' in fields:
-                            result_data.append({
-                                'symbol': code,
-                                'circ_mv': cached_mv
-                            })
-                        continue
-                    else:
-                        continue
+                    # QMT无法获取价格，跳过该股票（不再使用缓存）
+                    print(f"[DataManager] {code} QMT无法获取 {date} 的价格，跳过")
+                    continue
 
                 # 3. 计算市值
                 row_data = {'symbol': code}
@@ -541,8 +552,8 @@ class DataManager:
                     circ_mv = float_volume * close_price
                     row_data['circ_mv'] = circ_mv
 
-                    # 缓存市值数据
-                    self.market_value_cache[code] = (date, circ_mv)
+                    # 注意：不再缓存市值数据（每次都重新计算）
+                    # 原因：QMT股本数据是时点数据，缓存会导致使用错误的市值
 
                 if 'total_mv' in fields:
                     # 总市值（万元）= 总股本（万股）× 收盘价（元）
@@ -1032,6 +1043,88 @@ class DataManager:
                 pass
 
         return None
+
+    def check_if_delisted(self, code: str, date: str, check_days: int = 30) -> Optional[tuple]:
+        """
+        检查股票是否退市（连续N天无价格数据）
+
+        Args:
+            code: 股票代码
+            date: 当前日期 (YYYYMMDD)
+            check_days: 检查天数，默认30天
+
+        Returns:
+            None (未退市) 或 (last_trade_date, last_price) (已退市)
+        """
+        from datetime import datetime, timedelta
+
+        dt_obj = datetime.strptime(date, '%Y%m%d')
+
+        # 向前查找最近的有价格的日期
+        for i in range(1, check_days + 1):
+            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+            # 跳过周末
+            day_of_week = (dt_obj - timedelta(days=i)).weekday()
+            if day_of_week >= 5:  # 周六、周日
+                continue
+
+            price = self._get_single_price(code, check_date)
+            if price is not None:
+                # 找到了最近的价格，说明还没退市（或者刚退市）
+                # 检查从那天到今天是否有交易日有数据
+                for j in range(i):
+                    between_date = (dt_obj - timedelta(days=j)).strftime('%Y%m%d')
+                    day_of_week = (dt_obj - timedelta(days=j)).weekday()
+                    if day_of_week >= 5:
+                        continue
+
+                    between_price = self._get_single_price(code, between_date)
+                    if between_price is not None:
+                        # 中间有价格数据，说明未退市
+                        return None
+
+                # 从找到的最近价格日期到现在都没有数据，判定为退市
+                return (check_date, price)
+
+        # 连续check_days都没找到价格，判定为退市
+        return (None, None)
+
+    def get_last_trade_date_and_price(self, code: str, date: str) -> Optional[tuple]:
+        """
+        获取股票的最后交易日和最后价格（用于退市处理）
+
+        Args:
+            code: 股票代码
+            date: 当前日期 (YYYYMMDD)
+
+        Returns:
+            None (有价格) 或 (last_date, last_price) (最后交易日和价格)
+        """
+        from datetime import datetime, timedelta
+
+        # 先尝试获取当前日期价格
+        current_price = self.get_nearest_price(code, date)
+        if current_price is not None:
+            return None  # 有价格，未退市
+
+        # 当前无价格，向前查找最后交易日
+        dt_obj = datetime.strptime(date, '%Y%m%d')
+
+        for i in range(1, 60):  # 最多向前查找60天
+            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+            # 跳过周末
+            day_of_week = (dt_obj - timedelta(days=i)).weekday()
+            if day_of_week >= 5:
+                continue
+
+            price = self._get_single_price(code, check_date)
+            if price is not None:
+                return (check_date, price)
+
+        # 无法找到任何历史价格
+        return (None, None)
 
     # ==================== 辅助方法 ====================
 

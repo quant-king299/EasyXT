@@ -116,6 +116,11 @@ class BacktestEngine:
         self.portfolio_history = []  # List[PortfolioSnapshot]
         self.daily_values = []  # [(date, total_value)]
 
+        # ✨ 退市损失追踪
+        self.delisted_stocks = {}  # {symbol: {'buy_dates': [date], 'buy_prices': [price], 'volumes': [volume], 'sell_date': date, 'sell_price': float, 'loss': float}}
+        self.delisted_total_loss = 0.0  # 退市总损失
+        self.position_costs = {}  # {symbol: {'total_cost': float, 'total_volume': int}} - 用于追踪持仓成本
+
     # ==================== 主回测循环 ====================
 
     def run_backtest(self,
@@ -199,6 +204,11 @@ class BacktestEngine:
         self.portfolio_history = []
         self.daily_values = []
 
+        # ✨ 重置退市损失追踪
+        self.delisted_stocks = {}
+        self.delisted_total_loss = 0.0
+        self.position_costs = {}
+
     def _rebalance(self, date: str, target_weights: Dict[str, float]):
         """
         执行调仓
@@ -211,7 +221,40 @@ class BacktestEngine:
         current_value = self._get_total_value(date)
         print(f"  当前总资产: {current_value:,.2f}")
 
-        # 2. 卖出不在目标中的股票
+        # 2. 处理退市股票（使用最后交易日价格强制卖出）
+        to_sell_delisted = []
+        for code in list(self.positions.keys()):  # 使用list()避免迭代时修改字典
+            current_price = self.data_manager.get_nearest_price(code, date)
+
+            if current_price is None:
+                # 当前无价格，检查是否退市
+                last_trade_info = self.data_manager.get_last_trade_date_and_price(code, date)
+
+                if last_trade_info is not None:
+                    last_date, last_price = last_trade_info
+
+                    if last_price is not None:
+                        # 已退市，使用最后价格强制卖出
+                        volume = self.positions[code]
+                        loss_amount = last_price * volume
+
+                        print(f"    [DELISTED] {code} 已退市({last_date}最后价格{last_price:.2f})，强制卖出{volume}股")
+                        print(f"              损失约: {loss_amount:,.2f} 元")
+
+                        # 使用最后价格执行卖出
+                        self._sell_with_price(code, date, volume, last_price, is_delisted=True)
+                        to_sell_delisted.append(code)
+                    else:
+                        # 无历史价格，清零持仓（模拟血本无归）
+                        volume = self.positions[code]
+                        print(f"    [DELISTED] {code} 已退市且无价格数据，清零持仓{volume}股（血本无归）")
+                        print(f"              损失: {volume}股（无法估值）")
+
+                        # 从positions中移除，但不增加资金（血本无归）
+                        del self.positions[code]
+                        to_sell_delisted.append(code)
+
+        # 3. 卖出不在目标中的股票
         to_sell = [code for code in self.positions if code not in target_weights]
         if to_sell:
             print(f"  卖出: {len(to_sell)} 只")
@@ -291,6 +334,13 @@ class BacktestEngine:
         # 增加持仓
         self.positions[symbol] = self.positions.get(symbol, 0) + volume
 
+        # ✨ 记录持仓成本（用于计算退市损失）
+        cost = amount + commission  # 总成本（含手续费）
+        if symbol not in self.position_costs:
+            self.position_costs[symbol] = {'total_cost': 0.0, 'total_volume': 0}
+        self.position_costs[symbol]['total_cost'] += cost
+        self.position_costs[symbol]['total_volume'] += volume
+
         # 记录交易
         trade = Trade(
             date=date,
@@ -341,6 +391,17 @@ class BacktestEngine:
         if self.positions[symbol] == 0:
             del self.positions[symbol]
 
+        # ✨ 更新持仓成本（按比例减少）
+        if symbol in self.position_costs:
+            cost_ratio = volume / (volume + self.positions.get(symbol, 0))
+            cost_to_reduce = self.position_costs[symbol]['total_cost'] * cost_ratio
+            self.position_costs[symbol]['total_cost'] -= cost_to_reduce
+            self.position_costs[symbol]['total_volume'] -= volume
+
+            # 如果持仓清零，清除成本记录
+            if symbol not in self.positions:
+                del self.position_costs[symbol]
+
         # 记录交易
         trade = Trade(
             date=date,
@@ -355,6 +416,89 @@ class BacktestEngine:
         self.trade_history.append(trade)
 
         print(f"    [SELL] {symbol} {volume}股 @ {execution_price:.2f} 元")
+
+    def _sell_with_price(self, symbol: str, date: str, volume: int, force_price: float, is_delisted: bool = False):
+        """
+        使用指定价格卖出（用于退市股票处理）
+
+        Args:
+            symbol: 股票代码
+            date: 日期
+            volume: 卖出股数
+            force_price: 强制使用的价格
+            is_delisted: 是否为退市股票
+        """
+        if symbol not in self.positions or self.positions[symbol] < volume:
+            print(f"    [FAIL] {symbol} 卖出失败 - 持仓不足")
+            return
+
+        # 直接使用指定价格，不计算滑点
+        execution_price = force_price
+
+        # 计算金额
+        amount = execution_price * volume
+        commission = max(amount * self.commission, 5)  # 最低5元
+        net_amount = amount - commission
+
+        # 增加资金
+        self.cash += net_amount
+
+        # 减少持仓
+        self.positions[symbol] -= volume
+        if self.positions[symbol] == 0:
+            del self.positions[symbol]
+
+        # ✨ 如果是退市股票，计算并记录损失
+        if is_delisted and symbol in self.position_costs:
+            # 计算平均成本
+            avg_cost_price = self.position_costs[symbol]['total_cost'] / self.position_costs[symbol]['total_volume']
+
+            # 计算损失
+            total_cost = avg_cost_price * volume
+            total_revenue = net_amount
+            loss = total_cost - total_revenue  # 正数表示损失
+
+            # 记录退市信息
+            self.delisted_stocks[symbol] = {
+                'buy_avg_price': avg_cost_price,
+                'sell_date': date,
+                'sell_price': execution_price,
+                'volume': volume,
+                'total_cost': total_cost,
+                'total_revenue': total_revenue,
+                'loss': loss,
+                'loss_pct': (loss / total_cost * 100) if total_cost > 0 else 0
+            }
+
+            self.delisted_total_loss += loss
+
+            # 清除持仓成本记录
+            del self.position_costs[symbol]
+
+        # 记录交易（标记为退市卖出）
+        direction = 'sell_delisted' if is_delisted else 'sell'
+        trade = Trade(
+            date=date,
+            symbol=symbol,
+            direction=direction,
+            volume=volume,
+            price=execution_price,
+            amount=amount,
+            commission=commission,
+            net_amount=net_amount
+        )
+        self.trade_history.append(trade)
+
+        if is_delisted:
+            loss_info = self.delisted_stocks.get(symbol, {})
+            if loss_info:
+                print(f"    [SELL_DELISTED] {symbol} {volume}股 @ {execution_price:.2f} 元（退市处理）")
+                print(f"                   买入均价: {loss_info['buy_avg_price']:.2f} 元")
+                print(f"                   亏损: {loss_info['loss']:,.2f} 元 ({loss_info['loss_pct']:.1f}%)")
+            else:
+                print(f"    [SELL_DELISTED] {symbol} {volume}股 @ {execution_price:.2f} 元（退市处理）")
+        else:
+            print(f"    [SELL] {symbol} {volume}股 @ {execution_price:.2f} 元")
 
     def _sell_all(self, date: str):
         """清仓"""
@@ -375,6 +519,10 @@ class BacktestEngine:
             price = self.data_manager.get_nearest_price(symbol, date)
             if price:
                 total += price * volume
+            else:
+                # ✨ 警告：无法获取价格的股票不计入市值（但持仓仍在）
+                # 这种情况应该在下一次调仓时被卖出
+                print(f"    [WARNING] {symbol} 持仓{volume}股无法估值（无价格数据）")
         return total
 
     def _record_portfolio(self, date: str):
@@ -438,6 +586,27 @@ class BacktestEngine:
             returns=returns,
             initial_cash=self.initial_cash
         )
+
+        # ✨ 添加退市损失统计
+        performance['delisted_stocks_count'] = len(self.delisted_stocks)
+        performance['delisted_total_loss'] = self.delisted_total_loss
+        performance['delisted_stocks'] = self.delisted_stocks
+
+        # 打印退市损失统计
+        if self.delisted_stocks:
+            print(f"\n{'='*70}")
+            print(f"【退市股票统计】")
+            print(f"  退市股票数量: {len(self.delisted_stocks)} 只")
+            print(f"  退市总损失:   {self.delisted_total_loss:,.2f} 元")
+            print(f"  损失占比:     {self.delisted_total_loss / self.initial_cash * 100:.2f}%")
+            print(f"\n  退市详情:")
+            for i, (symbol, info) in enumerate(self.delisted_stocks.items(), 1):
+                print(f"    {i}. {symbol}")
+                print(f"       买入均价: {info['buy_avg_price']:.2f} 元")
+                print(f"       卖出日期: {info['sell_date']} (退市)")
+                print(f"       卖出价格: {info['sell_price']:.2f} 元")
+                print(f"       亏损:     {info['loss']:,.2f} 元 ({info['loss_pct']:.1f}%)")
+            print(f"{'='*70}")
 
         return BacktestResult(
             trades=trades_df,

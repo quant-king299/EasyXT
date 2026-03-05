@@ -110,73 +110,281 @@ class TushareDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def _download_market_cap(self):
-        """下载市值数据"""
+        """下载市值数据（全市场，按日期范围）"""
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
-            stock_count = self.kwargs.get('stock_count', 500)
-            days_back = self.kwargs.get('days_back', 30)
+            start_date = self.kwargs.get('start_date', '20240101')
+            end_date = self.kwargs.get('end_date', '20241231')
 
             self.log_signal.emit("=" * 60)
-            self.log_signal.emit("开始下载市值数据")
+            self.log_signal.emit("开始下载全A股市值数据")
             self.log_signal.emit("=" * 60)
 
             # 连接数据库
             conn = duckdb.connect(db_path)
             self.log_signal.emit("✅ 数据库连接成功")
 
-            # 创建市值表
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS stock_market_cap (
-                    stock_code VARCHAR,
-                    date DATE,
-                    circ_mv DECIMAL(18,2),
-                    total_mv DECIMAL(18,2),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, date)
-                )
-            """)
+            # 检查表是否存在，获取现有结构
+            try:
+                # 尝试查询表
+                conn.execute("SELECT COUNT(*) FROM stock_market_cap LIMIT 1")
+                self.log_signal.emit("✅ stock_market_cap 表已存在")
 
-            # 获取股票列表
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            total_stocks = len(stock_list)
-            self.log_signal.emit(f"✅ 共 {total_stocks} 只股票")
+                # 检查是否有必要的字段
+                required_columns = ['stock_code', 'date', 'circ_mv', 'total_mv', 'close', 'pe', 'pb', 'turnover_rate']
+                existing_columns = conn.execute("""
+                    SELECT column_name FROM information_schema.columns
+                    WHERE table_name = 'stock_market_cap'
+                """).fetchdf()['column_name'].tolist()
 
-            if stock_count < total_stocks:
-                stock_list = stock_list.head(stock_count)
+                # 找出缺失的字段
+                missing_columns = [col for col in required_columns if col.lower() not in [c.lower() for c in existing_columns]]
 
-            # 下载市值数据
+                if missing_columns:
+                    self.log_signal.emit(f"📝 检测到缺失字段: {', '.join(missing_columns)}")
+                    self.log_signal.emit("📝 正在添加缺失字段...")
+
+                    # 添加缺失字段
+                    if 'close' in missing_columns:
+                        conn.execute("ALTER TABLE stock_market_cap ADD COLUMN close DECIMAL(10,2)")
+                        self.log_signal.emit("  ✅ 已添加 close 字段")
+                    if 'pe' in missing_columns:
+                        conn.execute("ALTER TABLE stock_market_cap ADD COLUMN pe DECIMAL(10,2)")
+                        self.log_signal.emit("  ✅ 已添加 pe 字段")
+                    if 'pb' in missing_columns:
+                        conn.execute("ALTER TABLE stock_market_cap ADD COLUMN pb DECIMAL(10,2)")
+                        self.log_signal.emit("  ✅ 已添加 pb 字段")
+                    if 'turnover_rate' in missing_columns:
+                        conn.execute("ALTER TABLE stock_market_cap ADD COLUMN turnover_rate DECIMAL(10,4)")
+                        self.log_signal.emit("  ✅ 已添加 turnover_rate 字段")
+
+                    self.log_signal.emit("✅ 表结构更新完成")
+
+            except Exception as e:
+                # 表不存在，创建新表
+                self.log_signal.emit(f"📝 创建新表: {e}")
+                conn.execute("""
+                    CREATE TABLE stock_market_cap (
+                        stock_code VARCHAR,
+                        date DATE,
+                        circ_mv DECIMAL(18,2),
+                        total_mv DECIMAL(18,2),
+                        close DECIMAL(10,2),
+                        pe DECIMAL(10,2),
+                        pb DECIMAL(10,2),
+                        turnover_rate DECIMAL(10,4),
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (stock_code, date)
+                    )
+                """)
+                self.log_signal.emit("✅ stock_market_cap 表创建成功")
+
+            # 获取交易日历
+            self.log_signal.emit(f"📅 获取交易日历: {start_date} ~ {end_date}")
+            trade_cal = pro.trade_cal(
+                exchange='SSE',
+                start_date=start_date,
+                end_date=end_date,
+                is_open=1
+            )
+
+            if trade_cal is None or trade_cal.empty:
+                self.log_signal.emit("❌ 未获取到交易日历")
+                return
+
+            all_trade_dates = trade_cal['cal_date'].tolist()
+            self.log_signal.emit(f"✅ 共 {len(all_trade_dates)} 个交易日")
+
+            # ✨ 智能检查：找出缺失数据的日期
+            self.log_signal.emit("\n🔍 检查已有数据...")
+            existing_dates = set()
+
+            try:
+                # 转换日期格式为YYYY-MM-DD用于数据库查询
+                start_date_db = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
+                end_date_db = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+
+                # 查询数据库中已有的日期
+                existing_result = conn.execute("""
+                    SELECT DISTINCT date
+                    FROM stock_market_cap
+                    WHERE date BETWEEN ? AND ?
+                    ORDER BY date
+                """, [start_date_db, end_date_db]).fetchall()
+
+                if existing_result:
+                    existing_dates = {row[0] for row in existing_result}
+
+                self.log_signal.emit(f"  已有数据: {len(existing_dates)} 个交易日")
+
+                # 找出缺失的日期（all_trade_dates是YYYYMMDD格式，需要转换比较）
+                # 注意：DuckDB返回的是datetime.date对象，需要先转换为字符串
+                existing_dates_db = {d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)
+                                    for d in existing_dates}
+                missing_dates = [d for d in all_trade_dates if f"{d[:4]}-{d[4:6]}-{d[6:]}" not in existing_dates_db]
+
+                if len(existing_dates) > 0:
+                    # 显示已有数据的日期范围
+                    sorted_dates = sorted(list(existing_dates))
+                    if sorted_dates:
+                        self.log_signal.emit(f"  日期范围: {sorted_dates[0]} ~ {sorted_dates[-1]}")
+
+            except Exception as e:
+                # 查询失败，下载所有数据
+                self.log_signal.emit(f"  ⚠️  检查失败: {e}")
+                self.log_signal.emit("  将下载所有数据...")
+                missing_dates = all_trade_dates
+
+            if missing_dates:
+                self.log_signal.emit(f"\n✨ 需要下载: {len(missing_dates)} 个交易日")
+                if len(existing_dates) > 0:
+                    self.log_signal.emit(f"✅ 跳过已有: {len(existing_dates)} 个交易日")
+                    self.log_signal.emit(f"💾 节省时间: 约 {len(existing_dates) * 0.3:.0f} 秒")
+            else:
+                self.log_signal.emit(f"\n✅ 所有数据已存在！无需下载")
+                self.finished_signal.emit({
+                    'success': True,
+                    'total_records': 0,
+                    'total_stocks': 0,
+                    'skipped': True
+                })
+                return
+
+            # 只下载缺失的日期
+            trade_dates = missing_dates
+
+            # 逐日下载全市场数据（超高速模式）
             total_inserted = 0
-            for i, (_, stock_row) in enumerate(stock_list.iterrows(), 1):
+            all_stocks = set()
+            start_time = time.time()
+
+            for date_idx, trade_date in enumerate(trade_dates, 1):
                 if not self._is_running:
+                    self.log_signal.emit("\n⚠️  下载已取消")
                     break
 
-                code = stock_row['ts_code']
                 try:
-                    df = pro.daily_basic(ts_code=code, fields='ts_code,trade_date,circ_mv,total_mv')
+                    # 获取当日全市场数据（不指定股票代码）
+                    df = pro.daily_basic(
+                        trade_date=trade_date,
+                        fields='ts_code,trade_date,close,pe,pb,total_mv,circ_mv,turnover_rate'
+                    )
+
                     if df is not None and not df.empty:
-                        df.rename(columns={'trade_date': 'date'}, inplace=True)
-                        df['date'] = pd.to_datetime(df['date'], format='%Y%m%d').dt.strftime('%Y-%m-%d')
-                        recent_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
-                        df = df[df['date'] >= recent_date]
+                        # 统计股票数量
+                        all_stocks.update(df['ts_code'].tolist())
 
-                        for _, row in df.iterrows():
-                            conn.execute("""
-                                INSERT OR IGNORE INTO stock_market_cap
-                                (stock_code, date, circ_mv, total_mv)
-                                VALUES (?, ?, ?, ?)
-                            """, [row['ts_code'], row['date'],
-                                  float(row['circ_mv']) if pd.notna(row['circ_mv']) else None,
-                                  float(row['total_mv']) if pd.notna(row['total_mv']) else None])
-                            total_inserted += 1
+                        # 转换日期格式 YYYYMMDD -> YYYY-MM-DD
+                        df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
 
-                    if i % 10 == 0:
-                        self.progress_signal.emit(i, len(stock_list))
+                        # 重命名列
+                        df.rename(columns={'ts_code': 'stock_code'}, inplace=True)
+
+                        # 选择需要的列
+                        df_insert = df[['stock_code', 'date', 'circ_mv', 'total_mv', 'close', 'pe', 'pb', 'turnover_rate']].copy()
+                        df_insert = df_insert.fillna(0)
+
+                        # ✨ 使用to_sql的APPEND模式（最快的方法！）
+                        try:
+                            df_insert.to_sql(
+                                'stock_market_cap',
+                                conn,
+                                if_exists='append',
+                                index=False,
+                                method='multi'  # 多行插入，速度最快
+                            )
+                            insert_count = len(df_insert)
+                        except Exception as sql_error:
+                            # to_sql失败，回退到executemany
+                            insert_data = [tuple(row) for row in df_insert.itertuples(index=False, name=None)]
+                            conn.executemany("""
+                                INSERT OR REPLACE INTO stock_market_cap
+                                (stock_code, date, circ_mv, total_mv, close, pe, pb, turnover_rate)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """, insert_data)
+                            insert_count = len(insert_data)
+
+                        total_inserted += insert_count
+
+                        # 每20个交易日显示一次进度（减少日志开销）
+                        if date_idx % 20 == 0 or date_idx == len(trade_dates):
+                            elapsed = time.time() - start_time
+                            # 确保至少运行了1秒再计算速度
+                            if elapsed > 0:
+                                speed = date_idx / elapsed
+                                eta = (len(trade_dates) - date_idx) / speed if speed > 0 else 0
+
+                                self.log_signal.emit(
+                                    f"[{date_idx}/{len(trade_dates)}] {trade_date} | "
+                                    f"已插入: {total_inserted:,}条 | "
+                                    f"速度: {speed:.2f}天/秒 | "
+                                    f"预计剩余: {eta/60:.1f}分钟"
+                                )
+
+                    else:
+                        # 无数据，每20个交易日显示一次
+                        if date_idx % 20 == 0 or date_idx == len(trade_dates):
+                            self.log_signal.emit(f"[{date_idx}/{len(trade_dates)}] {trade_date} | ⚠️ 无数据")
 
                 except Exception as e:
-                    continue
+                    # 错误，每20个交易日显示一次
+                    if date_idx % 20 == 0 or date_idx == len(trade_dates):
+                        self.log_signal.emit(f"[{date_idx}/{len(trade_dates)}] {trade_date} | ❌ 失败: {str(e)[:50]}")
 
-                time.sleep(0.2)
+                # 更新进度
+                progress = int(date_idx / len(trade_dates) * 100)
+                self.progress_signal.emit(progress, len(trade_dates))
+
+                # ✨ 添加适当延迟避免IP限流（0.15秒 = 每秒约6-7次请求）
+                time.sleep(0.15)
+                # time.sleep(0)
+
+            # 完成统计
+            self.log_signal.emit("\n" + "=" * 60)
+            if len(existing_dates) > 0:
+                self.log_signal.emit("✅ 下载完成！（增量更新）")
+                self.log_signal.emit(f"  本次新增: {total_inserted:,} 条记录")
+                self.log_signal.emit(f"  跳过已有: {len(existing_dates)} 个交易日")
+                total_records = len(existing_dates) + len(trade_dates)
+                self.log_signal.emit(f"  总覆盖范围: {total_records} 个交易日")
+            else:
+                self.log_signal.emit("✅ 下载完成！（首次下载）")
+                self.log_signal.emit(f"  总记录数: {total_inserted:,}")
+                self.log_signal.emit(f"  涉及股票: {len(all_stocks)} 只")
+                self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            # 验证数据
+            # 转换日期格式：20240101 -> 2024-01-01
+            start_date_db = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
+            end_date_db = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+
+            stats = conn.execute("""
+                SELECT
+                    COUNT(DISTINCT stock_code) as total_stocks,
+                    COUNT(DISTINCT date) as total_dates
+                FROM stock_market_cap
+                WHERE date BETWEEN ? AND ?
+            """, [start_date_db, end_date_db]).fetchone()
+
+            self.log_signal.emit(f"\n📊 验证结果:")
+            self.log_signal.emit(f"  数据库中股票数: {stats[0]}")
+            self.log_signal.emit(f"  数据库中日期数: {stats[1]}")
+
+            conn.close()
+
+            self.finished_signal.emit({
+                'success': True,
+                'total_records': total_inserted,
+                'total_stocks': len(all_stocks)
+            })
+
+        except Exception as e:
+            import traceback
+            error_msg = f"下载失败: {str(e)}\n{traceback.format_exc()}"
+            self.log_signal.emit(error_msg)
+            self.error_signal.emit(error_msg)
 
             conn.close()
             self.finished_signal.emit({'success': True, 'total_inserted': total_inserted})
@@ -737,36 +945,79 @@ class TushareDataWidget(QWidget):
         tab = QWidget()
         layout = QVBoxLayout(tab)
 
-        config_group = QGroupBox("下载配置")
+        config_group = QGroupBox("📅 下载配置")
         config_layout = QFormLayout(config_group)
 
-        self.stock_count_spin = QSpinBox()
-        self.stock_count_spin.setRange(10, 5000)
-        self.stock_count_spin.setValue(500)
-        self.stock_count_spin.setSuffix(" 只")
-        config_layout.addRow("股票数量:", self.stock_count_spin)
+        # 开始日期
+        self.start_date_edit = QDateEdit()
+        self.start_date_edit.setCalendarPopup(True)
+        self.start_date_edit.setDate(QDate(2024, 1, 1))
+        self.start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        config_layout.addRow("开始日期:", self.start_date_edit)
 
-        self.days_back_spin = QSpinBox()
-        self.days_back_spin.setRange(1, 365)
-        self.days_back_spin.setValue(30)
-        self.days_back_spin.setSuffix(" 天")
-        config_layout.addRow("时间范围:", self.days_back_spin)
+        # 结束日期
+        self.end_date_edit = QDateEdit()
+        self.end_date_edit.setCalendarPopup(True)
+        self.end_date_edit.setDate(QDate.currentDate())
+        self.end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        config_layout.addRow("结束日期:", self.end_date_edit)
 
         layout.addWidget(config_group)
 
+        # 快速选择按钮
+        quick_group = QGroupBox("⚡ 快速选择")
+        quick_layout = QHBoxLayout(quick_group)
+
+        btn_2024 = QPushButton("2024年全年")
+        btn_2024.clicked.connect(lambda: self._set_date_range("2024-01-01", "2024-12-31"))
+        quick_layout.addWidget(btn_2024)
+
+        btn_2023 = QPushButton("2023年全年")
+        btn_2023.clicked.connect(lambda: self._set_date_range("2023-01-01", "2023-12-31"))
+        quick_layout.addWidget(btn_2023)
+
+        btn_2years = QPushButton("近2年")
+        btn_2years.clicked.connect(lambda: self._set_date_range("2023-01-01", "2024-12-31"))
+        quick_layout.addWidget(btn_2years)
+
+        layout.addWidget(quick_group)
+
+        # 说明文字
         info_label = QLabel(
-            "📌 说明：市值数据将保存到stock_market_cap表，包含流通市值和总市值。"
+            "📌 <b>说明：</b><br>"
+            "• 下载全A股市值数据（不指定股票代码）<br>"
+            "• 自动下载所有A股（主板+创业板+科创板）<br>"
+            "• 一次下载，永久支持任意回测参数<br>"
+            "• 预计时间：5-10分钟/年"
         )
-        info_label.setStyleSheet("color: #666; padding: 5px;")
+        info_label.setStyleSheet("color: #666; padding: 10px; background: #f5f5f5; border-radius: 5px;")
         layout.addWidget(info_label)
 
-        download_btn = QPushButton("🚀 开始下载市值数据")
-        download_btn.setFont(QFont("Microsoft YaHei", 10))
+        download_btn = QPushButton("🚀 开始下载全A股市值数据")
+        download_btn.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
+        download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+        """)
         download_btn.clicked.connect(self.start_download_market_cap)
         layout.addWidget(download_btn)
 
         layout.addStretch()
         return tab
+
+    def _set_date_range(self, start_str: str, end_str: str):
+        """设置日期范围"""
+        start_date = QDate.fromString(start_str, "yyyy-MM-dd")
+        end_date = QDate.fromString(end_str, "yyyy-MM-dd")
+        self.start_date_edit.setDate(start_date)
+        self.end_date_edit.setDate(end_date)
 
     def _create_financial_tab(self):
         """创建财务数据标签页"""
@@ -1017,10 +1268,30 @@ class TushareDataWidget(QWidget):
             QMessageBox.warning(self, "警告", "请输入Tushare Token")
             return
 
+        # 获取日期范围
+        start_date = self.start_date_edit.date().toString("yyyyMMdd")
+        end_date = self.end_date_edit.date().toString("yyyyMMdd")
+
+        # 确认对话框
+        reply = QMessageBox.question(
+            self,
+            "确认下载",
+            f"即将下载全A股市值数据：\n\n"
+            f"📅 日期范围：{start_date} ~ {end_date}\n"
+            f"⏱️  预计时间：5-10分钟\n"
+            f"💾 数据量：约100-200MB\n\n"
+            f"是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+
+        if reply == QMessageBox.No:
+            return
+
         os.environ['TUSHARE_TOKEN'] = token
 
         self.log_text.append("=" * 60)
-        self.log_text.append("🚀 开始下载市值数据...")
+        self.log_text.append("🚀 开始下载全A股市值数据...")
         self.log_text.append("=" * 60)
 
         self.progress_bar.setVisible(True)
@@ -1029,8 +1300,8 @@ class TushareDataWidget(QWidget):
         self.download_thread = TushareDownloadThread(
             'market_cap',
             token=token,
-            stock_count=self.stock_count_spin.value(),
-            days_back=self.days_back_spin.value()
+            start_date=start_date,
+            end_date=end_date
         )
         self.download_thread.log_signal.connect(self._on_log)
         self.download_thread.progress_signal.connect(self._on_progress)
