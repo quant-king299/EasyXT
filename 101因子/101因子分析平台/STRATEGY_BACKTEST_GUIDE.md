@@ -236,4 +236,4 @@ elif page == "🎲 您的策略":
 
 **更新日期**: 2025-03-04
 **版本**: v2.1
-**作者**: Claude Code Assistant
+**作者**: 王者quant

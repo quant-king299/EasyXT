@@ -151,22 +151,41 @@ def render_config_panel():
     </div>
     """, unsafe_allow_html=True)
 
+    # 使用session_state管理日期
+    if 'start_date' not in st.session_state:
+        st.session_state.start_date = pd.to_datetime("2024-01-01").date()
+    if 'end_date' not in st.session_state:
+        st.session_state.end_date = pd.to_datetime("2024-12-31").date()
+
     col1, col2, col3 = st.columns(3)
 
     with col1:
         st.markdown("#### 📅 回测时间")
+        
+        # 直接使用date_input，不添加额外的确认逻辑
+        # Streamlit的设计理念就是"输入即更新"
         start_date = st.date_input(
             "开始日期",
-            value=pd.to_datetime("2015-01-01"),
-            key="start_date",
-            help="回测开始日期"
+            value=st.session_state.start_date,
+            key="start_date_widget",
+            help="回测开始日期",
+            on_change=lambda: st.session_state.update(start_date=st.session_state.start_date)
         )
         end_date = st.date_input(
-            "结束日期",
-            value=pd.to_datetime("2024-12-31"),
-            key="end_date",
+            "结束日期", 
+            value=st.session_state.end_date,
+            key="end_date_widget",
             help="回测结束日期"
         )
+        
+        # 更新session_state
+        st.session_state.start_date = start_date
+        st.session_state.end_date = end_date
+        
+        # 转换为datetime
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+
 
     with col2:
         st.markdown("#### 📊 策略参数")
@@ -201,7 +220,21 @@ def render_config_panel():
             help="回测初始资金"
         )
 
-    return start_date, end_date, num_stocks, universe_size, initial_cash
+    # 显示当前生效的日期范围
+    days_diff = (end_dt - start_dt).days
+    expected_trading_days = int(days_diff * 5 / 7)
+    
+    st.markdown("---")
+    st.info(f"""
+    ✓ 当前生效的回测范围：
+    • 开始日期：{start_dt.strftime('%Y-%m-%d')}
+    • 结束日期：{end_dt.strftime('%Y-%m-%d')}
+    • 时间跨度：{days_diff} 天（约 {expected_trading_days} 个交易日）
+    
+    ℹ️ 如需修改日期，直接在上方修改即可，会自动更新
+    """)
+
+    return start_dt, end_dt, num_stocks, universe_size, initial_cash
 
 
 def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):

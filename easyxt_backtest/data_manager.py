@@ -1126,6 +1126,152 @@ class DataManager:
         # 无法找到任何历史价格
         return (None, None)
 
+    def get_price_date(self, code: str, query_date: str) -> Optional[str]:
+        """
+        获取价格数据的实际日期（用于验证价格是否过期）
+
+        Args:
+            code: 股票代码
+            query_date: 查询日期 (YYYYMMDD)
+
+        Returns:
+            价格数据的实际日期，如果无法获取则返回None
+        """
+        from datetime import datetime, timedelta
+
+        dt_obj = datetime.strptime(query_date, '%Y%m%d')
+
+        # 1. 先尝试获取当天的价格
+        price = self._get_single_price(code, query_date)
+        if price is not None:
+            return query_date
+
+        # 2. 向前查找最近的价格（最多7天）
+        for i in range(1, 8):  # 7天
+            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+            # 跳过周末
+            day_of_week = (dt_obj - timedelta(days=i)).weekday()
+            if day_of_week >= 5:
+                continue
+
+            price = self._get_single_price(code, check_date)
+            if price is not None:
+                return check_date
+
+        return None
+
+    def is_delisted(self, code: str, date: str, check_days: int = 30) -> tuple:
+        """
+        检查股票是否已退市（增强版）
+
+        Args:
+            code: 股票代码
+            date: 当前日期 (YYYYMMDD)
+            check_days: 检查天数，默认30天
+
+        Returns:
+            (is_delisted: bool, last_trade_date: Optional[str], last_price: Optional[float])
+            - is_delisted: True表示已退市，False表示正常
+            - last_trade_date: 最后交易日（如果已退市）
+            - last_price: 最后价格（如果已退市）
+        """
+        from datetime import datetime, timedelta
+
+        dt_obj = datetime.strptime(date, '%Y%m%d')
+
+        # 1. 先检查当天是否有价格
+        current_price = self._get_single_price(code, date)
+        if current_price is not None:
+            # 当天有价格，说明未退市
+            return (False, None, None)
+
+        # 2. 当天无价格，向前查找最后交易日
+        last_trade_date = None
+        last_price = None
+
+        for i in range(1, check_days + 1):
+            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+            # 跳过周末
+            day_of_week = (dt_obj - timedelta(days=i)).weekday()
+            if day_of_week >= 5:  # 周六、周日
+                continue
+
+            price = self._get_single_price(code, check_date)
+            if price is not None:
+                last_trade_date = check_date
+                last_price = price
+                break
+
+        # 3. 判断是否退市
+        if last_trade_date is None:
+            # 连续check_days都没有价格，认为已退市且无价格数据
+            return (True, None, None)
+
+        # 4. 检查从最后交易日到今天是否有交易日有数据
+        # 如果中间有交易日有数据，说明未退市（可能只是停牌）
+        for j in range(1, i):
+            between_date = (dt_obj - timedelta(days=j)).strftime('%Y%m%d')
+            day_of_week = (dt_obj - timedelta(days=j)).weekday()
+            if day_of_week >= 5:
+                continue
+
+            between_price = self._get_single_price(code, between_date)
+            if between_price is not None:
+                # 中间有价格数据，说明未退市（可能只是当天无数据）
+                return (False, None, None)
+
+        # 从最后交易日到现在都没有数据，判定为退市
+        return (True, last_trade_date, last_price)
+
+    def check_price_data_valid(self, code: str, date: str, max_days_diff: int = 7) -> tuple:
+        """
+        综合检查价格数据的有效性（包括是否退市）
+
+        Args:
+            code: 股票代码
+            date: 查询日期 (YYYYMMDD)
+            max_days_diff: 允许的最大天数差异，默认7天
+
+        Returns:
+            (is_valid: bool, reason: str, price_date: Optional[str], price: Optional[float])
+            - is_valid: True表示数据有效，False表示无效
+            - reason: 无效的原因（用于日志输出）
+            - price_date: 价格数据的实际日期
+            - price: 价格
+        """
+        from datetime import datetime, timedelta
+
+        # 1. 检查是否退市
+        is_delisted, last_trade_date, last_price = self.is_delisted(code, date)
+
+        if is_delisted:
+            if last_price is not None:
+                return (False, f"已退市({last_trade_date}最后价格{last_price:.2f})", last_trade_date, last_price)
+            else:
+                return (False, "已退市且无历史价格数据", None, None)
+
+        # 2. 获取价格和价格日期
+        price = self.get_nearest_price(code, date)
+        if price is None:
+            return (False, "无价格数据", None, None)
+
+        price_date = self.get_price_date(code, date)
+        if price_date is None:
+            return (False, "无法确定价格日期", None, None)
+
+        # 3. 检查价格数据是否过期
+        price_dt = datetime.strptime(price_date, '%Y%m%d')
+        query_dt = datetime.strptime(date, '%Y%m%d')
+        days_diff = (query_dt - price_dt).days
+
+        if days_diff > max_days_diff:
+            return (False, f"价格数据过期({price_date}，{days_diff}天前)", price_date, price)
+
+        # 4. 所有检查通过
+        return (True, "数据有效", price_date, price)
+
     # ==================== 辅助方法 ====================
 
     def get_index_components(self, index_code: str, date: str) -> List[str]:

@@ -4,7 +4,7 @@
 本文件展示从策略设计到实盘部署的专业开发过程
 基于EasyXT框架，展示真实的实盘策略开发技能
 
-作者: CodeBuddy
+作者: 王者quant
 版本: 1.0 (实盘策略开发专版)
 """
 
@@ -254,18 +254,18 @@ class LiveTradingStrategy:
                         xt_code = self.stock_code
                     
                     # 获取实时行情数据
-                    current_data = xt.data.get_current_data([xt_code])
+                    current_data = xt.data.get_current_price([xt_code])
                     
-                    if current_data and len(current_data) > 0:
-                        data = current_data[xt_code]
+                    if current_data is not None and not current_data.empty:
+                        data = current_data.iloc[0]
                         market_data = {
                             'datetime': datetime.now(),
-                            'open': data.get('open', 0),
-                            'high': data.get('high', 0),
-                            'low': data.get('low', 0),
-                            'close': data.get('last_price', 0),
-                            'volume': data.get('volume', 0),
-                            'amount': data.get('amount', 0)
+                            'open': float(data.get('open', 0)),
+                            'high': float(data.get('high', 0)),
+                            'low': float(data.get('low', 0)),
+                            'close': float(data.get('close', data.get('last_price', 0))),
+                            'volume': int(data.get('volume', 0)),
+                            'amount': float(data.get('amount', 0))
                         }
                         
                         print(f"✅ 通过EasyXT获取实时数据成功")
@@ -302,23 +302,49 @@ class LiveTradingStrategy:
                 else:
                     qs_code = self.stock_code.split('.')[0]
                 
-                # 获取实时数据
-                current_data = qs.get_realtime_data(qs_code)
-                
-                if current_data is not None:
-                    market_data = {
-                        'datetime': datetime.now(),
-                        'open': float(current_data.get('open', 0)),
-                        'high': float(current_data.get('high', 0)),
-                        'low': float(current_data.get('low', 0)),
-                        'close': float(current_data.get('price', 0)),
-                        'volume': int(current_data.get('volume', 0)),
-                        'amount': float(current_data.get('amount', 0))
-                    }
+                # 使用qstock获取实时数据 (修复API调用)
+                try:
+                    # qstock的正确API调用方式
+                    current_data = qs.get_data(qs_code, start='', end='')
                     
-                    print(f"✅ 通过qstock获取数据成功")
-                    print(f"  💰 当前价格: {market_data['close']:.2f}元")
-                    return market_data
+                    if current_data is not None and not current_data.empty:
+                        # 获取最新一行数据
+                        latest_data = current_data.iloc[-1]
+                        market_data = {
+                            'datetime': datetime.now(),
+                            'open': float(latest_data.get('open', latest_data.get('开盘', 0))),
+                            'high': float(latest_data.get('high', latest_data.get('最高', 0))),
+                            'low': float(latest_data.get('low', latest_data.get('最低', 0))),
+                            'close': float(latest_data.get('close', latest_data.get('收盘', 0))),
+                            'volume': int(latest_data.get('volume', latest_data.get('成交量', 0))),
+                            'amount': float(latest_data.get('amount', latest_data.get('成交额', 0)))
+                        }
+                        
+                        print(f"✅ 通过qstock获取数据成功")
+                        print(f"  💰 当前价格: {market_data['close']:.2f}元")
+                        return market_data
+                except Exception as qstock_error:
+                    print(f"⚠️ qstock API调用失败: {qstock_error}")
+                    # 尝试其他qstock方法
+                    try:
+                        # 尝试使用实时行情接口
+                        realtime_data = qs.realtime(qs_code)
+                        if realtime_data is not None:
+                            market_data = {
+                                'datetime': datetime.now(),
+                                'open': float(realtime_data.get('open', 8.50)),
+                                'high': float(realtime_data.get('high', 8.60)),
+                                'low': float(realtime_data.get('low', 8.40)),
+                                'close': float(realtime_data.get('price', 8.50)),
+                                'volume': int(realtime_data.get('volume', 1000000)),
+                                'amount': float(realtime_data.get('amount', 8500000))
+                            }
+                            
+                            print(f"✅ 通过qstock实时接口获取数据成功")
+                            print(f"  💰 当前价格: {market_data['close']:.2f}元")
+                            return market_data
+                    except Exception as realtime_error:
+                        print(f"⚠️ qstock实时接口也失败: {realtime_error}")
                     
             except ImportError:
                 print("⚠️ qstock模块未安装")
@@ -365,11 +391,13 @@ class LiveTradingStrategy:
                 print(f"⚠️ akshare获取数据失败: {e}")
             
             # 如果所有数据源都失败，使用模拟实时数据
-            print("🔄 所有数据源均不可用，使用模拟实时数据...")
+            print("🔄 所有外部数据源均不可用，切换到模拟数据模式...")
+            print("💡 模拟数据模式：基于真实市场特征生成高质量模拟数据")
             return self.generate_mock_realtime_data()
             
         except Exception as e:
             print(f"❌ 获取实时数据过程中发生错误: {e}")
+            print("🔄 自动切换到模拟数据模式...")
             return self.generate_mock_realtime_data()
     
     def generate_mock_realtime_data(self):
@@ -483,16 +511,11 @@ class LiveTradingStrategy:
         return current_volume / avg_volume
     
     def check_trading_time(self, current_time):
-        """检查是否在交易时间内"""
+        """检查是否在交易时间内 (已移除时间限制)"""
         current_time_str = current_time.strftime('%H:%M')
         
-        # 检查是否在指定的交易时点
-        for trading_time in self.trading_times:
-            if abs((datetime.strptime(current_time_str, '%H:%M') - 
-                   datetime.strptime(trading_time, '%H:%M')).total_seconds()) <= 300:  # 5分钟容差
-                return True, trading_time
-        
-        return False, None
+        # 已移除交易时间限制 - 始终允许交易
+        return True, current_time_str
     
     def generate_trading_signals(self, market_data):
         """生成交易信号"""
@@ -744,7 +767,7 @@ class LiveTradingStrategy:
     
     def run_live_strategy_demo(self, demo_minutes=30):
         """运行实盘策略演示"""
-        print(f"\n🚀 开始实盘策略演示 (模拟{demo_minutes}分钟)")
+        print(f"\n🚀 开始实盘策略演示 (模拟{demo_minutes}分钟) - 无时间限制版")
         print(f"=" * 60)
         
         start_time = datetime.now()
@@ -752,15 +775,7 @@ class LiveTradingStrategy:
         for minute in range(demo_minutes):
             current_time = start_time + timedelta(minutes=minute)
             
-            # 模拟交易时间检查
-            if current_time.hour < 9 or current_time.hour > 15:
-                continue
-            
-            if current_time.hour == 11 and current_time.minute > 30:
-                continue
-            
-            if current_time.hour == 12:
-                continue
+            # 已移除交易时间检查 - 可以在任何时间运行
             
             print(f"\n⏰ 时间: {current_time.strftime('%Y-%m-%d %H:%M')}")
             

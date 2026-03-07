@@ -7,9 +7,9 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from data_manager import DataManager
-from strategy_base import StrategyBase
-from performance import PerformanceAnalyzer
+from easyxt_backtest.data_manager import DataManager
+from easyxt_backtest.strategy_base import StrategyBase
+from easyxt_backtest.performance import PerformanceAnalyzer
 
 
 @dataclass
@@ -261,8 +261,14 @@ class BacktestEngine:
             for code in to_sell:
                 self._sell(code, date, self.positions[code])
 
-        # 3. 买入目标股票
+        # 4. ✨ 优化：智能买入目标股票（处理资金不足）
         print(f"  买入/调整: {len(target_weights)} 只")
+
+        # 4.1 计算所有需要买入的股票和预估资金
+        buy_orders = []  # [(code, buy_volume, needed_cash)]
+        total_needed_cash = 0.0
+        available_cash = self.cash
+
         for code, target_weight in target_weights.items():
             target_value = current_value * target_weight
 
@@ -290,13 +296,34 @@ class BacktestEngine:
                 buy_amount = diff_value
                 buy_volume = int(buy_amount / current_price / 100) * 100  # 整手
                 if buy_volume > 0:
-                    self._buy(code, date, buy_volume)
+                    # 预估买入金额（含手续费）
+                    estimated_amount = current_price * buy_volume * (1 + self.commission)
+                    buy_orders.append((code, buy_volume, estimated_amount))
+                    total_needed_cash += estimated_amount
             else:
                 # 需要卖出
                 sell_volume = int(abs(diff_value) / current_price / 100) * 100
                 sell_volume = min(sell_volume, current_volume)  # 不能超过持仓
                 if sell_volume > 0:
                     self._sell(code, date, sell_volume)
+
+        # 4.2 检查资金是否充足
+        if total_needed_cash > available_cash:
+            # 资金不足，按比例缩减买入
+            print(f"    [WARNING]  资金不足: 需要{total_needed_cash:,.2f}元，可用{available_cash:,.2f}元")
+            print(f"    [INFO] 按比例缩减买入金额至 {(available_cash / total_needed_cash * 100):.1f}%")
+
+            # 按可用资金比例缩减
+            scale_ratio = available_cash / total_needed_cash if total_needed_cash > 0 else 0
+
+            for code, original_volume, _ in buy_orders:
+                scaled_volume = int(original_volume * scale_ratio / 100) * 100  # 保持整手
+                if scaled_volume > 0:
+                    self._buy(code, date, scaled_volume)
+        else:
+            # 资金充足，正常买入
+            for code, buy_volume, _ in buy_orders:
+                self._buy(code, date, buy_volume)
 
     # ==================== 交易执行 ====================
 
@@ -518,11 +545,17 @@ class BacktestEngine:
         for symbol, volume in self.positions.items():
             price = self.data_manager.get_nearest_price(symbol, date)
             if price:
+                # 有市场价格，使用市场价
                 total += price * volume
             else:
-                # ✨ 警告：无法获取价格的股票不计入市值（但持仓仍在）
-                # 这种情况应该在下一次调仓时被卖出
-                print(f"    [WARNING] {symbol} 持仓{volume}股无法估值（无价格数据）")
+                # ✨ 修复：无法获取价格的股票使用成本价估值（避免资产突然"暴跌"）
+                if symbol in self.position_costs and symbol in self.position_costs:
+                    avg_cost_price = self.position_costs[symbol]['total_cost'] / self.position_costs[symbol]['total_volume']
+                    total += avg_cost_price * volume
+                    print(f"    [INFO] {symbol} 持仓{volume}股使用成本价估值: {avg_cost_price:.2f}元（市值: {avg_cost_price * volume:,.2f}元）")
+                else:
+                    # 既无市场价也无成本价，警告但不计0
+                    print(f"    [WARNING] {symbol} 持仓{volume}股无法估值（无价格数据且无成本记录），市值计为0")
         return total
 
     def _record_portfolio(self, date: str):
