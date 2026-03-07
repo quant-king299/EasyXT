@@ -1,6 +1,6 @@
 import requests
 from typing import Any, Dict
-from qka.logger import logger
+from qka.utils.logger import logger
 
 class QMTClient:
     def __init__(self, base_url: str = "http://localhost:8000", token: str = None):
