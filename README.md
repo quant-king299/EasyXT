@@ -1,10 +1,9 @@
-# MiniQMT扩展 - 量化交易工具包
+# EasyXT - 模块化QMT量化交易工具集
 
 [![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://www.python.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 [![QMT](https://img.shields.io/badge/QMT-Compatible-orange.svg)](https://www.gtja.com/)
 [![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
-[![知识星球](https://img.shields.io/badge/知识星球-quant--king299-brightgreen)](https://www.zhihu.com/club/12345678901234567890)
 
 > **注意**：本项目使用的是miniQMT环境。QMT有两个版本：完整版QMT（包含GUI界面）和miniQMT（轻量级API版本）。两者在API使用上基本一致，但在环境配置和部署方式上有显著区别。详细区别请参阅 [QMT版本说明](qmt_versions_explanation.md)。
 
@@ -12,201 +11,257 @@
 >
 > 欢迎加入[知识星球](https://www.zhihu.com/club/12345678901234567890)，获取更多量化交易干货和一对一答疑服务！
 
-一个基于迅投QMT的量化交易扩展工具包，提供简化的API接口和丰富的学习实例。
+---
 
-项目地址: https://github.com/quant-king299/EasyXT
+## 🎯 项目定位
 
-项目结构:
+**EasyXT 不是单一框架，而是一套模块化的量化交易工具集**，包含：
+
+### 核心特性
+
+- 🎯 **简化API**: 封装复杂的QMT接口，提供易用的Python API
+- 💰 **真实交易**: 支持通过EasyXT接口进行真实股票交易
+- 📊 **数据获取**: 集成qstock、akshare等多种数据源
+- 📈 **技术指标**: 内置常用技术指标计算
+- 🚀 **策略开发**: 提供完整的量化策略开发框架
+- 📚 **学习实例**: 丰富的教学案例，从入门到高级
+
+### 模块概览
+
+| 模块 | 类型 | 说明 | 独立性 |
+|------|------|------|--------|
+| **easy_xt** | 📦 核心库 | QMT API的轻量级封装，提供简洁的数据/交易接口 | ✅ 可独立使用 |
+| **easyxt_backtest** | 🔧 扩展工具 | 通用回测框架，支持多策略、多数据源 | ✅ 可独立使用 |
+| **101因子平台** | 📊 独立应用 | 基于Streamlit的因子分析Web应用 | ✅ 完全独立 |
+| **strategies** | 📁 策略集合 | 完整的交易策略示例（雪球跟单、网格交易等） | ⚠️ 依赖easy_xt |
+| **学习实例** | 📚 教学案例 | 从入门到实战的代码教程 | ⚠️ 依赖easy_xt |
+
+**核心理念**：按需选用，低耦合，清晰边界
+
+---
+
+## 🚀 快速导航
+
+### 🤔 我该从哪里开始？
+
+#### 我是新手，想学习量化交易
+→ 📖 **[学习路径](#-学习路径)** → 从 `学习实例/` 开始
+
+#### 我只需要API封装，要在自己的项目中使用
+→ 📦 **[easy_xt API文档](easy_xt/README.md)** → 只需安装 `easy_xt`
+
+#### 我想做策略回测
+→ 🔧 **[回测系统指南](easyxt_backtest/README.md)** → 使用 `easyxt_backtest`
+
+#### 我要用现成的策略
+→ 📁 **[策略列表](strategies/README.md)** → 查看 `strategies/` 目录
+
+#### 我想做因子分析
+→ 📊 **[101因子平台](101因子/101因子分析平台/README.md)** → 独立Web应用
+
+---
+
+## 📦 核心模块说明
+
+### 📁 详细项目结构
+
 ```
 miniqmt扩展/
-├── strategies/
-│   ├── jq2qmt/                         # 聚宽到QMT的中转服务实现
-│   │   ├── qka/                        # QKA服务端实现
-│   │   ├── ptqmt_client.py             # PTQMT客户端实现
-│   │   ├── qmt_client_mini.py          # 聚宽策略使用的简化客户端
-│   │   ├── run_qka_server.py           # QKA服务启动脚本
-│   │   └── config/                     # 配置文件目录
-│   ├── xueqiu_follow/                  # 雪球跟单策略
-│   │   ├── start_xueqiu_follow_easyxt.py   # 生产主入口（推荐）
-│   │   ├── start_with_initial_sync.py      # 启动即调仓版（首次对齐）
-│   │   ├── start_real_trading_easyxt.py    # 真实交易连通性自测
-│   │   ├── startup_manager.py              # 守护式统一管理入口
-│   │   ├── system_monitor.py               # 运行期轻量监控
-│   │   ├── core/                           # 策略引擎/采集器/执行器/风控
-│   │   ├── config/                         # 统一配置（unified_config.json 等）
-│   │   ├── logs/                           # 策略运行日志
-│   │   └── tests/                          # 单元/集成测试
-│   └── ...                             # 其他策略模块
-├── gui_app/                            # 通用GUI（位于仓库根目录）
-│   ├── main_window.py                  # 专业主窗口（策略管理与回测入口）
-│   ├── trading_interface_simple.py     # 简洁交易界面
+├── easy_xt/                    # 核心API模块
+│   ├── __init__.py
+│   ├── api.py                  # 主API接口
+│   ├── data_api.py            # 数据接口
+│   ├── trade_api.py           # 交易接口
+│   ├── advanced_trade_api.py  # 高级交易接口
+│   └── utils.py               # 工具函数
+├── easyxt_backtest/           # 回测框架
+│   ├── data_manager.py        # 数据管理器
+│   ├── engine.py              # 回测引擎
+│   ├── performance.py         # 性能分析
+│   └── strategies/            # 策略实现
+├── 101因子/                    # 因子分析平台
+│   └── 101因子分析平台/       # Streamlit应用
+├── strategies/                 # 策略集合
+│   ├── xueqiu_follow/         # 雪球跟单
+│   ├── grid_trading/          # 网格交易
+│   ├── jq2qmt/                # 聚宽转QMT
+│   └── tdxtrader/             # 通达信预警交易
+├── 学习实例/                   # 学习案例
+│   ├── 01_基础入门.py
+│   ├── 02_交易基础.py
+│   └── ...
+├── gui_app/                    # GUI应用
+│   ├── main_window.py
 │   └── widgets/
-│       └── backtest_widget.py          # 回测窗口组件
-├── easy_xt/                            # 交易/数据子系统封装
-└── reports/                            # 导出报表（如组合持仓导出）
+├── tools/                      # 开发工具
+│   ├── debug_qmt_api.py
+│   └── demos/
+├── config/                     # 配置文件
+├── data/                       # 数据存储
+├── logs/                       # 日志目录
+├── xtquant/                    # QMT相关文件（需手动安装）
+├── requirements.txt            # 依赖列表
+└── README.md                   # 本文件
 ```
 
-## 🚀 特性
+### 1️⃣ easy_xt - 核心库（可独立使用）
 
-- **简化API**: 封装复杂的QMT接口，提供易用的Python API
-- **真实交易**: 支持通过EasyXT接口进行真实股票交易
-- **数据获取**: 集成qstock、akshare等多种数据源
-- **技术指标**: 内置常用技术指标计算
-- **策略开发**: 提供完整的量化策略开发框架
-- **学习实例**: 丰富的教学案例，从入门到高级
+**定位**：轻量级QMT API封装库
 
-## 📦 安装
+**特点**：
+- ✅ 简洁的Python接口，隐藏QMT复杂性
+- ✅ 统一的数据获取（行情、财务、指数成分股等）
+- ✅ 标准化的交易接口（下单、查询、持仓管理）
+- ✅ **无依赖其他模块**，可单独集成到任何项目
 
-### 环境要求
-
-- 64 位 Python（建议 3.9+）
-- 已安装并登录的 QMT 客户端（标准版或迷你版）
-- Windows 系统（QMT 限制）
-
-### 通过 pip 从 GitHub 安装（推荐用于生产环境）
-
-推荐固定到稳定标签 v1.0.0：
-```powershell
-# 可选：创建虚拟环境
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-
-python -m pip install -U pip setuptools wheel
-pip install "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
+**安装**：
+```bash
+pip install -e ./easy_xt
 ```
 
-国内镜像（依赖走镜像，源码仍从 GitHub 拉取）：
-```powershell
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
-```
-
-验证安装：
-```powershell
-python - << 'PY'
-import easy_xt
-print("easy_xt import OK:", easy_xt.__name__)
+**使用示例**：
+```python
 from easy_xt import get_api
+
+# 获取API实例
 api = get_api()
-print("get_api OK:", type(api))
-PY
+
+# 获取行情数据
+data = api.get_full_history(
+    ['000001.SZ'],
+    period='1d',
+    start_time='20240101'
+)
 ```
 
-> 说明：pip 仅安装 Python 包，不会安装 QMT/xtquant，本地需自备。
+**📖 详细文档**：[easy_xt/README.md](easy_xt/README.md)
 
-### ⚙️ 首次使用配置（重要）
+---
 
-如果你需要使用 **Tushare 数据下载功能**，请配置环境变量：
+### 2️⃣ easyxt_backtest - 回测框架（可独立使用）
 
-1. **复制配置文件**
-   ```bash
-   # Windows PowerShell
-   Copy-Item .env.example .env
+**定位**：通用量化策略回测框架
 
-   # Windows CMD
-   copy .env.example .env
+**特点**：
+- ✅ 支持多种策略类型（选股策略、因子策略）
+- ✅ 多数据源支持（DuckDB、QMT、Tushare）
+- ✅ 完整的交易模拟（佣金、滑点、持仓管理）
+- ✅ 详细的性能分析（夏普比率、最大回撤等）
+- ✅ **不依赖101因子平台**，可独立使用
 
-   # Linux/Mac
-   cp .env.example .env
-   ```
-
-2. **获取并填写 Tushare Token**
-   - 访问 [Tushare Pro](https://tushare.pro) 注册并获取 Token
-   - 打开 `.env` 文件，将 `your_tushare_token_here` 替换为你的 Token：
-   ```env
-   TUSHARE_TOKEN=你的Token
-   ```
-
-3. **保存并重启程序**
-
-> 📖 详细配置说明：[SETUP_TUSHARE_TOKEN.md](SETUP_TUSHARE_TOKEN.md) | [docs/TUSHARE_TOKEN_CONFIG.md](docs/TUSHARE_TOKEN_CONFIG.md)
->
-> 必装的 xtquant 特殊版本（强制）：请到以下 Release 页面下载附件 `xtquant.rar`，解压后覆盖到本项目根目录下的 `xtquant/` 目录（若不存在则直接解压到根目录会创建该目录）：
->
-> https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
->
-> 为什么必须使用这一份 xtquant：券商侧随各自版本发布，不会与迅投官方保持一致节奏；不同券商包的 xtquant 版本、接口和行为差异会导致本项目运行报错。为确保一致性与稳定性，本项目仅支持上述 Release 附件中的 xtquant 版本，使用高/低其它版本都可能出现连接失败、字段缺失、接口不兼容等错误。
->
-> 一键下载并解压（PowerShell，推荐）：
-> ```powershell
-> $url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
-> $dest = "$PWD\xtquant.rar"
-> Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
-> if (Test-Path "$env:ProgramFiles\7-Zip\7z.exe") {
->   & "$env:ProgramFiles\7-Zip\7z.exe" x -y "$dest" -o"$PWD"
-> } elseif (Get-Command 7z.exe -ErrorAction SilentlyContinue) {
->   7z x -y "$dest" -o"$PWD"
-> } else {
->   Write-Host "未检测到 7-Zip，请手动解压 $dest 到项目根目录（或安装 7-Zip 后重试）"
-> }
-> Remove-Item $dest -ErrorAction SilentlyContinue
-> # 验证目录：应出现 $PWD\xtquant 目录
-> if (Test-Path "$PWD\xtquant") { Write-Host "xtquant 安装完成" } else { Write-Host "xtquant 目录未找到，请检查解压是否成功" }
-> ```
-> 注：PowerShell 无法原生解压 .rar，需本机已安装 7-Zip（https://www.7-zip.org/）。如无 7-Zip，请手动解压 `xtquant.rar` 到项目根目录。
-
-### 项目源码方式安装（可选）
-
-#### # 克隆项目到本地
+**安装**：
 ```bash
-git clone https://github.com/quant-king299/EasyXT.git
-cd EasyXT
+pip install -e ./easyxt_backtest
 ```
 
-#### # 安装依赖到Python环境
+**使用示例**：
+```python
+from easyxt_backtest import BacktestEngine, DataManager
+from easyxt_backtest.strategies import SmallCapStrategy
 
-**方式一：直接安装依赖到系统Python环境**
+# 创建数据管理器和引擎
+data_manager = DataManager(duckdb_path='your_data.ddb')
+engine = BacktestEngine(initial_cash=1000000, data_manager=data_manager)
+
+# 运行回测
+strategy = SmallCapStrategy(select_num=5)
+result = engine.run_backtest(strategy, '20230101', '20231231')
+result.print_summary()
+```
+
+**📖 详细文档**：[easyxt_backtest/README.md](easyxt_backtest/README.md)
+
+---
+
+### 3️⃣ 101因子分析平台（完全独立应用）
+
+**定位**：基于Streamlit的因子研究Web应用
+
+**特点**：
+- ✅ 191个Alpha因子（Alpha101全系列 + Alpha191扩展）
+- ✅ 可视化工作流编辑器（拖拽式构建策略）
+- ✅ 完整的因子分析工具（IC分析、分层回测）
+- ✅ **完全独立的Web应用**，不依赖其他模块
+
+**启动**：
 ```bash
-pip install -r requirements.txt
+cd 101因子/101因子分析平台
+python 启动增强版.py
 ```
 
-**方式二：创建虚拟环境安装（推荐）**
-```bash
-# 创建虚拟环境
-python -m venv .venv
-# 激活虚拟环境（Windows）
-.\.venv\Scripts\activate
-# 安装依赖
-pip install -r requirements.txt
+访问：http://127.0.0.1:8510
+
+**📖 详细文档**：[101因子分析平台/README.md](101因子/101因子分析平台/README.md)
+
+---
+
+### 4️⃣ strategies - 策略集合（依赖easy_xt）
+
+**定位**：完整的实战策略示例
+
+**包含策略**：
+- ❄️ **雪球跟单**：自动跟随雪球组合调仓
+- 🔲 **网格交易**：固定网格、高频分时网格
+- 📡 **通达信预警交易**：基于通达信预警自动交易
+- 🔄 **聚宽策略转QMT**：JQ2QMT适配器
+
+**依赖关系**：依赖 `easy_xt` 核心库
+
+**📖 详细文档**：[strategies/README.md](strategies/README.md)
+
+---
+
+### 5️⃣ 学习实例 - 教学案例（依赖easy_xt）
+
+**定位**：从入门到实战的代码教程
+
+**学习路径**：
+1. **01_基础入门.py** - 数据获取和API使用
+2. **02_交易基础.py** - 基础交易操作
+3. **04_策略回测.py** - 策略开发与回测
+4. **07_akshare数据获取** - 多数据源集成
+5. **10_qstock真实案例** - 完整实战案例
+
+**依赖关系**：依赖 `easy_xt` 核心库
+
+---
+
+## 🏗️ 项目架构图
+
+```
+EasyXT 项目结构
+│
+├── 【核心层】可独立使用
+│   ├── easy_xt/              # 核心API封装库
+│   │   └── 无任何其他依赖
+│   │
+│   └── easyxt_backtest/      # 回测框架
+│       └── 可独立使用（不依赖101因子平台）
+│
+├── 【应用层】独立应用
+│   └── 101因子/101因子分析平台/  # 因子分析Web应用
+│       └── 完全独立，不依赖其他模块
+│
+└── 【示例层】依赖核心库
+    ├── strategies/           # 策略集合（依赖easy_xt）
+    ├── 学习实例/             # 教学案例（依赖easy_xt）
+    └── gui_app/             # GUI界面（依赖easy_xt）
 ```
 
-**方式三：通过pip从GitHub直接安装（推荐用于生产环境）**
-```bash
-# 可选：创建虚拟环境
-python -m venv .venv
-.\.venv\Scripts\activate
+**模块依赖关系**：
+- `easy_xt` ← 零依赖，可独立使用
+- `easyxt_backtest` ← 可独立使用（不依赖101因子）
+- `101因子平台` ← 完全独立
+- `strategies` → 依赖 `easy_xt`
+- `学习实例` → 依赖 `easy_xt`
 
-# 更新pip并安装
-python -m pip install -U pip setuptools wheel
-pip install "git+https://github.com/quant-king299/EasyXT.git@v1.0.0"
-```
-## 🔧 配置
+---
 
-### 配置 QMT 路径（雪球跟单）
+## 📚 学习路径
 
-编辑：`strategies/xueqiu_follow/config/unified_config.json`
+### 🚀 快速开始（5分钟上手）
 
-关键键名：`settings.account.qmt_path`（若同时存在 `account.qmt_path`，两处保持一致）。
-
-示例（Windows JSON 需双反斜杠或用正斜杠）：
-```json
-{
-  "settings": {
-    "account": {
-      "qmt_path": "D:\\国金证券QMT交易端\\userdata_mini",
-      "account_id": "你的交易账号ID"
-    }
-  }
-}
-```
-
-如何判断“正确目录”：
-- 必须是 QMT 的 `userdata` 或 `userdata_mini` 目录本身
-- 目录内通常包含 `xtquant`, `log`, `cfg` 等子目录
-- 常见错写：`0MT`（应为 `QMT`）、`userdata mini`（应为 `userdata_mini`）
-
-## 📚 快速开始
-
-### 基础数据获取
+#### 基础数据获取
 
 ```python
 from easy_xt import EasyXT
@@ -222,7 +277,7 @@ data = api.get_price('000001.SZ', count=100)
 print(data.head())
 ```
 
-### 简单交易示例
+#### 简单交易示例
 
 ```python
 # 初始化交易服务
@@ -238,162 +293,294 @@ order_id = api.buy(
 )
 ```
 
-### 运行雪球跟单
+### 初学者路线
 
-方式一：批处理脚本（Windows）
+```bash
+# 第1步：学习基础API
+学习实例/01_基础入门.py
+学习实例/02_交易基础.py
+
+# 第2步：了解策略开发
+学习实例/04_策略回测.py
+
+# 第3步：运行现成策略
+strategies/grid_trading/固定网格.py
+```
+
+### 进阶路线
+
+```bash
+# 第1步：学习回测框架
+easyxt_backtest/examples/small_cap_backtest.py
+
+# 第2步：开发自定义策略
+easyxt_backtest/strategies/ (参考策略基类)
+
+# 第3步：使用因子平台
+cd 101因子/101因子分析平台
+python 启动增强版.py
+```
+
+### 实战路线
+
+```bash
+# 第1步：部署雪球跟单
+strategies/xueqiu_follow/启动雪球跟单.bat
+
+# 第2步：部署通达信预警交易
+strategies/tdxtrader/ (查看README)
+
+# 第3步：监控和优化
+gui_app/main_window.py
+```
+
+---
+
+## ⚙️ 安装指南
+
+### 环境要求
+
+- Python 3.9+
+- Windows系统（QMT限制）
+- 已安装QMT客户端（标准版或miniQMT）
+
+### 快速安装
+
+#### 1️⃣ 安装xtquant（必需且重要）
+
+**⚠️ 重要：本项目需要特殊版本的 xtquant，不能使用 pip 安装的官方版本！**
+
+##### 为什么必须使用特殊版本？
+
+不同券商的QMT版本发布节奏不一致，xtquant接口和行为存在差异。为避免连接失败、字段缺失、接口不兼容等问题，**本项目仅支持以下特定版本**。
+
+##### 下载地址
+
+🔗 **https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0**
+
+下载附件：`xtquant.rar`
+
+##### 安装步骤
+
+**方法 1：直接解压到项目根目录（推荐）**
+
+1. 下载 `xtquant.rar`
+2. 解压到本项目根目录（`miniqmt扩展/`）
+3. 确保目录结构为：`miniqmt扩展/xtquant/`
+
+**方法 2：解压到自定义目录 + 设置环境变量**
+
+1. 解压到自定义目录，如：`C:\xtquant_special`
+2. 设置环境变量 `XTQUANT_PATH`：
+
+   **PowerShell**：
+   ```powershell
+   setx XTQUANT_PATH "C:\xtquant_special"
+   ```
+
+   **CMD**：
+   ```cmd
+   setx XTQUANT_PATH "C:\xtquant_special"
+   ```
+
+3. **重启终端/IDE** 使环境变量生效
+
+##### 验证安装
+
+```bash
+python -c "from xtquant import datacenter; print('✓ xtquant 安装正确')"
+```
+
+如果报错 `cannot import name 'datacenter' from 'xtquant'`，说明 xtquant **未安装或版本不完整**。
+
+##### 一键下载并解压（PowerShell）
+
 ```powershell
-.\strategies\xueqiu_follow\启动雪球跟单.bat
+$url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
+$dest = "$PWD\xtquant.rar"
+Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+if (Test-Path "$env:ProgramFiles\7-Zip\7z.exe") {
+  & "$env:ProgramFiles\7-Zip\7z.exe" x -y "$dest" -o"$PWD"
+} elseif (Get-Command 7z.exe -ErrorAction SilentlyContinue) {
+  7z x -y "$dest" -o"$PWD"
+} else {
+  Write-Host "未检测到 7-Zip，请手动解压 $dest 到项目根目录"
+}
+Remove-Item $dest -ErrorAction SilentlyContinue
+if (Test-Path "$PWD\xtquant") { Write-Host "✓ xtquant 安装完成" } else { Write-Host "✗ xtquant 目录未找到，请检查解压" }
 ```
 
-方式二：Python 入口脚本
+#### 2️⃣ 安装核心库
+
+```bash
+# 安装easy_xt核心库
+pip install -e ./easy_xt
+
+# 验证安装
+python -c "from easy_xt import get_api; print('✓ 安装成功')"
+```
+
+#### 3️⃣ 按需安装扩展模块
+
+```bash
+# 如果需要回测功能
+pip install -e ./easyxt_backtest
+
+# 如果需要因子平台
+cd 101因子/101因子分析平台
+pip install -r requirements.txt
+```
+
+---
+
+### ⚙️ 首次使用配置（重要）
+
+#### 配置 Tushare Token（如果需要使用数据下载功能）
+
+如果你需要使用 **Tushare 数据下载功能**，必须配置Token。
+
+##### 步骤 1：获取 Tushare Token
+
+1. 访问 [Tushare Pro](https://tushare.pro) 注册账号
+2. 登录后进入「用户中心」→「接口Token」
+3. 复制你的 Token（类似：`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`）
+
+##### 步骤 2：配置环境变量文件
+
+**方法 A：使用 .env 文件（推荐）**
+
+1. 复制配置文件模板：
+   ```bash
+   # Windows PowerShell
+   Copy-Item .env.example .env
+
+   # Windows CMD
+   copy .env.example .env
+
+   # Linux/Mac
+   cp .env.example .env
+   ```
+
+2. 编辑 `.env` 文件，填写你的 Token：
+   ```env
+   TUSHARE_TOKEN=你的Token（替换这一行）
+   ```
+
+3. 保存文件
+
+**方法 B：直接设置环境变量**
+
 ```powershell
-python strategies\xueqiu_follow\start_xueqiu_follow_easyxt.py
+# PowerShell
+setx TUSHARE_TOKEN "你的Token"
+
+# CMD
+setx TUSHARE_TOKEN "你的Token"
 ```
 
-## 📖 学习路径
+**方法 C：在代码中设置（不推荐，仅用于测试）**
 
-### 初学者路径
-
-1. **01_基础入门.py** - 学习基本的数据获取和API使用
-2. **02_交易基础.py** - 掌握基础交易操作
-3. **05_数据周期详解.py** - 了解不同数据周期的使用
-
-### 进阶路径
-
-4. **03_高级交易.py** - 学习高级交易功能
-5. **04_策略开发.py** - 开发量化交易策略
-6. **06_扩展API学习实例.py** - 掌握扩展功能
-
-### 实战路径
-
-7. **07_qstock数据获取学习案例.py** - 真实数据获取
-8. **08_数据获取与交易结合案例.py** - 数据与交易结合
-9. **10_qstock真实数据交易案例_修复交易服务版.py** - 完整实战案例
-
-## 🏗️ 项目结构
-
-```
-miniqmt扩展/
-├── easy_xt/                    # 核心API模块
-│   ├── __init__.py
-│   ├── api.py                  # 主API接口
-│   ├── data_api.py            # 数据接口
-│   ├── trade_api.py           # 交易接口
-│   ├── advanced_trade_api.py  # 高级交易接口
-│   └── utils.py               # 工具函数
-├── 学习实例/                   # 学习案例
-│   ├── 01_基础入门.py
-│   ├── 02_交易基础.py
-│   ├── 03_高级交易.py
-│   └── ...
-├── config/                     # 配置文件
-│   ├── config_template.py
-│   └── config.py
-├── data/                       # 数据存储目录
-├── logs/                       # 日志目录
-├── xtquant/                    # QMT相关文件
-├── gui_app/                    # GUI应用（可选）
-├── requirements.txt            # 依赖列表
-├── README.md                   # 项目说明
-└── .gitignore                  # Git忽略文件
+```python
+import os
+os.environ['TUSHARE_TOKEN'] = '你的Token'
 ```
 
-## ⚠️ 风险提示
+##### 步骤 3：验证配置
 
-1. **投资风险**: 量化交易存在投资风险，请谨慎操作
-2. **测试环境**: 建议先在模拟环境中测试策略
-3. **资金管理**: 合理控制仓位，设置止损止盈
-4. **合规要求**: 遵守相关法律法规和交易所规则
-
-## 🤝 贡献
-
-欢迎提交Issue和Pull Request！
-
-### 开发指南
-
-1. Fork项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启Pull Request
-
-## 📄 许可证
-
-本项目采用MIT许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
-
-## 🙏 致谢
-
-- [迅投QMT](https://www.gtja.com/) - 提供量化交易平台
-- [qstock](https://github.com/tkfy920/qstock) - 股票数据获取
-- [akshare](https://github.com/akfamily/akshare) - 金融数据接口
-
-## 📞 联系方式
-
-- 项目主页: https://github.com/quant-king299/EasyXT
-- 问题反馈: https://github.com/quant-king299/EasyXT/issues
-- 网站: **https://www.ptqmt.com**
-
-## 📈 更新日志
-
-### v1.0.0 (2025-01-11)
-- 初始版本发布
-- 完整的EasyXT API封装
-- 丰富的学习实例
-- 修复交易服务初始化问题
-
-
-## 🧰 开发者工具与演示脚本
-
-- 诊断工具（tools/）
-  - `tools/debug_qmt_api.py`：检查 easy_xt API 结构，枚举 trade/data/account 能力并做基础调用验证
-  - `tools/debug_data_api.py`：直连 DataAPI 验证 connect/xtquant 可用性及行情、列表获取
-- 演示脚本（tools/demos/）
-  - `tools/demos/P1-006_config_demo.py`：配置系统演示
-  - `tools/demos/P1-009_monitor_demo.py`：监控告警演示
-  - `tools/demos/P1-010_validator_demo.py`：配置校验器演示
-  - `tools/demos/P1-011_scheduler_demo.py`：任务调度器演示（定时、周期、优先级、并发、重试、统计）
-  - `tools/demos/P2-011_performance_demo.py`：性能/压测演示
-  - `tools/demos/P2-012_error_handler_demo.py`：错误处理与恢复机制（重试/降级/优雅退化、断路器）
-  - `tools/demos/P2-013_log_manager_demo.py`：日志管理（配置、检索/过滤、统计分析、导出）
-  - `tools/demos/quick_start_monitor.py`：监控告警系统快速启动（演示用）
-  - `tools/demos/find_current_holdings_api.py`：雪球接口探测（确定“当前持仓”来源）
-
-运行示例（PowerShell）：
-```powershell
-# 诊断脚本
-cd "c:\Users\Administrator\Desktop\miniqmt扩展\tools"
-python .\debug_qmt_api.py
-python .\debug_data_api.py
-
-# 演示脚本
-cd "c:\Users\Administrator\Desktop\miniqmt扩展\tools\demos"
-python .\P1-006_config_demo.py
-python .\P1-009_monitor_demo.py
-python .\P1-010_validator_demo.py
-python .\P1-011_scheduler_demo.py
-python .\P2-011_performance_demo.py
-python .\P2-012_error_handler_demo.py
-python .\P2-013_log_manager_demo.py
-python .\quick_start_monitor.py
-python .\find_current_holdings_api.py
+```bash
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('✓ Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...')"
 ```
 
-依赖说明：需预先安装“xtquant 特殊版本”，并按 README 配置（或设置环境变量 `XTQUANT_PATH`）；推荐通过 `pip install -e .\easy_xt` 可编辑安装后再运行脚本。
+##### 常见问题
 
-## 👀 监控系统
+**Q: 不配置 Token 会影响哪些功能？**
+A: 以下功能会受影响：
+- ❌ 无法使用 Tushare 数据源（回测时自动降级到其他数据源）
+- ❌ 无法下载股票列表、财务数据等
+- ✅ QMT本地数据仍可正常使用
+- ✅ 其他不依赖Tushare的功能不受影响
 
-- 标准启动入口（独立服务）：
-```powershell
+**Q: Token 会被泄露吗？**
+A: `.env` 文件已被加入 `.gitignore`，不会提交到Git。请勿手动提交包含Token的文件。
+
+**Q: 如何获取 Token？需要付费吗？**
+A: Tushare Pro采用积分制：
+- 注册后会获得一些初始积分，可兑换基础权限的Token
+- 基础功能（如股票行情、基础数据）所需积分较少
+- 高级功能（如财务数据、高频数据）需要更多积分，可能需要充值
+- 详细积分规则：https://tushare.pro/document/2
+- 建议先试用基础功能，确认满足需求后再考虑充值
+
+**Q: 不想用Tushare，有其他选择吗？**
+A: 本项目支持多种数据源，可按需选择：
+- **QMT本地数据**：如果有QMT终端，可直接使用本地历史数据
+- **DuckDB本地数据库**：预先下载的数据文件（回测速度最快）
+- **akshare**：免费数据接口（功能类似Tushare）
+- **qstock**：免费数据接口
+
+配置优先级：DuckDB > QMT > Tushare > akshare > qstock
+
+---
+
+### 📋 安装检查清单
+
+在开始使用前，请确认以下事项：
+
+- [ ] 已下载并解压特殊版本的 `xtquant`
+- [ ] 验证 `from xtquant import datacenter` 不报错
+- [ ] 已安装 `easy_xt` 核心库（`pip install -e ./easy_xt`）
+- [ ] 如需回测，已安装 `easyxt_backtest`（`pip install -e ./easyxt_backtest`）
+- [ ] 如需Tushare数据，已配置 Token
+- [ ] QMT客户端已安装并登录
+- [ ] Python 版本 ≥ 3.9
+
+### 快速验证安装
+
+运行以下命令验证所有组件：
+
+```bash
+# 1. 验证 xtquant
+python -c "from xtquant import datacenter; print('✓ xtquant OK')"
+
+# 2. 验证 easy_xt
+python -c "from easy_xt import get_api; print('✓ easy_xt OK')"
+
+# 3. 验证 easyxt_backtest（如果已安装）
+python -c "import easyxt_backtest; print('✓ easyxt_backtest OK')"
+
+# 4. 验证 Tushare Token（如果已配置）
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('✓ Tushare Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...') if os.getenv('TUSHARE_TOKEN') else print('✗ Token未配置')"
+```
+
+---
+
+## 🛠️ 开发者工具（可选）
+
+项目包含一些开发者工具和演示脚本，位于 `tools/` 目录：
+
+### 诊断工具
+- `tools/debug_qmt_api.py` - 检查 easy_xt API 结构
+- `tools/debug_data_api.py` - 验证数据连接
+
+### 演示脚本
+- 配置系统演示
+- 监控告警演示
+- 任务调度器演示
+- 性能压测演示
+- 日志管理演示
+
+### 监控系统
+```bash
+# 启动监控服务
 python start_monitor.py --config config/monitor_config.json
+
 # 查看状态
 python start_monitor.py --status
 ```
-- 演示快速启动：`tools/demos/quick_start_monitor.py`
-- 相关组件：`easy_xt/realtime_data/monitor_service.py`
 
-## ❄️ 雪球跟单策略
+### 雪球跟单策略
 
-- 快速启动：
+**快速启动**：
 ```powershell
 # 批处理脚本（Windows）
 .\strategies\xueqiu_follow\启动雪球跟单.bat
@@ -401,23 +588,144 @@ python start_monitor.py --status
 # 或 Python 入口
 python strategies\xueqiu_follow\start_xueqiu_follow_easyxt.py
 ```
-- 配置目录：`strategies/xueqiu_follow/config/`
-- 示例/样本数据：`strategies/xueqiu_follow/fixtures/`
 
-### 常见问题（FAQ）
-- Q: 连接返回 -1 / “交易服务连接失败”？
-  - A: 99% 为 `qmt_path` 路径错误：请指向本机 `userdata` 或 `userdata_mini` 目录；避免 `0MT` 与 `userdata mini` 等拼写错误；确保 QMT 已登录、Python 与 QMT 权限一致（管理员/普通一致）。
+**常见问题**：
+- **Q**: 连接返回 -1 / "交易服务连接失败"？
+- **A**: 99% 为 `qmt_path` 路径错误，请确保指向本机 `userdata` 或 `userdata_mini` 目录，避免 `0MT` 与 `userdata mini` 等拼写错误。
 
-## 🔌 JQ2QMT / QKA 服务（如需）
+**详细配置**: 查看 `strategies/xueqiu_follow/README.md`
 
-- 快速启动 QKA 服务端：
+### JQ2QMT / QKA 服务（聚宽策略迁移）
+
+如需将聚宽策略迁移到QMT：
 ```powershell
-python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-path "C:\\Path\\To\\miniQMT" --host 127.0.0.1 --port 8000
+python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-path "C:\\Path\\To\\miniQMT"
 ```
-- 若使用本地 xtquant 解压目录，设置环境变量：
-```powershell
-setx XTQUANT_PATH "C:\\xtquant_special"
+
+详细文档：查看 `strategies/jq2qmt/README.md`
+
+---
+
+详细文档：查看 `tools/` 目录下的 README 文件
+
+---
+
+## 🎓 常见问题
+
+### Q1: 我应该安装哪些模块？
+
+**A**: 根据需求选择：
+- **只要API** → 只安装 `easy_xt`
+- **要做回测** → 安装 `easy_xt` + `easyxt_backtest`
+- **因子研究** → 只使用 `101因子平台`（完全独立）
+- **学习量化** → 安装 `easy_xt` + 看 `学习实例/`
+- **使用现成策略** → 安装 `easy_xt` + 看 `strategies/`
+
+### Q2: 这些模块之间有什么依赖关系？
+
+**A**:
+- `easy_xt`：无依赖，可独立
+- `easyxt_backtest`：可独立，不依赖101因子平台
+- `101因子平台`：完全独立
+- `strategies`、`学习实例`：依赖 `easy_xt`
+
+### Q3: 我可以在自己的项目中只使用easy_xt吗？
+
+**A**: **完全可以！** `easy_xt` 就是设计成可独立使用的库：
+
+```python
+# 在你的项目中
+from easy_xt import get_api
+
+api = get_api()
+data = api.get_full_history(['000001.SZ'], period='1d', start_time='20240101')
 ```
+
+### Q4: 101因子平台必须配合easy_xt使用吗？
+
+**A**: **不需要**。101因子平台是完全独立的Web应用，可以单独使用。
+
+### Q5: 我是新手，应该从哪里开始？
+
+**A**: 建议路径：
+1. 阅读 `学习实例/01_基础入门.py`
+2. 运行 `学习实例/02_交易基础.py`
+3. 尝试 `学习实例/04_策略回测.py`
+4. 需要时再学习其他模块
+
+---
+
+## 📊 与其他项目的对比
+
+| 项目 | 定位 | 关系 |
+|------|------|------|
+| **miniQMT** | QMT官方Python接口 | EasyXT依赖的基础 |
+| **EasyXT** | miniQMT的简化封装 | 本项目的核心库 |
+| **QMT官方** | 迅投QMT交易平台 | 底层交易软件 |
+| **聚宽JoinQuant** | 在线量化平台 | 通过JQ2QMT可集成 |
+| **Backtrader** | 通用回测框架 | `easyxt_backtest`是QMT专用版 |
+
+---
+
+## 🤝 贡献指南
+
+欢迎提交Issue和Pull Request！
+
+### 开发流程
+
+1. Fork 项目
+2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 开启 Pull Request
+
+### 代码规范
+
+- 使用 Python PEP 8 编码规范
+- 添加详细的文档字符串
+- 编写单元测试
+
+---
+
+## 📈 更新日志
+
+### v1.0.0 (2025-01-11)
+- ✅ 初始版本发布
+- ✅ 完整的EasyXT API封装
+- ✅ 丰富的学习实例
+- ✅ 修复交易服务初始化问题
+
+---
+
+## 🔗 相关链接
+
+- **项目主页**: https://github.com/quant-king299/EasyXT
+- **问题反馈**: https://github.com/quant-king299/EasyXT/issues
+- **网站**: https://www.ptqmt.com
+- **微信公众号**: 王者quant
+
+---
+
+## 📄 许可证
+
+MIT License - 详见 [LICENSE](LICENSE) 文件
+
+---
+
+## ⚠️ 风险提示
+
+1. **投资风险**：量化交易存在投资风险，请谨慎操作
+2. **测试环境**：建议先在模拟环境中测试策略
+3. **资金管理**：合理控制仓位，设置止损止盈
+4. **合规要求**：遵守相关法律法规和交易所规则
+
+---
+
+## 🙏 致谢
+
+- [迅投QMT](https://www.gtja.com/) - 提供量化交易平台
+- [qstock](https://github.com/tkfy920/qstock) - 股票数据获取
+- [akshare](https://github.com/akfamily/akshare) - 金融数据接口
 
 ---
 
@@ -425,16 +733,12 @@ setx XTQUANT_PATH "C:\\xtquant_special"
 
 ---
 
-## 关注公众号 / 加群交流
+<div align="center">
 
-- 关注公众号：
+**👇 关注公众号 / 加群交流 👇**
 
-<img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="260" />
+<img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="200" />
+<img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="200" />
+<img src="docs/assets/知识星球.jpg" alt="知识星球二维码" width="200" />
 
-- 欢迎加入QQ交流群：492287081（或扫码加入）
-
-<img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="260" />
-
-- 欢迎加入知识星球，获取更多量化交易干货和一对一答疑服务
-
-<img src="docs/assets/知识星球.jpg" alt="知识星球二维码" width="260" />
+</div>
