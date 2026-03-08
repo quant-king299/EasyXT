@@ -82,7 +82,7 @@ mkdir -p ~/StockData
 
 #### 📝 详细指南
 
-查看完整的DuckDB初始化指南：[DuckDB数据库使用指南](docs/DUCKDB_GUIDE.md)
+查看完整的DuckDB初始化指南：[DuckDB数据库使用指南](docs/assets/DUCKDB_GUIDE.md)
 
 ---
 
