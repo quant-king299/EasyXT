@@ -206,6 +206,7 @@ comprehensive_*.py
 !tools/测试订阅接口.py
 !tools/诊断tick字段.py
 !tools/检查qstock状态.py
+!tools/check_env.py
 
 # 文档和总结文件
 *总结.md

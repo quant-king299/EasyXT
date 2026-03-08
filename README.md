@@ -5,11 +5,9 @@
 [![QMT](https://img.shields.io/badge/QMT-Compatible-orange.svg)](https://www.gtja.com/)
 [![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
 
-> **注意**：本项目使用的是miniQMT环境。QMT有两个版本：完整版QMT（包含GUI界面）和miniQMT（轻量级API版本）。两者在API使用上基本一致，但在环境配置和部署方式上有显著区别。详细区别请参阅 [QMT版本说明](qmt_versions_explanation.md)。
+> **注意**：本项目使用的是miniQMT环境。QMT有两个版本：完整版QMT（包含GUI界面）和miniQMT（轻量级API版本）。两者在API使用上基本一致，但在环境配置和部署方式上有显著区别。详细区别请参阅 [📖 QMT版本说明](docs/assets/QMT_VERSIONS.md)。
 
 > 量化为王，策略致胜，我是只聊干货的王者 quant！
->
-> 欢迎加入[知识星球](https://www.zhihu.com/club/12345678901234567890)，获取更多量化交易干货和一对一答疑服务！
 
 ---
 
@@ -58,6 +56,13 @@
 
 #### 我想做因子分析
 → 📊 **[101因子平台](101因子/101因子分析平台/README.md)** → 独立Web应用
+
+### 🔧 遇到问题了？
+
+→ 🆘 **[疑难问题解答 (FAQ)](docs/assets/TROUBLESHOOTING.md)** ← **点击这里！**
+- DuckDB数据库找不到？数据下载失败？
+- 安装报错？运行失败？性能问题？
+- 这里收集了最常见的问题和解决方案！
 
 ---
 
@@ -612,6 +617,8 @@ python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-
 
 ## 🎓 常见问题
 
+> 💡 **遇到更复杂的问题？** 查看 **[🔧 疑难问题解答 (FAQ)](docs/assets/TROUBLESHOOTING.md)** 获取详细的故障排查指南！
+
 ### Q1: 我应该安装哪些模块？
 
 **A**: 根据需求选择：
@@ -733,12 +740,16 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ---
 
-<div align="center">
+## 关注公众号 / 加群交流
 
-**👇 关注公众号 / 加群交流 👇**
+- 关注公众号：
 
-<img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="200" />
-<img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="200" />
-<img src="docs/assets/知识星球.jpg" alt="知识星球二维码" width="200" />
+<img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="260" />
 
-</div>
+- 欢迎加入QQ交流群：492287081（或扫码加入）
+
+<img src="docs/assets/qq_group_qr.jpg" alt="QQ群二维码" width="260" />
+
+- 欢迎加入知识星球，获取更多量化交易干货和一对一答疑服务
+
+<img src="docs/assets/知识星球.jpg" alt="知识星球二维码" width="260" />
