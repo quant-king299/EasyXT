@@ -495,16 +495,16 @@ class StrategyEngine:
             return []
     
     def _generate_follow_mode_orders(self, target_positions: Dict[str, Dict[str, Any]], current_positions: Dict[str, Dict[str, Any]]) -> List[Dict[str, Any]]:
-        """跟投模式：不考虑现有持仓差异，直接按目标权重生成指令"""
+        """跟投模式：基于持仓差异计算调仓数量，确保调仓数量 = 目标仓位 - 当前持仓"""
         try:
             orders = []
-            
+
             for symbol, target in target_positions.items():
                 # 统一代码为后缀格式，确保订单代码与行情提供者一致
                 symbol_norm = self._normalize_symbol(symbol)
                 target_value = target['target_value']
                 action = target['action']
-                
+
                 # 获取当前价格，如果获取失败则跳过该股票
                 try:
                     current_price = self._get_current_price(symbol)
@@ -514,43 +514,72 @@ class StrategyEngine:
                 except Exception as price_error:
                     self.logger.error(f"获取 {symbol} 价格失败: {price_error}")
                     continue
-                
-                # 跟投模式：直接按目标价值计算股数，不考虑现有持仓
+
+                # 获取当前持仓股数
+                current = current_positions.get(symbol_norm, {'volume': 0, 'value': 0})
+                current_volume = int(
+                    current.get('volume')
+                    or current.get('can_use_volume')
+                    or current.get('current_qty')
+                    or current.get('qty')
+                    or current.get('position')
+                    or 0
+                )
+
+                # 计算目标持仓股数
                 target_volume = int(target_value / current_price / 100) * 100
-                
-                # 最小交易单位检查（保持A股整手100股）
-                if target_volume < 100:
-                    self.logger.info(f"{symbol} 目标股数 {target_volume} 小于100股，忽略")
+
+                # 【修复】计算调仓数量 = 目标持仓 - 当前持仓
+                adjust_volume = target_volume - current_volume
+
+                # 如果调仓数量为0，说明已经达到目标仓位，无需交易
+                if adjust_volume == 0:
+                    self.logger.info(f"{symbol} 当前持仓 {current_volume}股 已等于目标持仓 {target_volume}股，无需调仓")
                     continue
-                
-                if action == 'buy':
-                    # 买入（应用滑点）
+
+                # 根据调仓数量的正负决定买入或卖出
+                if adjust_volume > 0:
+                    # 需要买入 adjust_volume 股
+                    if adjust_volume < 100:
+                        self.logger.info(f"{symbol} 需要买入数量 {adjust_volume} 小于100股，忽略")
+                        continue
+
                     adjusted_price = self._apply_slippage(symbol_norm, current_price, 'buy')
                     order = {
                         'symbol': symbol_norm,
                         'action': 'buy',
-                        'volume': target_volume,
+                        'volume': adjust_volume,
                         'price': adjusted_price,
                         'order_type': 'limit',
-                        'reason': target['reason']
+                        'reason': f"{target['reason']}｜当前持仓{current_volume}股→目标持仓{target_volume}股（调入{adjust_volume}股）"
                     }
                     orders.append(order)
-                    self.logger.info(f"跟投模式：生成买入指令: {symbol} {target_volume}股 @ {current_price:.2f}，目标市值 {target_value:.2f}")
-                    
-                elif action == 'sell':
-                    # 卖出（应用滑点）
+                    self.logger.info(f"跟投模式：生成买入指令: {symbol} {adjust_volume}股 @ {current_price:.2f}｜当前{current_volume}股→目标{target_volume}股")
+
+                elif adjust_volume < 0:
+                    # 需要卖出 abs(adjust_volume) 股
+                    sell_volume = abs(adjust_volume)
+                    if sell_volume < 100:
+                        self.logger.info(f"{symbol} 需要卖出数量 {sell_volume} 小于100股，忽略")
+                        continue
+
+                    # 检查当前持仓是否足够卖出
+                    if sell_volume > current_volume:
+                        self.logger.warning(f"{symbol} 需要卖出{sell_volume}股，但当前持仓只有{current_volume}股，调整为清仓")
+                        sell_volume = current_volume
+
                     adjusted_price = self._apply_slippage(symbol_norm, current_price, 'sell')
                     order = {
                         'symbol': symbol_norm,
                         'action': 'sell',
-                        'volume': target_volume,
+                        'volume': sell_volume,
                         'price': adjusted_price,
                         'order_type': 'limit',
-                        'reason': target['reason']
+                        'reason': f"{target['reason']}｜当前持仓{current_volume}股→目标持仓{target_volume}股（调出{sell_volume}股）"
                     }
                     orders.append(order)
-                    self.logger.info(f"跟投模式：生成卖出指令: {symbol} {target_volume}股 @ {current_price:.2f}")
-            
+                    self.logger.info(f"跟投模式：生成卖出指令: {symbol} {sell_volume}股 @ {current_price:.2f}｜当前{current_volume}股→目标{target_volume}股")
+
             self.logger.info(f"跟投模式：生成了 {len(orders)} 个交易指令")
             return orders
             
