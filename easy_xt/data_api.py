@@ -3,13 +3,16 @@
 简化xtquant数据接口的调用
 
 ⚠️ 线程安全说明：
-xtdata.download_history_data2() 方法在并发调用时可能导致卡死。
+xtdata.download_history_data2() 和 download_history_data() 方法在并发调用时可能导致卡死。
 为了解决这个问题，我们在 DataAPI 类中添加了类级别的线程锁 (_download_lock)，
 确保同一时间只有一个线程执行下载操作。
 
 锁保护的方法包括：
-- download_history_data_batch()
-- 任何内部调用 download_history_data2 的方法
+- get_price() - 获取价格数据时的下载操作
+- get_price_robust() - 健壮获取价格数据时的下载操作
+- download_data() - 下载历史数据
+- download_history_data_batch() - 批量下载历史数据
+- 任何内部调用 download_history_data 或 download_history_data2 的方法
 
 这样可以确保即使在并发场景下，也能正常工作，不会导致卡死。
 """
@@ -242,13 +245,15 @@ class DataAPI:
                 else:
                     download_start = start_date if start_date else '20200101'
                     download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
-                
-                self.xt.download_history_data2(
-                    stock_list=codes,
-                    period=period,
-                    start_time=download_start,
-                    end_time=download_end
-                )
+
+                # 使用线程锁保护下载操作，防止并发调用导致卡死
+                with DataAPI._download_lock:
+                    self.xt.download_history_data2(
+                        stock_list=codes,
+                        period=period,
+                        start_time=download_start,
+                        end_time=download_end
+                    )
                 print("历史数据下载完成")
             except Exception as download_error:
                 print(f"数据下载警告: {download_error}")
@@ -907,8 +912,10 @@ class DataAPI:
         end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
         
         try:
-            for code in codes:
-                self.xt.download_history_data(code, period, start_date, end_date)
+            # 使用线程锁保护下载操作，防止并发调用导致卡死
+            with DataAPI._download_lock:
+                for code in codes:
+                    self.xt.download_history_data(code, period, start_date, end_date)
             return True
         
         except Exception as e:
@@ -1114,13 +1121,15 @@ class DataAPI:
                     else:
                         download_start = start_date if start_date else '20200101'
                         download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
-                    
-                    self.xt.download_history_data2(
-                        stock_list=codes,
-                        period=period,
-                        start_time=download_start,
-                        end_time=download_end
-                    )
+
+                    # 使用线程锁保护下载操作，防止并发调用导致卡死
+                    with DataAPI._download_lock:
+                        self.xt.download_history_data2(
+                            stock_list=codes,
+                            period=period,
+                            start_time=download_start,
+                            end_time=download_end
+                        )
                     print("历史数据下载完成")
                 except Exception as download_error:
                     print(f"数据下载警告: {download_error}")
