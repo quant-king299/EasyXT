@@ -100,13 +100,31 @@ python init_data.py
 # 3. 完整模式（全市场股票，10年数据）
 ```
 
-### 方式三：使用Python脚本
+### 方式三：使用GUI下载数据（推荐）
+
+```bash
+# 启动GUI（最简单的方式）
+python run_gui.py
+
+# 在"📥 Tushare下载"标签页中：
+# 1. 输入Tushare Token
+# 2. 选择要下载的股票数量
+# 3. 设置时间范围
+# 4. 点击"开始下载"按钮
+```
+
+### 方式四：使用101因子平台的数据管理器（高级）
+
+如果需要编程方式下载数据，请使用101因子平台的LocalDataManager：
 
 ```python
-from easyxt_backtest import DataManager
+import sys
+sys.path.append('101因子/101因子分析平台/src')
 
-# 创建数据管理器
-dm = DataManager(duckdb_path='D:/StockData/stock_data.ddb')
+from data_manager import LocalDataManager
+
+# 创建本地数据管理器
+dm = LocalDataManager()
 
 # 下载数据
 dm.download_and_save(
@@ -116,9 +134,15 @@ dm.download_and_save(
     symbol_type='stock'
 )
 
-# 保存
-dm.close()
+# 查询下载的数据（会保存为parquet格式）
+data = dm.get_price('000001.SZ', start_date='2020-01-01', end_date='2023-12-31')
+print(data.head())
 ```
+
+**注意**：
+- `easyxt_backtest.DataManager` 是用于**数据查询**的类，主要在回测时使用
+- `LocalDataManager` 是用于**数据下载和管理**的类
+- 两个类的用途不同，不要混淆使用
 
 ---
 
@@ -191,16 +215,21 @@ df.to_csv('stock_list.csv', index=False)
 
 #### Step 3: 批量下载历史数据
 
+**推荐方式：使用101因子平台的数据管理器**
+
 ```python
-from easyxt_backtest import DataManager
+import sys
+sys.path.append('101因子/101因子分析平台/src')
+
+from data_manager import LocalDataManager
 import pandas as pd
 
 # 读取股票列表
 stocks = pd.read_csv('stock_list.csv')
 symbols = stocks['ts_code'].tolist()[:100]  # 先下载100只测试
 
-# 创建数据管理器
-dm = DataManager(duckdb_path='D:/StockData/stock_data.ddb')
+# 创建本地数据管理器
+dm = LocalDataManager()
 
 # 批量下载
 for symbol in symbols:
@@ -215,7 +244,7 @@ for symbol in symbols:
     except Exception as e:
         print(f"✗ {symbol} 下载失败: {e}")
 
-dm.close()
+print("所有数据下载完成！")
 ```
 
 #### Step 4: 下载市值数据（可选但推荐）
