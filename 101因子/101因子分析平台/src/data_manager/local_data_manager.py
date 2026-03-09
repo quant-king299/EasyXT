@@ -82,6 +82,10 @@ class LocalDataManager:
         # 数据源（延迟导入）
         self._data_source = None
 
+        # 【修复】初始化单例API实例，避免重复创建
+        self._api = None
+        self._api_initialized = False
+
     def _load_config_from_file(self, config_file: str = None) -> Dict:
         """从YAML文件加载配置"""
         import yaml
@@ -298,24 +302,44 @@ class LocalDataManager:
 
         return results
 
+    def _get_api_instance(self):
+        """【新增】获取或创建单例API实例"""
+        if self._api is None:
+            try:
+                import sys
+                workspace_dir = Path(__file__).parents[4]
+                if str(workspace_dir) not in sys.path:
+                    sys.path.insert(0, str(workspace_dir))
+
+                import easy_xt
+                self._api = easy_xt.get_api()
+                print("[OK] 创建API实例成功")
+            except Exception as e:
+                print(f"[ERROR] 创建API实例失败: {e}")
+                self._api = None
+
+        return self._api
+
     def _fetch_from_source(self, symbol: str,
                           start_date: str, end_date: str) -> pd.DataFrame:
         """从数据源获取数据"""
-        # 尝试使用easy_xt API
+        # 【修复】重用单例API实例，避免重复创建
         try:
-            import sys
-            workspace_dir = Path(__file__).parents[4]
-            if str(workspace_dir) not in sys.path:
-                sys.path.insert(0, str(workspace_dir))
+            api = self._get_api_instance()
+            if api is None:
+                warnings.warn(f"无法获取API实例，跳过数据下载: {symbol}")
+                return pd.DataFrame()
 
-            import easy_xt
-            api = easy_xt.get_api()
-
-            # 初始化数据服务
-            try:
-                api.init_data()
-            except:
-                pass  # 忽略初始化错误
+            # 初始化数据服务（只初始化一次）
+            if not self._api_initialized:
+                try:
+                    api.init_data()
+                    self._api_initialized = True
+                    print("[OK] API数据服务初始化成功")
+                except Exception as init_error:
+                    print(f"[WARN] API数据服务初始化失败: {init_error}")
+                    # 初始化失败不继续执行，但可以继续尝试
+                    pass
 
             # 使用api.get_price()获取数据
             from datetime import datetime
@@ -339,6 +363,7 @@ class LocalDataManager:
 
                 # 标准化列名
                 df.columns = df.columns.str.lower()
+                print(f"[OK] 成功获取 {symbol} 数据: {len(df)}条记录")
                 return df
         except Exception as e:
             warnings.warn(f"easy_xt获取数据失败: {symbol}, 错误: {e}")
