@@ -64,7 +64,20 @@ class StrategyEngine:
                 if len(parts) == 2 and parts[0] and parts[1] in ('SZ', 'SH'):
                     return parts[0] + '.' + parts[1]
                 return s
-            # 其他情况（纯6位或未知），原样返回（上游应提供标准格式）
+
+            # 【修复】为纯6位代码添加默认后缀规则
+            if len(s) == 6 and s.isdigit():
+                # 根据首位数字判断市场：0/3开头的为深圳，6开头的为上海
+                if s.startswith(('0', '3')):
+                    return s + '.SZ'
+                elif s.startswith('6'):
+                    return s + '.SH'
+                else:
+                    # 其他情况默认上海
+                    return s + '.SH'
+
+            # 其他情况（未知格式），记录警告并原样返回
+            self.logger.warning(f"无法识别的股票代码格式: {symbol}，原样返回")
             return s
         except Exception:
             return str(symbol)
@@ -84,7 +97,20 @@ class StrategyEngine:
             # 已是前缀格式则保持
             if s.startswith('SZ') or s.startswith('SH'):
                 return s
-            # 纯6位或其他未知，原样返回
+
+            # 【修复】为纯6位代码添加默认前缀规则
+            if len(s) == 6 and s.isdigit():
+                # 根据首位数字判断市场：0/3开头的为深圳，6开头的为上海
+                if s.startswith(('0', '3')):
+                    return 'SZ' + s
+                elif s.startswith('6'):
+                    return 'SH' + s
+                else:
+                    # 其他情况默认上海
+                    return 'SH' + s
+
+            # 其他情况（未知格式），记录警告并原样返回
+            self.logger.warning(f"无法识别的股票代码格式: {symbol}，原样返回")
             return s
         except Exception:
             return str(symbol)
@@ -142,7 +168,7 @@ class StrategyEngine:
             self.logger.info(f"使用跟单模式: {follow_mode}")
             
             if follow_mode == 'simple_follow':
-                return self._calculate_follow_mode_positions(portfolio_changes, follow_ratio, account_value)
+                return self._calculate_follow_mode_positions(portfolio_changes, follow_ratio, account_value, self.current_positions)
             else:
                 return self._calculate_smart_mode_positions(portfolio_changes, follow_ratio, account_value)
             
@@ -218,31 +244,31 @@ class StrategyEngine:
             self.logger.error(f"智能跟投模式计算目标仓位失败: {e}")
             return {}
     
-    def _calculate_follow_mode_positions(self, portfolio_changes: List[Dict[str, Any]], follow_ratio: float, account_value: float) -> Dict[str, Dict[str, Any]]:
-        """跟投模式：不考虑现有持仓，按目标权重直接计算"""
+    def _calculate_follow_mode_positions(self, portfolio_changes: List[Dict[str, Any]], follow_ratio: float, account_value: float, current_positions: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+        """跟投模式：考虑现有持仓，按目标权重计算调仓指令"""
         try:
             target_positions = {}
-            
+
             # 确保参数类型正确
             account_value_float = float(account_value)
             follow_ratio_float = float(follow_ratio)
-            
+
             for change in portfolio_changes:
                 # 安全检查：确保change字典包含必要的字段
                 symbol = change.get('symbol')
                 target_weight = change.get('target_weight')
                 prev_weight = change.get('prev_weight')
-                
+
                 if not symbol or target_weight is None or prev_weight is None:
                     self.logger.warning(f"跳过无效的变化数据: {change}")
                     continue
-                
-                # 跟投模式逻辑：只关注目标权重，不考虑现有持仓
+
+                # 跟投模式逻辑：考虑现有持仓
                 if target_weight > 0:
                     # 计算目标价值
                     target_value = account_value_float * follow_ratio_float * target_weight
-                    
-                    # 跟投模式：只要有目标权重就生成买入指令，不考虑现有持仓
+
+                    # 跟投模式：只要有目标权重就生成买入指令
                     target_positions[symbol] = {
                         'action': 'buy',
                         'target_value': target_value,
@@ -250,19 +276,31 @@ class StrategyEngine:
                         'reason': f'跟投模式买入｜目标权重 {target_weight:.2%}｜目标价值=账户市值×跟随比例×目标权重 = {account_value_float:,.2f}×{follow_ratio_float:.2%}×{target_weight:.2%} = ¥{account_value_float * follow_ratio_float * target_weight:,.2f}'
                     }
                     self.logger.info(f"跟投模式：生成买入指令 {symbol}，目标权重 {target_weight:.2%}")
-                
+
                 elif target_weight == 0 and prev_weight > 0:
-                    # 清仓逻辑
-                    target_positions[symbol] = {
-                        'action': 'sell',
-                        'target_value': 0,
-                        'weight': 0,
-                        'reason': '跟投模式清仓｜目标权重 0%｜将卖出至完全清空'
-                    }
-                    self.logger.info(f"跟投模式：生成清仓指令 {symbol}")
-            
-            self.logger.info(f"跟投模式：计算得到 {len(target_positions)} 个目标仓位")
-            return target_positions
+                    # 【修复】清仓逻辑：检查用户是否真的持有该股票
+                    symbol_norm = self._normalize_symbol(symbol)
+                    current = current_positions.get(symbol_norm, {'volume': 0, 'value': 0})
+                    current_volume = int(
+                        current.get('volume')
+                        or current.get('can_use_volume')
+                        or current.get('current_qty')
+                        or current.get('qty')
+                        or current.get('position')
+                        or 0
+                    )
+
+                    # 只有当用户确实持有该股票时，才生成清仓指令
+                    if current_volume > 0:
+                        target_positions[symbol] = {
+                            'action': 'sell',
+                            'target_value': 0,
+                            'weight': 0,
+                            'reason': f'跟投模式清仓｜目标权重 0%｜当前持仓{current_volume}股，将卖出至完全清空'
+                        }
+                        self.logger.info(f"跟投模式：生成清仓指令 {symbol}，当前持仓 {current_volume}股")
+                    else:
+                        self.logger.info(f"跟投模式：跳过 {symbol} 的清仓指令，当前无持仓")
             
         except Exception as e:
             self.logger.error(f"跟投模式计算目标仓位失败: {e}")
@@ -277,6 +315,8 @@ class StrategyEngine:
             - 价格保留位数: 股票2位；转债/基金保留3位
             """
             try:
+                original_price = price  # 保存原始价格用于验证
+
                 slip_type = (
                     self.config_manager.get_setting('滑点类型')
                     or self.config_manager.get_setting('settings.slippage.type')
@@ -287,10 +327,39 @@ class StrategyEngine:
                     or self.config_manager.get_setting('settings.slippage.value')
                     or 0.01
                 )
+
+                # 【修复】添加最大滑点限制，防止滑点过大
+                max_slip_ratio = self.config_manager.get_setting('settings.slippage.max_ratio', 0.03)  # 默认最大3%滑点
+
                 if slip_type == '百分比':
-                    price = price * (1 + float(slip_value)) if action == 'buy' else price * (1 - float(slip_value))
+                    slip_ratio = float(slip_value)
+                    # 限制滑点比例，防止过大
+                    if slip_ratio > max_slip_ratio:
+                        self.logger.warning(f"滑点比例 {slip_ratio:.2%} 超过最大限制 {max_slip_ratio:.2%}，使用最大限制")
+                        slip_ratio = max_slip_ratio
+
+                    price = price * (1 + slip_ratio) if action == 'buy' else price * (1 - slip_ratio)
                 elif slip_type == '数值':
-                    price = price + float(slip_value) if action == 'buy' else price - float(slip_value)
+                    slip_amount = float(slip_value)
+                    # 【修复】对于数值滑点，计算对应的比例，确保不超过最大限制
+                    slip_ratio = slip_amount / price if price > 0 else 0
+                    if slip_ratio > max_slip_ratio:
+                        self.logger.warning(f"滑点金额 {slip_amount} 对应比例 {slip_ratio:.2%} 超过最大限制 {max_slip_ratio:.2%}，使用最大限制")
+                        slip_amount = price * max_slip_ratio
+
+                    price = price + slip_amount if action == 'buy' else price - slip_amount
+
+                # 【修复】验证最终价格合理性，防止价格偏离过大
+                price_change_ratio = abs(price - original_price) / original_price if original_price > 0 else 0
+                if price_change_ratio > max_slip_ratio:
+                    self.logger.warning(f"滑点后价格偏离 {price_change_ratio:.2%} 超过最大限制 {max_slip_ratio:.2%}，调整为最大限制")
+                    price = original_price * (1 + max_slip_ratio) if action == 'buy' else original_price * (1 - max_slip_ratio)
+
+                # 确保价格为正数
+                if price <= 0:
+                    self.logger.error(f"滑点计算后价格 {price} 无效，使用原始价格 {original_price}")
+                    price = original_price
+
                 code6 = symbol.replace('.SH', '').replace('.SZ', '').replace('SH', '').replace('SZ', '')
                 code6 = code6[-6:] if len(code6) >= 6 else code6
                 is_bond = code6.startswith(('11', '12')) or code6.startswith(('110', '113', '123', '127', '128', '117'))
@@ -588,30 +657,50 @@ class StrategyEngine:
             return []
     
     def merge_multiple_portfolios(self, portfolio_list: List[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
-        """合并多个组合的信号"""
+        """合并多个组合的信号，防止权重累加超出限制"""
         try:
             merged_positions = {}
-            
+
+            # 【修复】添加多组合跟单的最大权重限制
+            max_total_weight = self.config_manager.get_setting('settings.max_total_weight', 0.95)  # 默认最大95%总仓位
+
             for portfolio_data in portfolio_list:
                 portfolio_code = portfolio_data['code']
                 follow_ratio = portfolio_data['follow_ratio']
                 changes = portfolio_data['changes']
-                
+
                 # 计算该组合的目标仓位
                 account_value = self._get_account_value()
                 positions = self.calculate_target_positions(changes, follow_ratio, account_value)
-                
+
                 # 合并到总仓位中
                 for symbol, position in positions.items():
                     if symbol in merged_positions:
-                        # 如果已存在，累加目标价值
-                        merged_positions[symbol]['target_value'] += position['target_value']
-                        merged_positions[symbol]['weight'] += position['weight']
+                        # 如果已存在，累加目标价值和权重
+                        old_weight = merged_positions[symbol]['weight']
+                        new_weight = old_weight + position['weight']
+
+                        # 【修复】检查权重是否超出限制
+                        if new_weight > max_total_weight:
+                            self.logger.warning(f"{symbol} 合并后权重 {new_weight:.2%} 超过最大限制 {max_total_weight:.2%}，调整为 {max_total_weight:.2%}")
+                            # 按比例缩减目标价值
+                            scale_ratio = max_total_weight / new_weight
+                            merged_positions[symbol]['target_value'] *= scale_ratio
+                            merged_positions[symbol]['weight'] = max_total_weight
+                        else:
+                            merged_positions[symbol]['target_value'] += position['target_value']
+                            merged_positions[symbol]['weight'] = new_weight
+
                         merged_positions[symbol]['reason'] += f"; {position['reason']}"
                     else:
                         merged_positions[symbol] = position.copy()
-            
-            self.logger.info(f"合并 {len(portfolio_list)} 个组合后得到 {len(merged_positions)} 个目标仓位")
+
+            # 【修复】计算总权重并警告
+            total_weight = sum(pos['weight'] for pos in merged_positions.values())
+            if total_weight > max_total_weight:
+                self.logger.warning(f"合并后总权重 {total_weight:.2%} 超过最大限制 {max_total_weight:.2%}，可能存在风险")
+
+            self.logger.info(f"合并 {len(portfolio_list)} 个组合后得到 {len(merged_positions)} 个目标仓位，总权重 {total_weight:.2%}")
             return merged_positions
             
         except Exception as e:
@@ -638,9 +727,10 @@ class StrategyEngine:
                         'price': order.get('price', 10.0)
                     }]
                     
-                    account_value = self._get_account_value()
-                    if account_value is None or account_value <= 0:
-                        self.logger.error("无法获取账户价值，拒绝当前交易指令")
+                    try:
+                        account_value = self._get_account_value()
+                    except Exception as account_error:
+                        self.logger.error(f"无法获取账户价值，拒绝当前交易指令: {account_error}")
                         # 记录拒绝原因
                         self._last_rejected_orders.append({
                             'symbol': symbol,
@@ -651,12 +741,7 @@ class StrategyEngine:
                             'risk_level': 'medium'
                         })
                         continue
-                    account_info = {
-                        'total_asset': account_value,
-                        'cash': account_value * 0.3,
-                        'market_value': account_value * 0.7,
-                        'daily_pnl': 0
-                    }
+                    account_info = self._get_detailed_account_info()
                     current_positions_broker = { self._to_broker_symbol(k): v for k, v in self.current_positions.items() }
                     result = self.risk_manager.check_trade_risk(
                         test_orders, current_positions_broker, account_info
@@ -718,7 +803,37 @@ class StrategyEngine:
                 account_id = str(account_id_raw) if account_id_raw else None
                 if account_id:
                     execution_results = []
+                    failed_orders = []  # 【新增】记录失败的订单
+
                     for order in valid_orders:
+                        # 【修复】实际执行前再次进行快速风险检查
+                        try:
+                            account_value = self._get_account_value()
+                            account_info = self._get_detailed_account_info()
+
+                            # 单订单风险检查
+                            test_order = [{
+                                'symbol': self._to_broker_symbol(order['symbol']),
+                                'action': order['action'],
+                                'volume': order['volume'],
+                                'price': order.get('price', 0)
+                            }]
+
+                            current_positions_broker = { self._to_broker_symbol(k): v for k, v in self.current_positions.items() }
+                            final_check = self.risk_manager.check_trade_risk(
+                                test_order, current_positions_broker, account_info
+                            )
+
+                            if not final_check['allowed']:
+                                self.logger.warning(f"执行前风险检查失败，跳过订单: {order['symbol']} - {final_check['reason']}")
+                                failed_orders.append({**order, 'error': final_check['reason']})
+                                continue
+
+                        except Exception as final_check_error:
+                            self.logger.warning(f"执行前风险检查异常，跳过订单: {order['symbol']} - {final_check_error}")
+                            failed_orders.append({**order, 'error': str(final_check_error)})
+                            continue
+
                         order_id = self.trader_api.sync_order(
                             account_id=account_id,
                             code=self._to_broker_symbol(order['symbol']),
@@ -735,6 +850,20 @@ class StrategyEngine:
                             'success': order_id is not None,
                             'reason': order.get('reason', '')
                         })
+
+                        # 【修复】交易执行成功后立即更新持仓信息
+                        if order_id:
+                            self._update_position_after_order(order, order_id)
+                        else:
+                            # 【新增】订单失败记录
+                            self.logger.error(f"订单执行失败: {order['symbol']} {order['action']} {order['volume']}股")
+                            failed_orders.append({**order, 'error': '订单提交失败，返回空order_id'})
+
+                    # 【新增】如果有关键订单失败，记录详细错误信息
+                    if failed_orders and len(failed_orders) > 0:
+                        self.logger.error(f"本批次有 {len(failed_orders)} 个订单执行失败:")
+                        for failed_order in failed_orders:
+                            self.logger.error(f"  - {failed_order['symbol']} {failed_order['action']} {failed_order['volume']}股: {failed_order.get('error', '未知错误')}")
                 
                 # 导出交易明细
                 try:
@@ -1009,6 +1138,130 @@ class StrategyEngine:
 
 
     
+    def _export_failed_orders_to_excel(self, failed_orders: List[Dict[str, Any]], filename: str):
+        """【新增】导出失败订单到Excel"""
+        try:
+            if not failed_orders:
+                return
+
+            df_data = []
+            for order in failed_orders:
+                df_data.append({
+                    '股票代码': order.get('symbol', ''),
+                    '操作方向': order.get('action', ''),
+                    '数量': order.get('volume', 0),
+                    '价格': order.get('price', 0),
+                    '失败原因': order.get('error', ''),
+                    '时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                })
+
+            df = pd.DataFrame(df_data)
+            export_dir = Path(__file__).parent.parent.parent / "reports"
+            export_dir.mkdir(parents=True, exist_ok=True)
+            filepath = export_dir / filename
+
+            with pd.ExcelWriter(filepath, engine='openpyxl') as writer:
+                df.to_excel(writer, sheet_name='失败订单', index=False)
+
+            self.logger.info(f"✅ 失败订单已导出: {filepath}")
+            return filepath
+        except Exception as e:
+            self.logger.error(f"导出失败订单失败: {e}")
+            return None
+
+    def _update_position_after_order(self, order: Dict[str, Any], order_id: str):
+        """【新增】交易执行成功后立即更新持仓信息"""
+        try:
+            symbol = order['symbol']
+            action = order['action']
+            volume = order['volume']
+
+            # 更新持仓信息
+            if symbol not in self.current_positions:
+                self.current_positions[symbol] = {
+                    'volume': 0,
+                    'value': 0,
+                    'available_volume': 0,
+                    'cost_price': 0,
+                    'current_price': 0,
+                    'market_value': 0,
+                    'profit_rate': 0
+                }
+
+            if action == 'buy':
+                # 买入：增加持仓
+                self.current_positions[symbol]['volume'] += volume
+                self.current_positions[symbol]['available_volume'] += volume
+                self.logger.info(f"更新持仓：{symbol} 买入 {volume}股，当前持仓 {self.current_positions[symbol]['volume']}股")
+            elif action == 'sell':
+                # 卖出：减少持仓
+                self.current_positions[symbol]['volume'] -= volume
+                self.current_positions[symbol]['available_volume'] -= volume
+                self.logger.info(f"更新持仓：{symbol} 卖出 {volume}股，当前持仓 {self.current_positions[symbol]['volume']}股")
+
+                # 如果持仓为0或负数，移除该股票持仓记录
+                if self.current_positions[symbol]['volume'] <= 0:
+                    del self.current_positions[symbol]
+                    self.logger.info(f"更新持仓：{symbol} 持仓已清空，移除记录")
+
+        except Exception as e:
+            self.logger.error(f"更新持仓信息失败: {e}")
+
+    def _get_detailed_account_info(self) -> Dict[str, float]:
+        """【新增】获取详细的账户信息，包括现金和持仓市值"""
+        try:
+            # 尝试多种路径获取账户ID
+            account_id = (
+                self.config_manager.get_setting('settings.account.account_id') or
+                self.config_manager.get_setting('account.account_id') or
+                None
+            )
+            if not account_id:
+                # 如果无法获取账户ID，返回基于总资产的估算
+                account_value = self._get_account_value()
+                return {
+                    'total_asset': account_value,
+                    'cash': account_value * 0.3,  # 默认30%现金
+                    'market_value': account_value * 0.7,  # 默认70%持仓
+                    'daily_pnl': 0
+                }
+
+            # 尝试获取详细账户信息
+            if hasattr(self.trader_api, 'get_account_asset_detailed'):
+                asset_info = self.trader_api.get_account_asset_detailed(account_id)
+                if asset_info:
+                    cash = asset_info.get('cash', asset_info.get('可用', 0))
+                    market_value = asset_info.get('market_value', asset_info.get('持仓市值', 0))
+                    total_asset = asset_info.get('total_asset', cash + market_value)
+                    daily_pnl = asset_info.get('daily_pnl', 0)
+
+                    return {
+                        'total_asset': float(total_asset),
+                        'cash': float(cash),
+                        'market_value': float(market_value),
+                        'daily_pnl': float(daily_pnl)
+                    }
+
+            # 如果无法获取详细信息，使用总资产估算
+            account_value = self._get_account_value()
+            return {
+                'total_asset': account_value,
+                'cash': account_value * 0.3,  # 默认30%现金
+                'market_value': account_value * 0.7,  # 默认70%持仓
+                'daily_pnl': 0
+            }
+
+        except Exception as e:
+            # 异常情况下使用总资产估算
+            self.logger.warning(f"获取详细账户信息失败，使用估算值: {e}")
+            account_value = self._get_account_value()
+            return {
+                'total_asset': account_value,
+                'cash': account_value * 0.3,
+                'market_value': account_value * 0.7,
+                'daily_pnl': 0
+            }
+
     def _get_account_value(self) -> float:
         """获取账户总价值"""
         try:
@@ -1504,8 +1757,13 @@ class StrategyEngine:
             clear_orders = []
             for symbol, position in self.current_positions.items():
                 if position['volume'] > 0:
-                    current_price = self._get_current_price(symbol)
-                    if current_price:
+                    try:
+                        current_price = self._get_current_price(symbol)
+                        # 【修复】统一价格检查逻辑，确保价格有效性
+                        if not current_price or current_price <= 0:
+                            self.logger.error(f"无法获取 {symbol} 的有效价格，跳过清仓指令")
+                            continue
+
                         adjusted_price = self._apply_slippage(symbol, current_price, 'sell')
                         order = {
                             'symbol': symbol,
@@ -1516,6 +1774,9 @@ class StrategyEngine:
                             'reason': '清空持仓'
                         }
                         clear_orders.append(order)
+                    except Exception as price_error:
+                        self.logger.error(f"获取 {symbol} 价格失败，跳过清仓指令: {price_error}")
+                        continue
             
             if clear_orders:
                 # 统一获取账户ID并规范为字符串
@@ -1531,10 +1792,18 @@ class StrategyEngine:
                         # 确保使用限价委托
                         order_price = order.get('price', 0)
                         if not order_price or order_price <= 0:
-                            order_price = self._get_current_price(order['symbol'])
-                            if order_price:
+                            try:
+                                order_price = self._get_current_price(order['symbol'])
+                                # 【修复】统一价格检查逻辑，确保价格有效性
+                                if not order_price or order_price <= 0:
+                                    self.logger.error(f"无法获取 {order['symbol']} 的有效价格，跳过该订单")
+                                    continue
+
                                 order_price = self._apply_slippage(order['symbol'], order_price, 'sell')
-                        
+                            except Exception as price_error:
+                                self.logger.error(f"获取 {order['symbol']} 价格失败，跳过该订单: {price_error}")
+                                continue
+
                         order_id = self.trader_api.sync_order(
                             account_id=account_id,
                             code=self._to_broker_symbol(order['symbol']),
@@ -1758,12 +2027,7 @@ class StrategyEngine:
             except Exception:
                 pass
 
-        account_info = {
-            'total_asset': account_value,
-            'cash': account_value * 0.3,
-            'market_value': account_value * 0.7,
-            'daily_pnl': 0
-        }
+        account_info = self._get_detailed_account_info()
 
         report = self.risk_manager.generate_risk_report(self.current_positions, account_info)
         if warn_msg:
