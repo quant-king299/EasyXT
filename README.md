@@ -160,12 +160,18 @@ pip install -e ./easyxt_backtest
 ```
 
 **使用示例**：
+
 ```python
 from easyxt_backtest import BacktestEngine, DataManager
 from easyxt_backtest.strategies import SmallCapStrategy
 
-# 创建数据管理器和引擎
-data_manager = DataManager(duckdb_path='your_data.ddb')
+# 创建数据管理器（无需参数，自动使用QMT/Tushare）
+data_manager = DataManager()
+
+# 如果有DuckDB数据库，可以指定路径（可选，提速10倍）
+# data_manager = DataManager(duckdb_path='D:/StockData/stock_data.ddb')
+
+# 创建回测引擎
 engine = BacktestEngine(initial_cash=1000000, data_manager=data_manager)
 
 # 运行回测
@@ -173,6 +179,10 @@ strategy = SmallCapStrategy(select_num=5)
 result = engine.run_backtest(strategy, '20230101', '20231231')
 result.print_summary()
 ```
+
+**💡 提示**：
+- ✅ **不需要DuckDB** - 无参数即可使用QMT/Tushare数据
+- 🚀 **DuckDB是可选的** - 如果有，速度提升10倍（查看[快速开始指南](QUICK_START.md)）
 
 **📖 详细文档**：[easyxt_backtest/README.md](easyxt_backtest/README.md)
 

@@ -19,15 +19,19 @@ class DataManagerConfig:
 
     # 默认配置
     DEFAULTS = {
-        'duckdb_path': 'D:/StockData/stock_data.ddb',
+        # DuckDB路径（None = 自动检测或不用DuckDB）
+        'duckdb_path': None,  # 改为None，避免硬编码路径
         'tushare_token': None,
         'qmt_path': None,
-        'preferred_sources': ['duckdb', 'qmt', 'tushare'],
+        # 数据源优先级（改为智能模式，优先使用本地可用数据源）
+        'preferred_sources': None,  # None = 自动检测可用数据源
         'cache_enabled': True,
         'cache_size': 1000,
         'log_level': 'INFO',
         'timeout': 30,
         'max_retries': 3,
+        # 新增：新手模式（默认False，优先QMT/Tushare）
+        'beginner_mode': False,
     }
 
     def __init__(self,
@@ -61,6 +65,9 @@ class DataManagerConfig:
         # DuckDB路径
         if 'DUCKDB_PATH' in os.environ:
             self.config['duckdb_path'] = os.environ['DUCKDB_PATH']
+        # 如果没有设置DUCKDB_PATH，尝试检测常见路径
+        elif self.config.get('duckdb_path') is None:
+            self.config['duckdb_path'] = self._detect_duckdb_path()
 
         # QMT路径
         if 'QMT_PATH' in os.environ:
@@ -70,135 +77,103 @@ class DataManagerConfig:
         if 'LOG_LEVEL' in os.environ:
             self.config['log_level'] = os.environ['LOG_LEVEL']
 
-    def _load_dotenv(self):
-        """手动加载 .env 文件到环境变量"""
-        # 查找 .env 文件
+        # 新手模式（环境变量）
+        if 'BEGINNER_MODE' in os.environ:
+            self.config['beginner_mode'] = os.environ['BEGINNER_MODE'].lower() in ('true', '1', 'yes')
+
+    def _detect_duckdb_path(self) -> Optional[str]:
+        """
+        自动检测DuckDB数据库文件
+
+        Returns:
+            Optional[str]: 找到的DuckDB路径，未找到返回None
+        """
+        # 常见路径列表（按优先级）
         possible_paths = [
-            '.env',
-            '../.env',
-            '../../.env',
-            'easyxt_backtest/.env',
-            '101因子/101因子分析平台/.env',
+            'D:/StockData/stock_data.ddb',  # Windows D盘
+            'C:/StockData/stock_data.ddb',  # Windows C盘
+            'E:/StockData/stock_data.ddb',  # Windows E盘
+            './data/stock_data.ddb',        # 项目相对路径
+            '~/StockData/stock_data.ddb',   # 用户主目录
+            '../stock_data.ddb',            # 项目上级目录
         ]
 
-        env_file = None
         for path in possible_paths:
-            if os.path.exists(path):
-                env_file = path
-                break
+            # 展开 ~
+            expanded_path = os.path.expanduser(path)
+            # 转为绝对路径
+            abs_path = os.path.abspath(expanded_path)
 
-        if not env_file:
-            return  # 没有 .env 文件
+            if os.path.exists(abs_path):
+                print(f"[Config] 自动检测到DuckDB数据库: {abs_path}")
+                return abs_path
 
-        # 读取 .env 文件并设置环境变量
-        try:
-            with open(env_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    # 跳过空行和注释
-                    if not line or line.startswith('#'):
-                        continue
+        # 未找到DuckDB文件
+        return None
 
-                    # 解析 KEY=VALUE 格式
-                    if '=' in line:
-                        key, value = line.split('=', 1)
-                        key = key.strip()
-                        value = value.strip()
-
-                        # 移除引号（如果有）
-                        if value.startswith('"') and value.endswith('"'):
-                            value = value[1:-1]
-                        elif value.startswith("'") and value.endswith("'"):
-                            value = value[1:-1]
-
-                        # 设置到环境变量（如果还没设置）
-                        if key not in os.environ:
-                            os.environ[key] = value
-        except Exception as e:
-            # 静默失败，避免影响启动
-            pass
-
-    def _load_from_file(self, config_file: str):
+    def _detect_available_sources(self) -> List[str]:
         """
-        从配置文件加载配置
-
-        Args:
-            config_file: 配置文件路径（支持.json格式）
-        """
-        config_path = Path(config_file)
-
-        if not config_path.exists():
-            return
-
-        try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                if config_path.suffix == '.json':
-                    file_config = json.load(f)
-                    self.config.update(file_config)
-                # 可以扩展支持其他格式（.yaml, .ini等）
-        except Exception as e:
-            print(f"[Config] 加载配置文件失败: {e}")
-
-    def get(self, key: str, default=None):
-        """
-        获取配置值
-
-        Args:
-            key: 配置键
-            default: 默认值
+        检测可用的数据源
 
         Returns:
-            配置值
+            List[str]: 可用数据源列表（按优先级排序）
         """
-        return self.config.get(key, default)
+        available = []
 
-    def set(self, key: str, value):
-        """
-        设置配置值
+        # 1. 检测DuckDB（如果文件存在）
+        if self.config.get('duckdb_path') and os.path.exists(self.config['duckdb_path']):
+            available.append('duckdb')
 
-        Args:
-            key: 配置键
-            value: 配置值
-        """
-        self.config[key] = value
+        # 2. 检测QMT（always available on Windows with QMT installed）
+        # QMT总是可用的（如果用户安装了QMT/miniQMT）
+        if os.name == 'nt':  # Windows系统
+            available.append('qmt')
 
-    def get_source_config(self, source_name: str) -> Dict:
-        """
-        获取特定数据源的配置
+        # 3. 检测Tushare（如果有token）
+        if self.config.get('tushare_token'):
+            available.append('tushare')
 
-        Args:
-            source_name: 数据源名称 ('duckdb', 'tushare', 'qmt')
-
-        Returns:
-            Dict: 数据源配置
-        """
-        source_configs = {
-            'duckdb': {
-                'path': self.get('duckdb_path'),
-                'timeout': self.get('timeout'),
-                'max_retries': self.get('max_retries'),
-            },
-            'tushare': {
-                'token': self.get('tushare_token'),
-                'timeout': self.get('timeout'),
-                'max_retries': self.get('max_retries'),
-            },
-            'qmt': {
-                'path': self.get('qmt_path'),
-                'timeout': self.get('timeout'),
-            }
-        }
-
-        return source_configs.get(source_name, {})
+        return available
 
     def get_preferred_sources(self) -> List[str]:
         """
         获取优先数据源列表
 
+        如果没有明确指定preferred_sources，自动检测可用的数据源
+
         Returns:
             List[str]: 数据源名称列表
         """
-        return self.get('preferred_sources', ['duckdb', 'qmt', 'tushare'])
+        # 如果已经明确指定了优先级，直接返回
+        if self.config.get('preferred_sources'):
+            return self.config['preferred_sources']
+
+        # 否则，自动检测可用数据源
+        available = self._detect_available_sources()
+
+        if not available:
+            # 如果什么都检测不到，使用默认降级方案
+            print("[Config] 未检测到任何数据源，使用默认降级方案: QMT -> Tushare")
+            return ['qmt', 'tushare']
+
+        # 根据是否为新手模式调整优先级
+        if self.config.get('beginner_mode'):
+            # 新手模式：优先使用最容易获取的数据源
+            # QMT（本地） > Tushare（在线，需token） > DuckDB（需要下载）
+            preferred = []
+            if 'qmt' in available:
+                preferred.append('qmt')
+            if 'tushare' in available:
+                preferred.append('tushare')
+            if 'duckdb' in available:
+                preferred.append('duckdb')
+        else:
+            # 进阶模式：优先使用最快的数据源
+            # DuckDB（本地最快） > QMT（本地） > Tushare（在线）
+            preferred = available
+
+        print(f"[Config] 自动检测到的可用数据源: {preferred}")
+        return preferred
 
     def is_cache_enabled(self) -> bool:
         """
