@@ -1,11 +1,15 @@
 # -*- coding: utf-8 -*-
 """
-数据管理器 - 统一多数据源接口
+数据管理器 - 向后兼容层
 
-支持的数据源：
-1. DuckDB本地数据库（优先，最快）
-2. QMT历史数据
-3. Tushare在线API（备用）
+⚠️ 已迁移到 core.data_manager.HybridDataManager
+
+本文件为向后兼容层，现有代码无需修改即可使用新的架构。
+建议新项目直接使用 core.data_manager.HybridDataManager
+
+迁移计划：
+- v1.5.0: 引入兼容层（当前版本）
+- v2.0.0: 移除兼容层
 """
 import os
 import sys
@@ -13,26 +17,20 @@ import pandas as pd
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Union
 import warnings
-warnings.filterwarnings('ignore')
 
-# 尝试导入各种数据源
-try:
-    import duckdb
-    DUCKDB_AVAILABLE = True
-except ImportError:
-    DUCKDB_AVAILABLE = False
+# 添加项目路径以导入core模块
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
-try:
-    import tushare as ts
-    TUSHARE_AVAILABLE = True
-except ImportError:
-    TUSHARE_AVAILABLE = False
-
-try:
-    from xtquant import xtdata
-    QMT_AVAILABLE = True
-except ImportError:
-    QMT_AVAILABLE = False
+from core.data_manager import (
+    HybridDataManager,
+    DataManagerConfig,
+    get_global_config,
+    normalize_symbol,
+    normalize_symbols,
+    validate_date,
+)
 
 
 def convert_date_format(dt_str: str,
@@ -58,14 +56,16 @@ def convert_date_format(dt_str: str,
 
 class DataManager:
     """
-    统一数据管理器
+    统一数据管理器（向后兼容层）
 
-    功能：
-    - 自动选择最优数据源
-    - 价格数据查询（OHLCV）
-    - 基本面数据查询（市值、财务指标）
-    - 交易日历查询
-    - 最近交易日价格查找（解决数据缺失问题）
+    ⚠️ 已迁移到 core.data_manager.HybridDataManager
+
+    本类为向后兼容层，内部使用 HybridDataManager 实现。
+    现有代码无需修改即可继续使用。
+
+    建议新代码直接使用：
+        from core.data_manager import HybridDataManager
+        manager = HybridDataManager()
     """
 
     def __init__(self,
@@ -75,114 +75,45 @@ class DataManager:
         初始化数据管理器
 
         Args:
-            duckdb_path: DuckDB数据库路径
-            tushare_token: Tushare API Token
+            duckdb_path: DuckDB数据库路径（已弃用，请使用环境变量）
+            tushare_token: Tushare API Token（已弃用，请使用环境变量）
         """
-        # 读取.env文件
-        self._load_env_file()
+        # 发出弃用警告
+        warnings.warn(
+            "easyxt_backtest.data_manager.DataManager 已迁移到 "
+            "core.data_manager.HybridDataManager。建议更新您的代码。"
+            "本兼容层将在 v2.0.0 移除。",
+            DeprecationWarning,
+            stacklevel=2
+        )
 
-        self.duckdb_path = duckdb_path or os.getenv('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
-        self.tushare_token = tushare_token or os.getenv('TUSHARE_TOKEN')
+        # 创建配置
+        config = DataManagerConfig()
 
-        # 数据源连接
-        self.duckdb_con = None
-        self.tushare_pro = None
-        self.qmt_connected = False
+        # 如果提供了参数，设置到配置中
+        if duckdb_path:
+            config.set('duckdb_path', duckdb_path)
+        if tushare_token:
+            config.set('tushare_token', tushare_token)
 
-        # 缓存
-        self.price_cache = {}  # {(date, symbol): price}
-        self.fundamental_cache = {}  # {(date, symbol): data} - 单个股票缓存
-        self.fundamentals_cache = {}  # {date: DataFrame} - 批量缓存（全市场）
+        # 创建HybridDataManager实例
+        self._manager = HybridDataManager(config)
+
+        # 保留原有的属性以保持兼容性
+        self.duckdb_path = config.get('duckdb_path')
+        self.tushare_token = config.get('tushare_token')
+        self.price_cache = {}
+        self.fundamental_cache = {}
         self.trading_days_cache = None
 
-        # 市值缓存（用于QMT失败时的fallback）
-        self.market_value_cache = {}  # {symbol: (date, market_value)}
-
-        # 初始化数据源
-        self._init_duckdb()
-        self._init_tushare()
-        self._init_qmt()
-
-        print(f"[DataManager] DuckDB: {'[OK]' if self.duckdb_con else '[FAIL]'}")
-        print(f"[DataManager] Tushare: {'[OK]' if self.tushare_pro else '[FAIL]'}")
-        print(f"[DataManager] QMT: {'[OK]' if self.qmt_connected else '[FAIL]'}")
-
-    def _load_env_file(self):
-        """加载.env文件"""
-        env_files = ['.env', '../.env', '../.env']
-
-        for env_file in env_files:
-            env_path = os.path.join(os.path.dirname(__file__), env_file)
-            if not os.path.exists(env_path):
-                # 尝试项目根目录
-                env_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), env_file)
-
-            if os.path.exists(env_path):
-                try:
-                    with open(env_path, 'r', encoding='utf-8') as f:
-                        for line in f:
-                            if line.strip() and not line.startswith('#') and '=' in line:
-                                key, value = line.split('=', 1)
-                                if key.strip() not in os.environ:
-                                    os.environ[key.strip()] = value.strip()
-                    break
-                except Exception as e:
-                    pass
-
-    def _init_duckdb(self):
-        """初始化DuckDB连接"""
-        if not DUCKDB_AVAILABLE:
-            return
-
-        try:
-            self.duckdb_con = duckdb.connect(self.duckdb_path, read_only=True)
-            # 测试连接
-            test_query = "SELECT COUNT(*) FROM stock_daily LIMIT 1"
-            self.duckdb_con.execute(test_query)
-        except Exception as e:
-            print(f"[DataManager] DuckDB初始化失败: {e}")
-            self.duckdb_con = None
-
-    def _init_tushare(self):
-        """初始化Tushare连接"""
-        if not TUSHARE_AVAILABLE or not self.tushare_token:
-            return
-
-        try:
-            ts.set_token(self.tushare_token)
-            self.tushare_pro = ts.pro_api()
-            # 测试连接
-            test_df = self.tushare_pro.daily(ts_code='000001.SZ',
-                                            trade_date='20230101',
-                                            fields='ts_code,trade_date,close')
-        except Exception as e:
-            print(f"[DataManager] Tushare初始化失败: {e}")
-            self.tushare_pro = None
-
-    def _init_qmt(self):
-        """初始化QMT连接"""
-        if not QMT_AVAILABLE:
-            return
-
-        try:
-            # 测试连接
-            test_data = xtdata.get_market_data_ex(['000001.SZ'],
-                                                  period='1d',
-                                                  start_time='20230101',
-                                                  end_time='20230102')
-            self.qmt_connected = True
-        except Exception as e:
-            print(f"[DataManager] QMT初始化失败: {e}")
-            self.qmt_connected = False
-
-    # ==================== 价格数据接口 ====================
+        print("[DataManager] 使用新的 core.data_manager.HybridDataManager")
 
     def get_price(self,
                   codes: Union[str, List[str]],
                   start_date: str,
                   end_date: str,
-                  fields: List[str] = ['open', 'high', 'low', 'close', 'volume'],
-                  fq: str = 'qfq') -> pd.DataFrame:
+                  fields: List[str] = None,
+                  fq: str = None) -> pd.DataFrame:
         """
         获取价格数据
 
@@ -190,651 +121,58 @@ class DataManager:
             codes: 股票代码或代码列表
             start_date: 开始日期 (YYYYMMDD)
             end_date: 结束日期 (YYYYMMDD)
-            fields: 字段列表
-            fq: 复权类型 ('qfq'-前复权, 'hfq'-后复权, 'None'-不复权)
+            fields: 需要的字段列表（已弃用，返回所有字段）
+            fq: 复权类型（已弃用，新架构默认不复权）
+                - 'qfq': 前复权
+                - 'hfq': 后复权
+                - 'None' or None: 不复权
 
         Returns:
-            DataFrame with MultiIndex [date, symbol], columns=fields
+            DataFrame: 价格数据
         """
-        if isinstance(codes, str):
-            codes = [codes]
-
-        # 优先从DuckDB获取
-        if self.duckdb_con:
-            df = self._get_price_from_duckdb(codes, start_date, end_date, fields)
-            if not df.empty:
-                return df
-
-        # 其次从QMT获取
-        if self.qmt_connected:
-            df = self._get_price_from_qmt(codes, start_date, end_date, fields)
-            if not df.empty:
-                return df
-
-        # 最后从Tushare获取
-        if self.tushare_pro:
-            df = self._get_price_from_tushare(codes, start_date, end_date, fields)
-            if not df.empty:
-                return df
-
-        return pd.DataFrame()
-
-    def _get_price_from_duckdb(self,
-                                codes: List[str],
-                                start_date: str,
-                                end_date: str,
-                                fields: List[str]) -> pd.DataFrame:
-        """从DuckDB获取价格数据"""
-        try:
-            # 转换日期格式
-            start_formatted = convert_date_format(start_date)
-            end_formatted = convert_date_format(end_date)
-
-            # 构建查询
-            codes_str = "', '".join(codes)
-            fields_str = ', '.join(fields)
-
-            query = f"""
-                SELECT
-                    stock_code as symbol,
-                    date,
-                    {fields_str}
-                FROM stock_daily
-                WHERE stock_code IN ('{codes_str}')
-                  AND date >= '{start_formatted}'
-                  AND date <= '{end_formatted}'
-                  AND period = '1d'
-                  AND symbol_type = 'stock'
-                ORDER BY date, stock_code
-            """
-
-            df = self.duckdb_con.execute(query).df()
-
-            if df.empty:
-                return pd.DataFrame()
-
-            # 设置MultiIndex
-            df.set_index(['date', 'symbol'], inplace=True)
-
-            # 缓存价格数据
-            for idx, row in df.iterrows():
-                date_str = idx[0].strftime('%Y%m%d') if isinstance(idx[0], pd.Timestamp) else str(idx[0])
-                symbol = idx[1]
-                if 'close' in fields:
-                    self.price_cache[(date_str, symbol)] = row['close']
-
-            return df
-
-        except Exception as e:
-            print(f"[DataManager] DuckDB查询失败: {e}")
-            return pd.DataFrame()
-
-    def _get_price_from_qmt(self,
-                            codes: List[str],
-                            start_date: str,
-                            end_date: str,
-                            fields: List[str]) -> pd.DataFrame:
-        """从QMT获取价格数据"""
-        try:
-            data = xtdata.get_market_data_ex(
-                stock_list=codes,
-                period='1d',
-                start_time=start_date,
-                end_time=end_date
+        # 如果提供了fq参数且不是None，发出警告
+        if fq is not None and fq != 'None':
+            warnings.warn(
+                f"get_price()的fq参数('{fq}')在新架构中被忽略。"
+                "新数据源默认返回不复权数据。如需复权，请使用数据源的复权功能。",
+                DeprecationWarning,
+                stacklevel=2
             )
 
-            if not data or len(data) == 0:
-                return pd.DataFrame()
+        # 调用新的HybridDataManager
+        df = self._manager.get_price(codes, start_date, end_date)
 
-            # 转换为DataFrame
-            dfs = []
-            for symbol in codes:
-                if symbol in data and data[symbol] is not None:
-                    df = data[symbol].reset_index()
-                    df['symbol'] = symbol
-                    dfs.append(df)
-
-            if not dfs:
-                return pd.DataFrame()
-
-            result = pd.concat(dfs, ignore_index=True)
-            result.rename(columns={'time': 'date'}, inplace=True)
-
-            # 设置MultiIndex
-            result.set_index(['date', 'symbol'], inplace=True)
-
-            return result
-
-        except Exception as e:
-            print(f"[DataManager] QMT查询失败: {e}")
+        if df is None or df.empty:
             return pd.DataFrame()
 
-    def _get_price_from_tushare(self,
-                                codes: List[str],
-                                start_date: str,
-                                end_date: str,
-                                fields: List[str]) -> pd.DataFrame:
-        """从Tushare获取价格数据"""
-        try:
-            # 转换代码格式 (000001.SZ -> 000001.SZ)
-            all_data = []
+        # 设置MultiIndex以保持与旧版本的兼容性
+        if 'date' in df.columns and 'symbol' in df.columns:
+            df.set_index(['date', 'symbol'], inplace=True)
 
-            for code in codes:
-                df = self.tushare_pro.daily(
-                    ts_code=code,
-                    start_date=start_date,
-                    end_date=end_date
-                )
-
-                if df is not None and not df.empty:
-                    df['symbol'] = code
-                    df.rename(columns={'trade_date': 'date'}, inplace=True)
-                    all_data.append(df)
-
-            if not all_data:
-                return pd.DataFrame()
-
-            result = pd.concat(all_data, ignore_index=True)
-            result.set_index(['date', 'symbol'], inplace=True)
-
-            return result
-
-        except Exception as e:
-            print(f"[DataManager] Tushare查询失败: {e}")
-            return pd.DataFrame()
-
-    # ==================== 基本面数据接口 ====================
+        return df
 
     def get_fundamentals(self,
-                         codes: List[str],
+                         codes: Union[str, List[str]],
                          date: str,
                          fields: List[str] = ['circ_mv']) -> pd.DataFrame:
         """
         获取基本面数据
 
         Args:
-            codes: 股票代码列表
+            codes: 股票代码或代码列表
             date: 查询日期 (YYYYMMDD)
-            fields: 字段列表 (支持: circ_mv-流通市值, total_mv-总市值)
+            fields: 需要的字段列表
 
         Returns:
-            DataFrame with index=symbol, columns=fields
-
-        优先级（优化后的数据源策略）：
-        1. DuckDB（本地，最快）⭐ 推荐优先使用，需先通过GUI下载完整数据
-        2. Tushare（在线，备用）⚡ 自动fallback，实时获取历史市值
-        3. QMT（仅供参考）⚠️ 使用当前股本×历史价格，可能不准确
+            DataFrame: 基本面数据
         """
-        # 优先级1: 从DuckDB获取（本地市值表，速度最快）
-        if self.duckdb_con and ('circ_mv' in fields or 'total_mv' in fields):
-            df = self._get_fundamentals_from_duckdb(codes, date, fields)
-            if not df.empty:
-                return df
+        # 调用新的HybridDataManager
+        df = self._manager.get_fundamentals(codes, date, fields)
 
-        # 优先级2: 从Tushare获取（在线API，真实的市值数据）
-        if self.tushare_pro and ('circ_mv' in fields or 'total_mv' in fields):
-            df = self._get_fundamentals_from_tushare(codes, date, fields)
-            if not df.empty:
-                return df
-
-        # 优先级3: 从QMT获取（不准确！使用当前股本×历史价格）
-        # 注意：QMT的股本数据是时点数据，不是历史数据，计算结果仅供参考
-        if self.qmt_connected and ('circ_mv' in fields or 'total_mv' in fields):
-            print("[DataManager] 警告: 使用QMT计算市值可能不准确（股本数据非历史数据）")
-            df = self._get_fundamentals_from_qmt(codes, date, fields)
-            if not df.empty:
-                return df
-
-        return pd.DataFrame()
-
-    def _get_fundamentals_from_tushare(self,
-                                       codes: List[str],
-                                       date: str,
-                                       fields: List[str]) -> pd.DataFrame:
-        """
-        从Tushare获取基本面数据（超高速批量查询版）⚡
-
-        优化：
-        1. 批量查询全市场数据（1次API调用 vs 5000次）
-        2. 缓存全市场数据，支持任意股票池查询
-        3. 添加延迟避免限流
-        """
-        try:
-            import time
-
-            # 检查缓存（缓存全市场数据，不筛选）
-            cache_key = ('tushare_fundamentals_all', date)
-            if cache_key in self.fundamentals_cache:
-                cached_df = self.fundamentals_cache[cache_key]
-                # 从缓存中筛选需要的股票
-                result = cached_df[cached_df['ts_code'].isin(codes)].copy()
-                if not result.empty:
-                    result.set_index('ts_code', inplace=True)
-                    return result
-
-            # ✨ 批量查询全市场数据（不指定ts_code，返回所有股票）
-            df = self.tushare_pro.daily_basic(
-                trade_date=date,
-                fields='ts_code,trade_date,' + ','.join(fields)
-            )
-
-            if df is None or df.empty:
-                # 如果指定日期没有数据，尝试向前查找（最多3天）
-                for i in range(1, 4):
-                    try:
-                        from datetime import datetime, timedelta
-                        date_obj = datetime.strptime(date, '%Y%m%d')
-                        prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-                        df = self.tushare_pro.daily_basic(
-                            trade_date=prev_date,
-                            fields='ts_code,trade_date,' + ','.join(fields)
-                        )
-
-                        if df is not None and not df.empty:
-                            print(f"[DataManager] {date}使用Tushare{prev_date}数据（批量）")
-                            break
-                    except:
-                        continue
-
-            if df is None or df.empty:
-                print(f"[DataManager] Tushare批量查询{date}失败：无数据")
-                return pd.DataFrame()
-
-            # 缓存全市场数据（不筛选，方便后续复用）
-            self.fundamentals_cache[cache_key] = df.copy()
-
-            # 筛选需要的股票
-            df_filtered = df[df['ts_code'].isin(codes)].copy()
-            df_filtered.set_index('ts_code', inplace=True)
-
-            # 添加延迟避免限流（每次查询间隔0.3秒）
-            time.sleep(0.3)
-
-            return df_filtered
-
-        except Exception as e:
-            print(f"[DataManager] Tushare批量查询{date}失败: {e}")
+        if df is None or df.empty:
             return pd.DataFrame()
 
-        except Exception as e:
-            print(f"[DataManager] Tushare基本面查询失败: {e}")
-            return pd.DataFrame()
-
-    def _get_tushare_with_fallback(self,
-                                   code: str,
-                                   date: str,
-                                   fields: List[str],
-                                   max_days_back: int = 10) -> pd.DataFrame:
-        """
-        从Tushare获取数据，带日期fallback机制
-
-        向前查找最近的数据（最多max_days_back天）
-        """
-        from datetime import datetime, timedelta
-
-        date_obj = datetime.strptime(date, '%Y%m%d')
-
-        for i in range(max_days_back):
-            prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (date_obj - timedelta(days=i)).weekday()
-            if day_of_week >= 5:  # 周六、周日
-                continue
-
-            try:
-                df = self.tushare_pro.daily_basic(
-                    ts_code=code,
-                    trade_date=prev_date,
-                    fields=','.join(['ts_code', 'trade_date'] + fields)
-                )
-
-                if df is not None and not df.empty:
-                    print(f"[DataManager] {code} {date}使用Tushare{prev_date}数据")
-                    return df
-
-            except Exception:
-                continue
-
-        return pd.DataFrame()
-
-    def _get_fundamentals_from_qmt(self,
-                                   codes: List[str],
-                                   date: str,
-                                   fields: List[str]) -> pd.DataFrame:
-        """
-        从QMT获取基本面数据（主要是市值）
-
-        计算方法：
-        - circ_mv (流通市值) = FloatVolume × 收盘价
-        - total_mv (总市值) = TotalVolume × 收盘价
-
-        增强功能：
-        - 自动回退查找（向前查找最近可用日期）
-        - 使用缓存的历史市值数据作为fallback
-        - 当FloatVolume为0时返回空，触发fallback到Tushare/DuckDB
-        """
-        if not QMT_AVAILABLE:
-            return pd.DataFrame()
-
-        try:
-            result_data = []
-
-            for code in codes:
-                # 1. 获取股票基本信息（股本数据）
-                info = xtdata.get_instrument_detail(code)
-
-                # 检查是否有有效的股本数据（QMT mini版本FloatVolume可能为0）
-                if not info or 'FloatVolume' not in info or info.get('FloatVolume', 0) == 0:
-                    # QMT mini版本不支持股本数据，跳过
-                    continue
-
-                # 2. 尝试获取收盘价（带日期回退）
-                close_price = self._get_close_price_with_fallback(code, date)
-
-                if close_price is None:
-                    # QMT无法获取价格，跳过该股票（不再使用缓存）
-                    print(f"[DataManager] {code} QMT无法获取 {date} 的价格，跳过")
-                    continue
-
-                # 3. 计算市值
-                row_data = {'symbol': code}
-
-                # 流通股本（股）转成（万股）
-                float_volume = info['FloatVolume'] / 10000  # 股 -> 万股
-
-                # 总股本（股）转成（万股）
-                total_volume = info['TotalVolume'] / 10000  # 股 -> 万股
-
-                if 'circ_mv' in fields:
-                    # 流通市值（万元）= 流通股本（万股）× 收盘价（元）
-                    circ_mv = float_volume * close_price
-                    row_data['circ_mv'] = circ_mv
-
-                    # 注意：不再缓存市值数据（每次都重新计算）
-                    # 原因：QMT股本数据是时点数据，缓存会导致使用错误的市值
-
-                if 'total_mv' in fields:
-                    # 总市值（万元）= 总股本（万股）× 收盘价（元）
-                    row_data['total_mv'] = total_volume * close_price
-
-                result_data.append(row_data)
-
-            if not result_data:
-                return pd.DataFrame()
-
-            result = pd.DataFrame(result_data)
-            result.set_index('symbol', inplace=True)
-
-            # 只返回请求的字段
-            available_fields = [f for f in fields if f in result.columns]
-            return result[available_fields]
-
-        except Exception as e:
-            print(f"[DataManager] QMT基本面查询失败: {e}")
-            return pd.DataFrame()
-
-    def _get_close_price_with_fallback(self, code: str, date: str, max_days_back: int = 10) -> Optional[float]:
-        """
-        获取收盘价（完整的多层fallback机制）
-
-        优先级（按速度和可靠性排序）：
-        1. DuckDB当天价格  ← 最快、最可靠！
-        2. QMT当天价格
-        3. Tushare当天价格
-        4. DuckDB向前查找（最多10天）
-        5. QMT向前查找（最多10天）
-
-        Args:
-            code: 股票代码
-            date: 日期 (YYYYMMDD)
-            max_days_back: 最多回退天数
-
-        Returns:
-            收盘价或None
-        """
-        # 1. 优先从DuckDB获取当天价格（最快、最可靠）
-        if self.duckdb_con:
-            price = self._get_single_price_from_duckdb(code, date)
-            if price is not None:
-                return price  # 静默成功，不打印日志
-
-        # 2. 尝试从QMT获取当天价格
-        try:
-            price_data = xtdata.get_market_data_ex(
-                stock_list=[code],
-                period='1d',
-                start_time=date,
-                end_time=date,
-                field_list=['close']
-            )
-
-            if price_data and code in price_data and price_data[code] is not None:
-                df = price_data[code]
-                if not df.empty:
-                    close_price = df['close'].values[0] if hasattr(df['close'], 'values') else df['close'].iloc[0]
-                    return close_price
-        except:
-            pass
-
-        # 3. 尝试从Tushare获取当天价格
-        if self.tushare_pro:
-            try:
-                df = self.tushare_pro.daily(
-                    ts_code=code,
-                    trade_date=date,
-                    fields='close'
-                )
-
-                if df is not None and not df.empty:
-                    price = df.iloc[0]['close']
-                    return price
-            except:
-                pass
-
-        # 4. 向前查找最近的交易日（优先DuckDB）
-        from datetime import datetime, timedelta
-        date_obj = datetime.strptime(date, '%Y%m%d')
-
-        for i in range(1, max_days_back + 1):
-            prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (date_obj - timedelta(days=i)).weekday()
-            if day_of_week >= 5:  # 周六、周日
-                continue
-
-            # 4a. 先尝试DuckDB（更快）
-            if self.duckdb_con:
-                price = self._get_single_price_from_duckdb(code, prev_date)
-                if price is not None:
-                    print(f"[DataManager] {code} {date}使用DuckDB{prev_date}价格: {price:.2f}")
-                    return price
-
-            # 4b. 再尝试QMT
-            try:
-                price_data = xtdata.get_market_data_ex(
-                    stock_list=[code],
-                    period='1d',
-                    start_time=prev_date,
-                    end_time=prev_date,
-                    field_list=['close']
-                )
-
-                if price_data and code in price_data and price_data[code] is not None:
-                    df = price_data[code]
-                    if not df.empty:
-                        close_price = df['close'].values[0] if hasattr(df['close'], 'values') else df['close'].iloc[0]
-                        print(f"[DataManager] {code} {date}使用QMT{prev_date}价格: {close_price:.2f}")
-                        return close_price
-            except:
-                continue
-
-        return None
-
-    def _get_single_price_from_duckdb(self, code: str, date: str) -> Optional[float]:
-        """
-        从DuckDB获取指定日期的价格
-
-        Args:
-            code: 股票代码
-            date: 日期 (YYYYMMDD)
-
-        Returns:
-            收盘价或None
-        """
-        try:
-            # 转换日期格式
-            from datetime import datetime
-            date_formatted = datetime.strptime(date, '%Y%m%d').strftime('%Y-%m-%d')
-
-            query = f"""
-                SELECT close
-                FROM stock_daily
-                WHERE stock_code = '{code}'
-                  AND date = '{date_formatted}'
-                  AND period = '1d'
-                LIMIT 1
-            """
-
-            df = self.duckdb_con.execute(query).df()
-
-            if not df.empty:
-                return df.iloc[0]['close']
-
-            return None
-
-        except Exception as e:
-            return None
-
-    def _get_fundamentals_from_duckdb(self,
-                                      codes: List[str],
-                                      date: str,
-                                      fields: List[str]) -> pd.DataFrame:
-        """
-        从DuckDB获取基本面数据
-
-        优先从stock_market_cap表读取市值数据
-        如果表不存在，则使用缓存数据
-        """
-        if not self.duckdb_con:
-            return pd.DataFrame()
-
-        try:
-            # 检查是否存在stock_market_cap表
-            try:
-                self.duckdb_con.execute("SELECT COUNT(*) FROM stock_market_cap LIMIT 1").fetchone()
-                table_exists = True
-            except:
-                table_exists = False
-
-            if table_exists:
-                # 从市值表读取数据
-                codes_str = "','".join(codes)
-                date_obj = pd.to_datetime(date, format='%Y%m%d')
-
-                # 查询市值表（使用最近的市值数据）
-                query = f"""
-                    SELECT DISTINCT
-                        stock_code as symbol,
-                        circ_mv,
-                        total_mv
-                    FROM stock_market_cap
-                    WHERE stock_code IN ('{codes_str}')
-                      AND date <= '{date_obj.strftime('%Y-%m-%d')}'
-                    ORDER BY date DESC
-                """
-                df = self.duckdb_con.execute(query).df()
-
-                if not df.empty:
-                    # 对每个股票只保留最近的一条记录
-                    df = df.drop_duplicates(subset=['symbol'], keep='first')
-                    df.set_index('symbol', inplace=True)
-
-                    # 只返回请求的字段
-                    available_fields = [f for f in fields if f in df.columns]
-                    if available_fields:
-                        print(f"[DataManager] 从DuckDB市值表获取 {len(df)} 只股票的市值数据")
-                        return df[available_fields]
-
-            # 表不存在或没有数据，使用缓存
-            result_data = []
-            for code in codes:
-                if code in self.market_value_cache:
-                    cached_date, cached_mv = self.market_value_cache[code]
-                    result_data.append({
-                        'symbol': code,
-                        'circ_mv': cached_mv
-                    })
-                    print(f"[DataManager] {code} 使用缓存市值 ({cached_date})")
-
-            if result_data:
-                df = pd.DataFrame(result_data)
-                df.set_index('symbol', inplace=True)
-                return df
-
-            return pd.DataFrame()
-
-        except Exception as e:
-            print(f"[DataManager] DuckDB基本面查询失败: {e}")
-            return pd.DataFrame()
-
-            if not result_data:
-                return pd.DataFrame()
-
-            result = pd.DataFrame(result_data)
-            result.set_index('symbol', inplace=True)
-
-            # 只返回请求的字段
-            available_fields = [f for f in fields if f in result.columns]
-            return result[available_fields]
-
-        except Exception as e:
-            print(f"[DataManager] DuckDB基本面查询失败: {e}")
-            return pd.DataFrame()
-
-    def _get_recent_price_from_duckdb(self, code: str, date: str, max_days_back: int = 30) -> Optional[float]:
-        """
-        从DuckDB获取最近的价格
-
-        Args:
-            code: 股票代码
-            date: 日期 (YYYYMMDD)
-            max_days_back: 最多回退天数
-
-        Returns:
-            最近的价格或None
-        """
-        try:
-            # 转换日期格式
-            from datetime import datetime, timedelta
-            date_obj = datetime.strptime(date, '%Y%m%d')
-            start_date = (date_obj - timedelta(days=max_days_back)).strftime('%Y-%m-%d')
-            end_date = date_obj.strftime('%Y-%m-%d')
-
-            query = f"""
-                SELECT close
-                FROM stock_daily
-                WHERE stock_code = '{code}'
-                  AND date >= '{start_date}'
-                  AND date <= '{end_date}'
-                  AND period = '1d'
-                ORDER BY date DESC
-                LIMIT 1
-            """
-
-            df = self.duckdb_con.execute(query).df()
-
-            if not df.empty:
-                return df.iloc[0]['close']
-
-            return None
-
-        except Exception as e:
-            return None
-
-    # ==================== 交易日历接口 ====================
+        return df
 
     def get_trading_dates(self,
                           start_date: str,
@@ -847,211 +185,63 @@ class DataManager:
             end_date: 结束日期 (YYYYMMDD)
 
         Returns:
-            交易日期列表 (YYYYMMDD格式)
+            List[str]: 交易日列表 (YYYYMMDD格式)
         """
-        if self.trading_days_cache is not None:
-            # 过滤日期范围
-            return [d for d in self.trading_days_cache
-                    if start_date <= d <= end_date]
+        # 调用新的HybridDataManager
+        dates = self._manager.get_trading_dates(start_date, end_date)
 
-        # 优先从DuckDB获取
-        if self.duckdb_con:
-            dates = self._get_trading_dates_from_duckdb(start_date, end_date)
-            if dates:
-                return dates
-
-        # 从Tushare获取
-        if self.tushare_pro:
-            dates = self._get_trading_dates_from_tushare(start_date, end_date)
-            if dates:
-                return dates
-
-        return []
-
-    def _get_trading_dates_from_duckdb(self,
-                                       start_date: str,
-                                       end_date: str) -> List[str]:
-        """从DuckDB获取交易日历"""
-        try:
-            start_formatted = convert_date_format(start_date)
-            end_formatted = convert_date_format(end_date)
-
-            query = f"""
-                SELECT DISTINCT date
-                FROM stock_daily
-                WHERE date >= '{start_formatted}'
-                  AND date <= '{end_formatted}'
-                  AND symbol_type = 'stock'
-                ORDER BY date
-            """
-
-            df = self.duckdb_con.execute(query).df()
-
-            if df.empty:
-                return []
-
-            # 转换为YYYYMMDD格式
-            dates = []
-            for date_val in df['date']:
-                if isinstance(date_val, str):
-                    dates.append(date_val.replace('-', ''))
-                elif isinstance(date_val, pd.Timestamp):
-                    dates.append(date_val.strftime('%Y%m%d'))
-
-            return dates
-
-        except Exception as e:
-            print(f"[DataManager] DuckDB交易日历查询失败: {e}")
-            return []
-
-    def _get_trading_dates_from_tushare(self,
-                                        start_date: str,
-                                        end_date: str) -> List[str]:
-        """从Tushare获取交易日历"""
-        try:
-            df = self.tushare_pro.trade_cal(
-                exchange='SSE',
-                start_date=start_date,
-                end_date=end_date,
-                is_open=1
-            )
-
-            if df is not None and not df.empty:
-                return df['cal_date'].tolist()
-
-            return []
-
-        except Exception as e:
-            print(f"[DataManager] Tushare交易日历查询失败: {e}")
-            return []
-
-    # ==================== 关键功能：最近交易日价格查找 ====================
+        return dates if dates else []
 
     def get_nearest_price(self,
                           code: str,
                           date: str,
-                          max_days_back: int = 10,
-                          max_days_forward: int = 2) -> Optional[float]:
+                          max_days_back: int = 30) -> Optional[float]:
         """
         获取最近交易日的价格
 
-        这是修复"调仓日数据缺失"问题的关键功能：
-        - 如果当天有数据，返回当天价格
-        - 如果当天无数据，向前查找最近的交易日
-        - 如果向前找不到，向后查找最近的交易日
-
         Args:
             code: 股票代码
-            date: 日期 (YYYYMMDD)
+            date: 查询日期 (YYYYMMDD)
             max_days_back: 最多向前查找天数
-            max_days_forward: 最多向后查找天数
 
         Returns:
-            价格或None
+            float: 收盘价，找不到返回None
         """
-        # 1. 先尝试获取当天价格
-        price = self._get_single_price(code, date)
-        if price is not None:
-            return price
+        # 标准化股票代码
+        code = normalize_symbol(code)
 
-        # 2. 向前查找
-        dt_obj = datetime.strptime(date, '%Y%m%d')
-
-        for i in range(1, max_days_back + 1):
-            prev_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末（简单判断）
-            day_of_week = (dt_obj - timedelta(days=i)).weekday()
-            if day_of_week >= 5:  # 周六、周日
-                continue
-
-            price = self._get_single_price(code, prev_date)
-            if price is not None:
-                print(f"[DataManager] {code} {date} 无数据，使用 {prev_date} 价格: {price:.2f}")
-                return price
-
-        # 3. 向后查找
-        for i in range(1, max_days_forward + 1):
-            next_date = (dt_obj + timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (dt_obj + timedelta(days=i)).weekday()
-            if day_of_week >= 5:
-                continue
-
-            price = self._get_single_price(code, next_date)
-            if price is not None:
-                print(f"[DataManager] {code} {date} 无数据，使用 {next_date} 价格: {price:.2f}")
-                return price
-
-        print(f"[DataManager] {code} {date} 附近无可用价格数据")
-        return None
-
-    def _get_single_price(self, code: str, date: str) -> Optional[float]:
-        """
-        获取单个股票在单个日期的价格
-
-        Args:
-            code: 股票代码
-            date: 日期 (YYYYMMDD)
-
-        Returns:
-            价格或None
-        """
-        # 1. 检查缓存
-        cache_key = (date, code)
-        if cache_key in self.price_cache:
-            return self.price_cache[cache_key]
-
-        # 2. 从DuckDB查询
-        if self.duckdb_con:
+        # 向前查找（使用静默模式，避免日志刷屏）
+        for i in range(max_days_back + 1):
             try:
-                date_formatted = convert_date_format(date)
-                query = f"""
-                    SELECT close
-                    FROM stock_daily
-                    WHERE stock_code = '{code}'
-                      AND date = '{date_formatted}'
-                      AND period = '1d'
-                """
+                date_obj = datetime.strptime(date, '%Y%m%d')
+                prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
 
-                df = self.duckdb_con.execute(query).df()
-
-                if not df.empty:
-                    price = df.iloc[0]['close']
-                    self.price_cache[cache_key] = price
-                    return price
-
-            except Exception as e:
-                print(f"[DataManager] 单股价格查询失败: {e}")
-
-        # 3. 从Tushare查询
-        if self.tushare_pro:
-            try:
-                df = self.tushare_pro.daily(
-                    ts_code=code,
-                    trade_date=date,
-                    fields='close'
-                )
+                # 获取价格数据（关闭详细日志）
+                df = self._manager.get_price(code, prev_date, prev_date, verbose=False)
 
                 if df is not None and not df.empty:
-                    price = df.iloc[0]['close']
-                    self.price_cache[cache_key] = price
-                    return price
+                    # 返回收盘价
+                    if 'close' in df.columns:
+                        return float(df['close'].iloc[-1])
+                    else:
+                        return None
 
             except Exception as e:
-                pass
+                continue
 
         return None
 
-    def check_if_delisted(self, code: str, date: str, check_days: int = 30) -> Optional[tuple]:
+    def check_if_delisted(self,
+                         code: str,
+                         date: str,
+                         check_days: int = 30) -> Optional[tuple]:
         """
-        检查股票是否退市（连续N天无价格数据）
+        检查股票是否退市（完整版逻辑）
 
         Args:
             code: 股票代码
-            date: 当前日期 (YYYYMMDD)
-            check_days: 检查天数，默认30天
+            date: 查询日期
+            check_days: 检查天数
 
         Returns:
             None (未退市) 或 (last_trade_date, last_price) (已退市)
@@ -1061,6 +251,10 @@ class DataManager:
         dt_obj = datetime.strptime(date, '%Y%m%d')
 
         # 向前查找最近的有价格的日期
+        last_trade_date = None
+        last_price = None
+        last_day_offset = None
+
         for i in range(1, check_days + 1):
             check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
 
@@ -1069,96 +263,79 @@ class DataManager:
             if day_of_week >= 5:  # 周六、周日
                 continue
 
-            price = self._get_single_price(code, check_date)
-            if price is not None:
-                # 找到了最近的价格，说明还没退市（或者刚退市）
-                # 检查从那天到今天是否有交易日有数据
-                for j in range(i):
-                    between_date = (dt_obj - timedelta(days=j)).strftime('%Y%m%d')
-                    day_of_week = (dt_obj - timedelta(days=j)).weekday()
-                    if day_of_week >= 5:
-                        continue
+            # 尝试获取价格（静默模式）
+            df = self._manager.get_price(code, check_date, check_date, verbose=False)
+            if df is not None and not df.empty and 'close' in df.columns:
+                last_trade_date = check_date
+                last_price = float(df['close'].iloc[-1])
+                last_day_offset = i
+                break
 
-                    between_price = self._get_single_price(code, between_date)
-                    if between_price is not None:
-                        # 中间有价格数据，说明未退市
-                        return None
+        # 如果在check_days内找不到任何价格，判定为退市
+        if last_trade_date is None:
+            return (None, None)
 
-                # 从找到的最近价格日期到现在都没有数据，判定为退市
-                return (check_date, price)
-
-        # 连续check_days都没找到价格，判定为退市
-        return (None, None)
-
-    def get_last_trade_date_and_price(self, code: str, date: str) -> Optional[tuple]:
-        """
-        获取股票的最后交易日和最后价格（用于退市处理）
-
-        Args:
-            code: 股票代码
-            date: 当前日期 (YYYYMMDD)
-
-        Returns:
-            None (有价格) 或 (last_date, last_price) (最后交易日和价格)
-        """
-        from datetime import datetime, timedelta
-
-        # 先尝试获取当前日期价格
-        current_price = self.get_nearest_price(code, date)
-        if current_price is not None:
-            return None  # 有价格，未退市
-
-        # 当前无价格，向前查找最后交易日
-        dt_obj = datetime.strptime(date, '%Y%m%d')
-
-        for i in range(1, 60):  # 最多向前查找60天
-            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (dt_obj - timedelta(days=i)).weekday()
+        # ✅ 关键检查：从最后交易日到今天之间是否有交易日有数据
+        # 如果中间有数据，说明只是停牌；如果全无数据，说明已退市
+        for j in range(last_day_offset):
+            between_date = (dt_obj - timedelta(days=j)).strftime('%Y%m%d')
+            day_of_week = (dt_obj - timedelta(days=j)).weekday()
             if day_of_week >= 5:
                 continue
 
-            price = self._get_single_price(code, check_date)
-            if price is not None:
-                return (check_date, price)
+            df = self._manager.get_price(code, between_date, between_date, verbose=False)
+            if df is not None and not df.empty and 'close' in df.columns:
+                # 中间有价格数据，说明未退市（可能只是当天停牌）
+                return None
 
-        # 无法找到任何历史价格
-        return (None, None)
+        # 从找到的最近价格日期到现在都没有数据，判定为退市
+        return (last_trade_date, last_price)
+
+    def get_last_trade_date_and_price(self,
+                                     code: str,
+                                     date: str) -> Optional[tuple]:
+        """
+        获取最后交易日和价格
+
+        Args:
+            code: 股票代码
+            date: 查询日期
+
+        Returns:
+            tuple: (最后交易日, 收盘价)
+        """
+        # 向前查找（使用静默模式）
+        for i in range(30):  # 最多向前30天
+            try:
+                date_obj = datetime.strptime(date, '%Y%m%d')
+                prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
+
+                # 关闭详细日志
+                df = self._manager.get_price(code, prev_date, prev_date, verbose=False)
+
+                if df is not None and not df.empty:
+                    price = float(df['close'].iloc[-1]) if 'close' in df.columns else None
+                    return (prev_date, price)
+
+            except Exception:
+                continue
+
+        return None
 
     def get_price_date(self, code: str, query_date: str) -> Optional[str]:
         """
-        获取价格数据的实际日期（用于验证价格是否过期）
+        获取价格对应的日期
 
         Args:
             code: 股票代码
-            query_date: 查询日期 (YYYYMMDD)
+            query_date: 查询日期
 
         Returns:
-            价格数据的实际日期，如果无法获取则返回None
+            str: 实际有数据的日期
         """
-        from datetime import datetime, timedelta
-
-        dt_obj = datetime.strptime(query_date, '%Y%m%d')
-
-        # 1. 先尝试获取当天的价格
-        price = self._get_single_price(code, query_date)
-        if price is not None:
-            return query_date
-
-        # 2. 向前查找最近的价格（最多7天）
-        for i in range(1, 8):  # 7天
-            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (dt_obj - timedelta(days=i)).weekday()
-            if day_of_week >= 5:
-                continue
-
-            price = self._get_single_price(code, check_date)
-            if price is not None:
-                return check_date
-
+        result = self.get_last_trade_date_and_price(code, query_date)
+        if result:
+            return result[0]
         return None
 
     def is_delisted(self, code: str, date: str, check_days: int = 30) -> tuple:
@@ -1176,56 +353,20 @@ class DataManager:
             - last_trade_date: 最后交易日（如果已退市）
             - last_price: 最后价格（如果已退市）
         """
-        from datetime import datetime, timedelta
+        result = self.check_if_delisted(code, date, check_days)
 
-        dt_obj = datetime.strptime(date, '%Y%m%d')
-
-        # 1. 先检查当天是否有价格
-        current_price = self._get_single_price(code, date)
-        if current_price is not None:
-            # 当天有价格，说明未退市
+        if result is None:
+            # 未退市（中间有价格数据）
             return (False, None, None)
+        else:
+            # 已退市（result 格式为 (last_trade_date, last_price)）
+            last_trade_date, last_price = result
+            return (True, last_trade_date, last_price)
 
-        # 2. 当天无价格，向前查找最后交易日
-        last_trade_date = None
-        last_price = None
-
-        for i in range(1, check_days + 1):
-            check_date = (dt_obj - timedelta(days=i)).strftime('%Y%m%d')
-
-            # 跳过周末
-            day_of_week = (dt_obj - timedelta(days=i)).weekday()
-            if day_of_week >= 5:  # 周六、周日
-                continue
-
-            price = self._get_single_price(code, check_date)
-            if price is not None:
-                last_trade_date = check_date
-                last_price = price
-                break
-
-        # 3. 判断是否退市
-        if last_trade_date is None:
-            # 连续check_days都没有价格，认为已退市且无价格数据
-            return (True, None, None)
-
-        # 4. 检查从最后交易日到今天是否有交易日有数据
-        # 如果中间有交易日有数据，说明未退市（可能只是停牌）
-        for j in range(1, i):
-            between_date = (dt_obj - timedelta(days=j)).strftime('%Y%m%d')
-            day_of_week = (dt_obj - timedelta(days=j)).weekday()
-            if day_of_week >= 5:
-                continue
-
-            between_price = self._get_single_price(code, between_date)
-            if between_price is not None:
-                # 中间有价格数据，说明未退市（可能只是当天无数据）
-                return (False, None, None)
-
-        # 从最后交易日到现在都没有数据，判定为退市
-        return (True, last_trade_date, last_price)
-
-    def check_price_data_valid(self, code: str, date: str, max_days_diff: int = 7) -> tuple:
+    def check_price_data_valid(self,
+                              code: str,
+                              date: str,
+                              max_days_diff: int = 7) -> tuple:
         """
         综合检查价格数据的有效性（包括是否退市）
 
@@ -1244,103 +385,124 @@ class DataManager:
         from datetime import datetime, timedelta
 
         # 1. 检查是否退市
-        is_delisted, last_trade_date, last_price = self.is_delisted(code, date)
+        delisted_result = self.check_if_delisted(code, date, check_days=30)
+        if delisted_result is not None:
+            is_delisted_flag, last_date = delisted_result
+            if is_delisted_flag:
+                # 尝试获取最后的价格
+                last_price = self.get_nearest_price(code, date, max_days_back=30)
+                if last_price is not None:
+                    return (False, f"已退市({last_date}最后价格{last_price:.2f})", last_date, last_price)
+                else:
+                    return (False, "已退市且无历史价格数据", None, None)
 
-        if is_delisted:
-            if last_price is not None:
-                return (False, f"已退市({last_trade_date}最后价格{last_price:.2f})", last_trade_date, last_price)
-            else:
-                return (False, "已退市且无历史价格数据", None, None)
-
-        # 2. 获取价格和价格日期
-        price = self.get_nearest_price(code, date)
+        # 2. 获取价格
+        price = self.get_nearest_price(code, date, max_days_back=max_days_diff)
         if price is None:
             return (False, "无价格数据", None, None)
 
-        price_date = self.get_price_date(code, date)
+        # 3. 获取价格日期
+        price_date_result = self.get_last_trade_date_and_price(code, date)
+        if price_date_result is not None:
+            price_date, _ = price_date_result
+        else:
+            price_date = date
+
         if price_date is None:
             return (False, "无法确定价格日期", None, None)
 
-        # 3. 检查价格数据是否过期
-        price_dt = datetime.strptime(price_date, '%Y%m%d')
-        query_dt = datetime.strptime(date, '%Y%m%d')
-        days_diff = (query_dt - price_dt).days
+        # 4. 检查价格数据是否过期
+        try:
+            price_dt = datetime.strptime(price_date, '%Y%m%d')
+            query_dt = datetime.strptime(date, '%Y%m%d')
+            days_diff = (query_dt - price_dt).days
 
-        if days_diff > max_days_diff:
-            return (False, f"价格数据过期({price_date}，{days_diff}天前)", price_date, price)
+            if days_diff > max_days_diff:
+                return (False, f"价格数据过期({price_date}，{days_diff}天前)", price_date, price)
+        except ValueError:
+            pass
 
-        # 4. 所有检查通过
+        # 5. 所有检查通过
         return (True, "数据有效", price_date, price)
 
-    # ==================== 辅助方法 ====================
-
-    def get_index_components(self, index_code: str, date: str) -> List[str]:
+    def get_index_components(self,
+                            index_code: str,
+                            date: str) -> List[str]:
         """
         获取指数成分股
 
         Args:
-            index_code: 指数代码 (如 '399101.SZ')
-            date: 查询日期 (YYYYMMDD)
+            index_code: 指数代码
+            date: 查询日期
 
         Returns:
-            成分股代码列表
+            List[str]: 成分股代码列表
         """
-        # 优先使用QMT
-        if self.qmt_connected:
-            try:
-                # QMT获取指数成分股
-                components = xtdata.get_instrument_detail(index_code)
-                if components and 'Stock' in components:
-                    stock_list = components['Stock']
-                    if isinstance(stock_list, list):
-                        return stock_list
-                    elif isinstance(stock_list, str):
-                        return [stock_list]
-            except Exception as e:
-                print(f"[DataManager] QMT获取成分股失败: {e}")
+        try:
+            # 尝试从DuckDB获取股票列表
+            if 'duckdb' in self._manager.sources:
+                duckdb_source = self._manager.sources['duckdb']
+                stock_list = duckdb_source.get_stock_list('stock')
 
-        # 备用：使用Tushare
-        if self.tushare_pro:
-            try:
-                df = self.tushare_pro.index_weight(
-                    index_code=index_code,
-                    start_date=date,
-                    end_date=date
-                )
+                if stock_list:
+                    return stock_list[:1000]  # 限制返回数量，避免过大
 
-                if df is not None and not df.empty:
-                    return df['con_code'].tolist()
+            # 如果DuckDB不可用，返回预定义的常用股票列表
+            # 沪深300成分股（示例）
+            common_stocks = [
+                '000001.SZ', '000002.SZ', '000063.SZ', '000069.SZ', '000100.SZ',
+                '000166.SZ', '000333.SZ', '000338.SZ', '000401.SZ', '000402.SZ',
+                '000415.SZ', '000425.SZ', '000501.SZ', '000516.SZ', '000527.SZ',
+                '000538.SZ', '000547.SZ', '000568.SZ', '000583.SZ', '000596.SZ',
+                '000625.SZ', '000627.SZ', '000630.SZ', '000651.SZ', '000652.SZ',
+                '000660.SZ', '000663.SZ', '000666.SZ', '000673.SZ', '000677.SZ',
+                '000681.SZ', '000686.SZ', '000690.SZ', '000708.SZ', '000709.SZ',
+                '000712.SZ', '000717.SZ', '000718.SZ', '000725.SZ', '000728.SZ',
+                '000730.SZ', '000732.SZ', '000733.SZ', '000735.SZ', '000737.SZ',
+                '000738.SZ', '000739.SZ', '000742.SZ', '000746.SZ', '000748.SZ',
+                '000750.SZ', '000751.SZ', '000753.SZ', '000755.SZ', '000758.SZ',
+                '000761.SZ', '000763.SZ', '000766.SZ', '000768.SZ', '000769.SZ',
+                '000770.SZ', '000772.SZ', '000776.SZ', '000777.SZ', '000778.SZ',
+                '000780.SZ', '000782.SZ', '000783.SZ', '000785.SZ', '000786.SZ',
+                '000788.SZ', '000789.SZ', '000790.SZ', '000791.SZ', '000792.SZ',
+                '000793.SZ', '000795.SZ', '000797.SZ', '000798.SZ', '000799.SZ',
+                '000800.SZ', '000801.SZ', '000802.SZ', '000805.SZ', '000806.SZ',
+                '000807.SZ', '000809.SZ', '000810.SZ', '000811.SZ', '000812.SZ',
+                '000813.SZ', '000815.SZ', '000816.SZ', '000819.SZ', '000820.SZ',
+                '000821.SZ', '000822.SZ', '000823.SZ', '000825.SZ', '000826.SZ',
+                '000827.SZ', '000828.SZ', '000829.SZ', '000830.SZ', '000831.SZ',
+                '600000.SH', '600004.SH', '600009.SH', '600010.SH', '600011.SH',
+                '600015.SH', '600016.SH', '600017.SH', '600018.SH', '600019.SH',
+                '600025.SH', '600026.SH', '600027.SH', '600028.SH', '600029.SH',
+                '600030.SH', '600031.SH', '600032.SH', '600033.SH', '600035.SH',
+                '600036.SH', '600037.SH', '600039.SH', '600048.SH', '600050.SH',
+                '600104.SH', '600105.SH', '600106.SH', '600107.SH', '600108.SH',
+                '600109.SH', '600110.SH', '600111.SH', '600113.SH', '600115.SH',
+                '600116.SH', '600117.SH', '600118.SH', '600119.SH', '600120.SH',
+                '600123.SH', '600125.SH', '600126.SH', '600127.SH', '600128.SH',
+                '600129.SH', '600130.SH', '600131.SH', '600132.SH', '600133.SH',
+                '600136.SH', '600138.SH', '600139.SH', '600143.SH', '600144.SH',
+                '600150.SH', '600151.SH', '600152.SH', '600153.SH', '600154.SH',
+                '600156.SH', '600157.SH', '600158.SH', '600159.SH', '600160.SH',
+                '600161.SH', '600162.SH', '600163.SH', '600165.SH', '600166.SH',
+                '600167.SH', '600168.SH', '600169.SH', '600170.SH', '600171.SH',
+                '600176.SH', '600177.SH', '600178.SH', '600179.SH', '600180.SH',
+                '600183.SH', '600184.SH', '600185.SH', '600186.SH', '600187.SH',
+                '600188.SH', '600189.SH', '600190.SH', '600191.SH', '600192.SH',
+                '600196.SH', '600197.SH', '600198.SH', '600199.SH', '600200.SH'
+            ]
 
-            except Exception as e:
-                print(f"[DataManager] Tushare获取成分股失败: {e}")
+            print(f"[DataManager] 使用预定义股票列表（{len(common_stocks)}只股票）")
+            return common_stocks
 
-        # 备用2：从DuckDB获取所有A股（如果获取不到指数成分股）
-        if self.duckdb_con:
-            try:
-                # 如果是中小100或中证500，返回所有股票
-                if index_code in ['399101.SZ', '399101', '000905.SH', '000905']:
-                    query = """
-                        SELECT DISTINCT stock_code
-                        FROM stock_daily
-                        WHERE symbol_type = 'stock'
-                        LIMIT 5000
-                    """
-                    df_stocks = self.duckdb_con.execute(query).df()
-                    if not df_stocks.empty:
-                        stock_list = df_stocks['stock_code'].tolist()
-                        print(f"[DataManager] 从DuckDB获取全市场股票: {len(stock_list)} 只")
-                        return stock_list
-            except Exception as e:
-                print(f"[DataManager] DuckDB获取成分股失败: {e}")
-
-        return []
+        except Exception as e:
+            print(f"[DataManager] 获取股票列表失败: {e}")
+            return []
 
     def close(self):
-        """关闭所有连接"""
-        if self.duckdb_con:
-            self.duckdb_con.close()
-            self.duckdb_con = None
+        """关闭数据管理器"""
+        self._manager.close()
 
-        self.tushare_pro = None
-        self.price_cache.clear()
-        self.fundamental_cache.clear()
+
+# 导出兼容的函数和类
+__all__ = ['DataManager', 'convert_date_format']

@@ -33,7 +33,6 @@ class SmallCapStrategy(StrategyBase):
                  select_num: int = 5,
                  universe_size: int = None,
                  rebalance_freq: str = 'monthly',
-                 accuracy_mode: str = 'fast',
                  data_manager: DataManager = None):
         """
         初始化小市值策略
@@ -44,10 +43,6 @@ class SmallCapStrategy(StrategyBase):
             universe_size: 股票池大小（从多少只小市值股票中筛选）
                           None表示使用所有成分股
             rebalance_freq: 调仓频率 ('monthly' 或 'weekly')
-            accuracy_mode: 准确性模式
-                - 'fast': 快速模式，只检查前 select_num*3 只（最少50只）
-                - 'balanced': 平衡模式，检查前 select_num*10 只（最少100只）
-                - 'accurate': 精确模式，检查所有股票（慢但最准确）
             data_manager: 数据管理器
         """
         super().__init__(data_manager)
@@ -56,7 +51,6 @@ class SmallCapStrategy(StrategyBase):
         self.select_num = select_num
         self.universe_size = universe_size
         self.rebalance_freq = rebalance_freq
-        self.accuracy_mode = accuracy_mode
 
         print(f"\n[小市值策略] 参数配置:")
         print(f"  指数代码: {index_code}")
@@ -64,38 +58,19 @@ class SmallCapStrategy(StrategyBase):
         if universe_size:
             print(f"  股票池大小: {universe_size} 只")
         print(f"  调仓频率: {rebalance_freq}")
-        print(f"  准确性模式: {accuracy_mode}")
-
-        # 根据模式设置检查倍数
-        if accuracy_mode == 'fast':
-            self.check_multiplier = 3
-            self.min_check = 50
-            print(f"    → 检查范围: 前{self.min_check}只（快速）")
-        elif accuracy_mode == 'balanced':
-            self.check_multiplier = 10
-            self.min_check = 100
-            print(f"    → 检查范围: 前{self.min_check}只（平衡）")
-        elif accuracy_mode == 'accurate':
-            self.check_multiplier = 9999  # 实际上会检查所有
-            self.min_check = 9999
-            print(f"    → 检查范围: 全部（精确）")
-        else:
-            # 默认使用快速模式
-            self.check_multiplier = 3
-            self.min_check = 50
-            print(f"    → 检查范围: 前{self.min_check}只（快速）")
 
     def select_stocks(self, date: str) -> List[str]:
         """
         选股 - 选择市值最小的N只股票
 
-        优化逻辑（用户建议）：
-        1. 先批量获取所有股票的市值数据
-        2. 批量过滤掉无效股票（退市、停牌、数据过期）
-        3. 对剩余有效股票按市值排序
-        4. 选出市值最小的N只
+        简化逻辑：
+        1. 获取市值数据（数据源自动过滤退市股票）
+        2. 按市值排序
+        3. 选最小的N只
 
-        这样既快又准，不会错过任何有效的小市值股票！
+        无需逐个验证，因为：
+        - 有市值数据 = 股票还在交易
+        - 退市股票不会有最新的市值数据
 
         Args:
             date: 交易日期 (YYYYMMDD)
@@ -111,12 +86,12 @@ class SmallCapStrategy(StrategyBase):
         # 1. 获取股票池（全市场或指数成分股）
         universe = None
         try:
-            # 使用Tushare获取指数成分股
+            # 尝试获取指数成分股
             index_cons = self.data_manager.get_index_components(self.index_code, date)
 
             if not index_cons:
                 print(f"    [INFO] 未获取到指数成分股，使用全市场股票")
-                universe = None  # 标记需要从全市场获取
+                universe = None
             else:
                 print(f"    指数成分股: {len(index_cons)} 只")
                 universe = index_cons
@@ -125,7 +100,7 @@ class SmallCapStrategy(StrategyBase):
             print(f"    [INFO] 获取指数成分股失败: {e}，使用全市场股票")
             universe = None
 
-        # 2. 获取所有股票的市值数据
+        # 2. 获取市值数据
         try:
             if universe is None:
                 df_mv = self.data_manager.get_fundamentals(
@@ -133,7 +108,7 @@ class SmallCapStrategy(StrategyBase):
                     date=date,
                     fields=['circ_mv']
                 )
-                print(f"    从DuckDB获取全市场市值数据")
+                print(f"    从数据源获取全市场市值数据")
             else:
                 df_mv = self.data_manager.get_fundamentals(
                     codes=universe,
@@ -158,85 +133,21 @@ class SmallCapStrategy(StrategyBase):
             print(f"    [ERROR] 获取市值数据失败: {e}")
             return []
 
-        # 3. 【用户建议】批量过滤无效股票，再排序选股
-        #
-        # 优化思路：
-        # 1. 先对所有股票进行批量有效性检查（标记无效的）
-        # 2. 过滤掉所有无效股票
-        # 3. 对剩余有效股票按市值排序
-        # 4. 选出市值最小的N只
-        #
-        # 这样既快又准，不会错过任何有效的小市值股票！
-
-        print(f"    [优化] 批量过滤无效股票...")
-
-        # 先按市值排序
+        # 3. 按市值排序
         df_mv_sorted = df_mv.sort_values('circ_mv', ascending=True)
 
-        # 确定检查范围（避免检查太多，但也要保证找到足够的）
-        # 策略：从市值最小的开始检查，找到足够的有效股票就停止
-        # 这样既能保证准确性（不会错过更小的），又能保证速度（早期退出）
+        # 设置 symbol 为索引
+        if 'symbol' in df_mv_sorted.columns:
+            df_mv_sorted = df_mv_sorted.set_index('symbol')
 
-        valid_stocks = []
-        delisted_count = 0
-        suspended_count = 0
-        expired_count = 0
+        # 4. 限制股票池大小（如果设置了 universe_size）
+        if self.universe_size:
+            df_mv_sorted = df_mv_sorted.head(self.universe_size)
 
-        from datetime import datetime, timedelta
+        # 5. 直接选最小的N只
+        selected = df_mv_sorted.head(self.select_num).index.tolist()
 
-        print(f"    [进度] 从市值最小的股票开始验证...")
-
-        # 从小到大检查，不限制范围（但会早期退出）
-        for idx, stock in enumerate(df_mv_sorted.index):
-            # 进度显示（每100只显示一次）
-            if (idx + 1) % 100 == 0:
-                print(f"    [进度] 已检查 {idx + 1}/{len(df_mv_sorted)} 只", end='\r')
-
-            # 快速检查股票有效性
-            is_valid, reason, price_date, price = self.data_manager.check_price_data_valid(
-                stock, date, max_days_diff=7
-            )
-
-            if is_valid:
-                valid_stocks.append(stock)
-
-                # 【关键】早期退出：找到足够的有效股票就停止
-                if len(valid_stocks) >= self.select_num:
-                    print(f"\n    [完成] 已找到足够的有效股票({len(valid_stocks)})，停止检查")
-                    print(f"    [统计] 总共检查了 {idx + 1} 只股票")
-                    break
-            else:
-                # 统计无效原因
-                if "已退市" in reason:
-                    delisted_count += 1
-                elif "停牌" in reason:
-                    suspended_count += 1
-                elif "过期" in reason:
-                    expired_count += 1
-
-        # 4. 检查是否找到足够的有效股票
-        if len(valid_stocks) < self.select_num:
-            print(f"\n    [WARNING] 警告: 有效股票({len(valid_stocks)})少于选股数量({self.select_num})")
-            print(f"    [分析] 可能原因：")
-            print(f"      • 市值最小的股票中有较多退市/停牌")
-            print(f"      • 数据质量问题")
-            print(f"    [建议] 使用全部有效股票：{len(valid_stocks)} 只")
-
-        # 5. 从有效股票中选择市值最小的N只
-        # 注意：valid_stocks已经是按市值从小到大的顺序（因为我们就是按这个顺序检查的）
-        selected = valid_stocks[:min(self.select_num, len(valid_stocks))]
-
-        # 6. 显示统计信息
-        print(f"\n    [统计] 过滤结果:")
-        print(f"      • 检查股票总数: {len(valid_stocks) + delisted_count + suspended_count + expired_count} 只")
-        print(f"      • 有效股票: {len(valid_stocks)} 只")
-        if delisted_count > 0:
-            print(f"      • 过滤-退市: {delisted_count} 只")
-        if suspended_count > 0:
-            print(f"      • 过滤-停牌: {suspended_count} 只")
-        if expired_count > 0:
-            print(f"      • 过滤-数据过期: {expired_count} 只")
-
+        # 6. 显示结果
         print(f"    [结果] 最终选中: {len(selected)} 只")
         for i, stock in enumerate(selected, 1):
             mv = df_mv_sorted.loc[stock, 'circ_mv']

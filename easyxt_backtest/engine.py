@@ -121,6 +121,10 @@ class BacktestEngine:
         self.delisted_total_loss = 0.0  # 退市总损失
         self.position_costs = {}  # {symbol: {'total_cost': float, 'total_volume': int}} - 用于追踪持仓成本
 
+        # ✨ 性能优化：每日价格缓存
+        self._daily_price_cache = {}  # {date: {symbol: price}}
+        self._current_cache_date = None  # 当前缓存日期
+
     # ==================== 主回测循环 ====================
 
     def run_backtest(self,
@@ -157,6 +161,15 @@ class BacktestEngine:
         # 获取所有交易日（用于计算每日净值）
         all_trading_days = self.data_manager.get_trading_dates(start_date, end_date)
 
+        # 添加时间估算
+        import time
+        estimated_time_per_rebalance = 15  # 秒（根据经验估算）
+        total_estimated_time = len(rebalance_dates) * estimated_time_per_rebalance
+        print(f"\n预计耗时: 约 {total_estimated_time // 60} 分钟 {total_estimated_time % 60} 秒")
+        print(f"提示: 耐心等待，可以通过日志查看进度...\n")
+
+        overall_start = time.time()
+
         # 执行回测
         last_rebalance_idx = 0
 
@@ -165,7 +178,11 @@ class BacktestEngine:
 
             # 检查是否需要调仓
             if trade_date in rebalance_dates:
-                print(f"\n[{trade_date}] 调仓...")
+                elapsed = time.time() - overall_start
+                remaining = len([d for d in rebalance_dates if d >= trade_date])
+                eta = remaining * estimated_time_per_rebalance
+
+                print(f"\n[{trade_date}] 调仓... (已用 {elapsed:.0f}s, 预计剩余 {eta//60}m{eta%60:.0f}s)")
 
                 # 选股
                 selected_stocks = strategy.select_stocks(trade_date)
@@ -191,6 +208,11 @@ class BacktestEngine:
             self._record_portfolio(trade_date)
 
         # 计算最终结果
+        total_time = time.time() - overall_start
+        print(f"\n{'='*70}")
+        print(f"回测完成！总耗时: {total_time/60:.1f} 分钟 ({total_time:.0f} 秒)")
+        print(f"{'='*70}\n")
+
         result = self._calculate_result(all_trading_days)
 
         return result
@@ -209,9 +231,13 @@ class BacktestEngine:
         self.delisted_total_loss = 0.0
         self.position_costs = {}
 
+        # ✨ 重置价格缓存
+        self._daily_price_cache = {}
+        self._current_cache_date = None
+
     def _rebalance(self, date: str, target_weights: Dict[str, float]):
         """
-        执行调仓
+        执行调仓（使用缓存优化）
 
         Args:
             date: 调仓日期
@@ -221,21 +247,26 @@ class BacktestEngine:
         current_value = self._get_total_value(date)
         print(f"  当前总资产: {current_value:,.2f}")
 
-        # 2. 处理退市股票（使用最后交易日价格强制卖出）
+        # 2. ✨ 性能优化：预取所有持仓和目标股票的价格
+        all_symbols = list(self.positions.keys()) + list(target_weights.keys())
+        self._prefetch_prices(all_symbols, date)
+
+        # 3. 处理退市股票（使用最后交易日价格强制卖出）
         to_sell_delisted = []
         for code in list(self.positions.keys()):  # 使用list()避免迭代时修改字典
-            current_price = self.data_manager.get_nearest_price(code, date)
+            current_price = self._get_price_with_cache(code, date)
 
             if current_price is None:
-                # 当前无价格，检查是否退市
-                last_trade_info = self.data_manager.get_last_trade_date_and_price(code, date)
+                # 当前无价格，使用 is_delisted() 方法检查是否退市
+                # 使用60天检查窗口，避免遗漏长期退市的股票
+                is_delisted_flag, last_date, last_price = self.data_manager.is_delisted(code, date, check_days=60)
 
-                if last_trade_info is not None:
-                    last_date, last_price = last_trade_info
+                if is_delisted_flag:
+                    # 已确认退市
+                    volume = self.positions[code]
 
                     if last_price is not None:
-                        # 已退市，使用最后价格强制卖出
-                        volume = self.positions[code]
+                        # 有最后价格，使用最后价格强制卖出
                         loss_amount = last_price * volume
 
                         print(f"    [DELISTED] {code} 已退市({last_date}最后价格{last_price:.2f})，强制卖出{volume}股")
@@ -246,7 +277,6 @@ class BacktestEngine:
                         to_sell_delisted.append(code)
                     else:
                         # 无历史价格，清零持仓（模拟血本无归）
-                        volume = self.positions[code]
                         print(f"    [DELISTED] {code} 已退市且无价格数据，清零持仓{volume}股（血本无归）")
                         print(f"              损失: {volume}股（无法估值）")
 
@@ -254,17 +284,17 @@ class BacktestEngine:
                         del self.positions[code]
                         to_sell_delisted.append(code)
 
-        # 3. 卖出不在目标中的股票
+        # 4. 卖出不在目标中的股票
         to_sell = [code for code in self.positions if code not in target_weights]
         if to_sell:
             print(f"  卖出: {len(to_sell)} 只")
             for code in to_sell:
                 self._sell(code, date, self.positions[code])
 
-        # 4. ✨ 优化：智能买入目标股票（处理资金不足）
+        # 5. ✨ 优化：智能买入目标股票（处理资金不足）
         print(f"  买入/调整: {len(target_weights)} 只")
 
-        # 4.1 计算所有需要买入的股票和预估资金
+        # 5.1 计算所有需要买入的股票和预估资金
         buy_orders = []  # [(code, buy_volume, needed_cash)]
         total_needed_cash = 0.0
         available_cash = self.cash
@@ -274,7 +304,8 @@ class BacktestEngine:
 
             # 获取当前持仓
             current_volume = self.positions.get(code, 0)
-            current_price = self.data_manager.get_nearest_price(code, date)
+            # ✨ 使用缓存获取价格
+            current_price = self._get_price_with_cache(code, date)
 
             if current_price is None:
                 print(f"    [SKIP] {code} 无法获取价格")
@@ -307,7 +338,7 @@ class BacktestEngine:
                 if sell_volume > 0:
                     self._sell(code, date, sell_volume)
 
-        # 4.2 检查资金是否充足
+        # 5.2 检查资金是否充足
         if total_needed_cash > available_cash:
             # 资金不足，按比例缩减买入
             print(f"    [WARNING]  资金不足: 需要{total_needed_cash:,.2f}元，可用{available_cash:,.2f}元")
@@ -329,14 +360,15 @@ class BacktestEngine:
 
     def _buy(self, symbol: str, date: str, volume: int):
         """
-        买入
+        买入（使用缓存优化）
 
         Args:
             symbol: 股票代码
             date: 日期
             volume: 买入股数（整手）
         """
-        price = self.data_manager.get_nearest_price(symbol, date)
+        # ✨ 使用缓存获取价格
+        price = self._get_price_with_cache(symbol, date)
 
         if price is None:
             print(f"    [FAIL] {symbol} 买入失败 - 无价格数据")
@@ -385,7 +417,7 @@ class BacktestEngine:
 
     def _sell(self, symbol: str, date: str, volume: int):
         """
-        卖出
+        卖出（使用缓存优化）
 
         Args:
             symbol: 股票代码
@@ -396,7 +428,8 @@ class BacktestEngine:
             print(f"    [FAIL] {symbol} 卖出失败 - 持仓不足")
             return
 
-        price = self.data_manager.get_nearest_price(symbol, date)
+        # ✨ 使用缓存获取价格
+        price = self._get_price_with_cache(symbol, date)
 
         if price is None:
             print(f"    [FAIL] {symbol} 卖出失败 - 无价格数据")
@@ -534,28 +567,92 @@ class BacktestEngine:
 
     # ==================== 持仓管理 ====================
 
+    def _get_price_with_cache(self, symbol: str, date: str) -> Optional[float]:
+        """
+        获取股票价格（带缓存优化）
+
+        Args:
+            symbol: 股票代码
+            date: 日期
+
+        Returns:
+            float: 价格，找不到返回None
+        """
+        # 如果日期变化，清空缓存
+        if self._current_cache_date != date:
+            self._daily_price_cache = {}
+            self._current_cache_date = date
+
+        # 检查缓存
+        if symbol in self._daily_price_cache:
+            return self._daily_price_cache[symbol]
+
+        # 缓存未命中，获取价格
+        price = self.data_manager.get_nearest_price(symbol, date)
+
+        # 存入缓存
+        if price is not None:
+            self._daily_price_cache[symbol] = price
+
+        return price
+
+    def _prefetch_prices(self, symbols: List[str], date: str):
+        """
+        预取多个股票的价格到缓存
+
+        Args:
+            symbols: 股票代码列表
+            date: 日期
+        """
+        # 如果日期变化，清空缓存
+        if self._current_cache_date != date:
+            self._daily_price_cache = {}
+            self._current_cache_date = date
+
+        # 批量获取价格
+        for symbol in symbols:
+            if symbol not in self._daily_price_cache:
+                price = self.data_manager.get_nearest_price(symbol, date)
+                if price is not None:
+                    self._daily_price_cache[symbol] = price
+
     def _get_total_value(self, date: str) -> float:
         """获取总资产（现金+持仓市值）"""
         market_value = self._get_market_value(date)
         return self.cash + market_value
 
     def _get_market_value(self, date: str) -> float:
-        """获取持仓市值"""
+        """
+        获取持仓市值（使用缓存优化）
+
+        估值逻辑：
+        1. 有市场价格 → 使用市场价
+        2. 无价格 → 使用成本价（可能是停牌或退市）
+
+        注意：退市检测只在调仓时进行，避免性能问题
+        """
         total = 0.0
         for symbol, volume in self.positions.items():
-            price = self.data_manager.get_nearest_price(symbol, date)
+            # ✨ 使用缓存获取价格
+            price = self._get_price_with_cache(symbol, date)
             if price:
                 # 有市场价格，使用市场价
                 total += price * volume
             else:
-                # ✨ 修复：无法获取价格的股票使用成本价估值（避免资产突然"暴跌"）
-                if symbol in self.position_costs and symbol in self.position_costs:
+                # 无法获取价格，使用成本价估值
+                # （可能是停牌或退市，退市股票会在下次调仓时处理）
+                if symbol in self.position_costs:
                     avg_cost_price = self.position_costs[symbol]['total_cost'] / self.position_costs[symbol]['total_volume']
                     total += avg_cost_price * volume
-                    print(f"    [INFO] {symbol} 持仓{volume}股使用成本价估值: {avg_cost_price:.2f}元（市值: {avg_cost_price * volume:,.2f}元）")
+                    # 只在第一次找不到价格时打印（减少日志）
+                    if symbol not in self._daily_price_cache:
+                        print(f"    [INFO] {symbol} 持仓{volume}股暂时无法获取价格，使用成本价估值: {avg_cost_price:.2f}元（市值: {avg_cost_price * volume:,.2f}元）")
+                        self._daily_price_cache[symbol] = None  # 标记已尝试
                 else:
-                    # 既无市场价也无成本价，警告但不计0
-                    print(f"    [WARNING] {symbol} 持仓{volume}股无法估值（无价格数据且无成本记录），市值计为0")
+                    # 既无市场价也无成本价，计为0
+                    if symbol not in self._daily_price_cache:
+                        print(f"    [WARNING] {symbol} 持仓{volume}股无法估值（无价格数据且无成本记录），市值计为0")
+                        self._daily_price_cache[symbol] = None  # 标记已尝试
         return total
 
     def _record_portfolio(self, date: str):

@@ -328,3 +328,12 @@ easyxt_backtest/output/
 gui_app/widgets/README_TUSHARE.md
 strategies/小市值基础策略V2_EasyXT版.py
 strategies/小市值基础策略V2_EasyXT实盘专用版.py
+未来的选题思路.md
+
+# 数据验证和分析脚本（临时文件，不提交）
+diagnose_*.py
+compare_*.py
+check_*.py
+verify_*.py
+docs/market_cap_data_analysis.md
+docs/*数据*.md
