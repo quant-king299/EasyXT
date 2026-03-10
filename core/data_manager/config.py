@@ -52,6 +52,50 @@ class DataManagerConfig:
             self._load_from_file(config_file)
         self.config.update(kwargs)
 
+    def _load_dotenv(self):
+        """
+        尝试加载.env文件
+
+        从项目根目录加载.env文件（如果存在）
+        """
+        try:
+            from pathlib import Path
+
+            # 尝试多个可能的.env文件位置
+            possible_paths = [
+                Path.cwd() / '.env',  # 当前工作目录
+                Path(__file__).parent.parent.parent / '.env',  # 项目根目录
+                Path.home() / '.env',  # 用户主目录
+            ]
+
+            for env_path in possible_paths:
+                if env_path.exists():
+                    # 读取.env文件并手动解析（避免依赖python-dotenv）
+                    with open(env_path, 'r', encoding='utf-8') as f:
+                        for line in f:
+                            line = line.strip()
+                            # 跳过注释和空行
+                            if not line or line.startswith('#'):
+                                continue
+                            # 解析 KEY=VALUE 格式
+                            if '=' in line:
+                                key, value = line.split('=', 1)
+                                key = key.strip()
+                                value = value.strip()
+                                # 移除引号
+                                if value.startswith('"') and value.endswith('"'):
+                                    value = value[1:-1]
+                                elif value.startswith("'") and value.endswith("'"):
+                                    value = value[1:-1]
+                                # 只设置未设置的环境变量
+                                if key not in os.environ:
+                                    os.environ[key] = value
+                    # 找到一个有效的.env文件后就停止
+                    break
+        except Exception as e:
+            # .env文件加载失败不是致命错误，静默处理
+            pass
+
     def _load_from_env(self):
         """从环境变量和.env文件加载配置"""
         # 1. 先尝试加载 .env 文件
@@ -134,6 +178,56 @@ class DataManagerConfig:
             available.append('tushare')
 
         return available
+
+    def get(self, key: str, default=None):
+        """
+        获取配置值
+
+        Args:
+            key: 配置键
+            default: 默认值
+
+        Returns:
+            配置值或默认值
+        """
+        return self.config.get(key, default)
+
+    def set(self, key: str, value):
+        """
+        设置配置值
+
+        Args:
+            key: 配置键
+            value: 配置值
+        """
+        self.config[key] = value
+
+    def get_source_config(self, source_name: str) -> Dict:
+        """
+        获取特定数据源的配置
+
+        Args:
+            source_name: 数据源名称 (duckdb/tushare/qmt)
+
+        Returns:
+            Dict: 数据源配置
+        """
+        source_configs = {
+            'duckdb': {
+                'path': self.get('duckdb_path'),
+                'enabled': self.get('duckdb_path') is not None
+            },
+            'tushare': {
+                'token': self.get('tushare_token'),
+                'enabled': self.get('tushare_token') is not None
+            },
+            'qmt': {
+                'path': self.get('qmt_path'),
+                'enabled': True  # QMT总是可用的（如果安装了）
+            }
+        }
+
+        return source_configs.get(source_name, {})
 
     def get_preferred_sources(self) -> List[str]:
         """

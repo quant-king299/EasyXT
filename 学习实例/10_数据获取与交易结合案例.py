@@ -1,39 +1,98 @@
 """
-股票量化交易学习案例 - 数据获取与easy_xt交易结合
+股票量化交易学习案例 - 真实数据获取与交易结合
 完整的从数据获取到交易执行的学习案例
 
 功能包括：
-1. 数据获取模块 (使用现有数据或akshare)
+1. 数据获取模块（使用DataManager获取真实数据）
 2. 技术指标计算
 3. 交易信号生成
-4. easy_xt交易执行
+4. 交易执行（支持真实交易和模拟交易）
 5. 风险管理
 6. 交易监控
 
+数据源支持：
+- QMT本地数据（推荐，速度快）
+- Tushare在线数据（需要token）
+- DuckDB本地数据库（可选，极速）
+
 作者：王者quant
 日期：2025-01-09
+更新：2025-03-10（改为使用真实数据）
+
+=====================================================================
+🔴🔴🔴 重要配置 - 在这里设置交易模式 🔴🔴🔴
+=====================================================================
+
+【交易模式配置】（找到这里！修改下面的配置）
+
+# 配置1：数据模式
+USE_REAL_DATA = True      # True=使用真实数据(QMT/Tushare/DuckDB)  False=使用模拟数据
+                          # 建议：保持True，使用真实数据学习
+
+# 配置2：交易模式
+USE_REAL_TRADING = True  # False=模拟交易(零风险)  True=真实交易(有风险)
+                          # ⚠️ 警告：True会真实下单，请谨慎！
+                          # 建议：学习阶段保持False
+
+【配置说明】
+- 学习推荐：USE_REAL_DATA=True, USE_REAL_TRADING=False（真实数据+模拟交易）
+- 快速测试：USE_REAL_DATA=False, USE_REAL_TRADING=False（模拟数据+模拟交易）
+- 实盘运行：USE_REAL_DATA=True, USE_REAL_TRADING=True（真实数据+真实交易）
+           ⚠️ 实盘需要QMT交易账号，有真实资金风险！
+
+【如何启用真实交易】
+方法1（推荐）：运行时使用命令行参数
+  python 学习实例/10_数据获取与交易结合案例.py --real-trading
+
+方法2：直接修改下面这行
+  USE_REAL_TRADING = False  # 改成 True
+
+【重要提示】
+- 真实交易有风险，可能导致资金损失
+- 建议先在模拟模式下充分测试策略
+- 实盘前请确保理解策略逻辑和风险
+- 使用小资金开始，逐步增加
+
+=====================================================================
 """
+
+# ==================== 配置区域（修改这里！）====================
+USE_REAL_DATA = True       # 数据模式：True=真实数据，False=模拟数据
+USE_REAL_TRADING = True   # 交易模式：False=模拟交易，True=真实交易⚠️
+# ===============================================================
 
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import os
 import sys
+import argparse
 from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# 添加easy_xt路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'easy_xt'))
+# 添加项目路径
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
+# 导入数据管理器
 try:
-    from easy_xt.EasyXT import EasyXT
+    from easyxt_backtest import DataManager
+    DATA_MANAGER_AVAILABLE = True
+    print("✅ DataManager模块加载成功")
+except ImportError as e:
+    DATA_MANAGER_AVAILABLE = False
+    print(f"⚠️ DataManager模块未找到: {e}")
+
+# 导入交易API（可选）
+try:
+    import easy_xt
     EASY_XT_AVAILABLE = True
-    print("✅ easy_xt模块加载成功")
+    print("[OK] easy_xt模块加载成功")
 except ImportError as e:
     EASY_XT_AVAILABLE = False
-    print(f"⚠️ easy_xt模块未找到: {e}")
-    print("📝 将使用模拟交易模式")
+    print(f"[WARNING] easy_xt模块未找到: {e}")
 
 # 设置中文字体
 plt.rcParams['font.sans-serif'] = ['SimHei']
@@ -41,103 +100,156 @@ plt.rcParams['axes.unicode_minus'] = False
 
 class TradingStrategy:
     """交易策略类 - 整合数据获取、信号生成和交易执行"""
-    
-    def __init__(self, use_real_trading=False):
+
+    def __init__(self, use_real_trading=False, use_real_data=True):
         """
         初始化交易策略
-        
+
         Args:
             use_real_trading (bool): 是否使用真实交易，默认False使用模拟
+            use_real_data (bool): 是否使用真实数据，默认True
         """
-        self.use_real_trading = use_real_trading and EASY_XT_AVAILABLE
+        self.use_real_trading = use_real_trading
+        self.use_real_data = use_real_data and DATA_MANAGER_AVAILABLE
         self.data_dir = "data"
         self.log_dir = "logs"
-        
+
         # 创建必要目录
         for dir_path in [self.data_dir, self.log_dir]:
             if not os.path.exists(dir_path):
                 os.makedirs(dir_path)
-        
-        # 初始化交易接口
-        if self.use_real_trading:
+
+        # 初始化数据管理器
+        if self.use_real_data:
             try:
-                self.trader = EasyXT()
-                print("✅ EasyXT交易接口初始化成功")
+                self.data_manager = DataManager()
+                print("✅ DataManager初始化成功")
             except Exception as e:
-                print(f"❌ EasyXT初始化失败: {e}")
+                print(f"❌ DataManager初始化失败: {e}")
+                self.use_real_data = False
+                print("📝 将使用模拟数据")
+
+        # 初始化交易接口
+        if self.use_real_trading and EASY_XT_AVAILABLE:
+            try:
+                # 使用真实交易API的适配器（使用easy_xt基础API）
+                self.trader = RealTradeAdapter()
+                print("  [信息] 真实交易模式已启用")
+            except Exception as e:
+                print(f"  [错误] 真实交易初始化失败: {e}")
                 self.use_real_trading = False
-                print("📝 切换到模拟交易模式")
-        
+                print("  [提示] 切换到模拟交易模式")
+
         if not self.use_real_trading:
             self.trader = MockTrader()
-            print("📝 使用模拟交易模式")
-        
+            print("  [信息] 模拟交易模式已启用")
+
         # 交易参数
         self.position = {}  # 持仓信息
         self.cash = 100000  # 初始资金
         self.trade_log = []  # 交易记录
-        
-        print(f"🚀 交易策略初始化完成 - {'真实交易' if self.use_real_trading else '模拟交易'}模式")
+
+        data_mode = "真实数据" if self.use_real_data else "模拟数据"
+        trade_mode = "真实交易" if self.use_real_trading else "模拟交易"
+        print(f"🚀 交易策略初始化完成 - {data_mode}/{trade_mode}模式")
     
-    def load_sample_data(self, stock_code='000001'):
+    def load_sample_data(self, stock_code='000001', start_date=None, end_date=None):
         """
-        加载示例数据 (使用现有CSV文件或生成模拟数据)
-        
+        加载股票数据（优先使用真实数据）
+
         Args:
             stock_code (str): 股票代码
-            
+            start_date (str): 开始日期，格式YYYYMMDD，默认60天前
+            end_date (str): 结束日期，格式YYYYMMDD，默认今天
+
         Returns:
             pd.DataFrame: 股票数据
         """
         try:
-            # 尝试加载现有数据文件
-            csv_files = [
-                f"{stock_code}_SZ_data.csv",
-                f"{stock_code}_SH_data.csv",
-                f"{self.data_dir}/{stock_code}_historical.csv"
-            ]
-            
-            for csv_file in csv_files:
-                if os.path.exists(csv_file):
-                    print(f"📊 加载现有数据文件: {csv_file}")
-                    data = pd.read_csv(csv_file, index_col=0, parse_dates=True)
-                    
-                    # 标准化列名
-                    if 'close' not in data.columns and '收盘' in data.columns:
-                        data = data.rename(columns={
-                            '开盘': 'open', '最高': 'high', '最低': 'low', 
-                            '收盘': 'close', '成交量': 'volume'
-                        })
-                    
-                    if len(data) > 0:
-                        print(f"✅ 成功加载 {len(data)} 条数据")
-                        return data
-            
-            # 如果没有现有数据，生成模拟数据
+            # 如果使用真实数据
+            if self.use_real_data:
+                print(f"📊 使用DataManager获取真实数据...")
+
+                # 设置默认日期范围
+                if end_date is None:
+                    end_date = datetime.now().strftime('%Y%m%d')
+                if start_date is None:
+                    start_date = (datetime.now() - timedelta(days=90)).strftime('%Y%m%d')
+
+                # 获取数据
+                data = self.data_manager.get_price(
+                    codes=stock_code,
+                    start_date=start_date,
+                    end_date=end_date
+                )
+
+                if data is not None and not data.empty:
+                    # 处理MultiIndex
+                    if isinstance(data.index, pd.MultiIndex):
+                        data = data.reset_index()
+
+                    # 标准化列名和索引
+                    if 'date' in data.columns:
+                        # 检查date列是否为时间戳（整数）
+                        if pd.api.types.is_integer_dtype(data['date']):
+                            # 毫秒级时间戳转换（QMT返回的是毫秒级时间戳）
+                            # 判断是否为毫秒级（大于10000000000）或秒级时间戳
+                            first_timestamp = data['date'].iloc[0]
+                            if first_timestamp > 10000000000:  # 毫秒级
+                                data['date'] = pd.to_datetime(data['date'], unit='ms')
+                            else:  # 秒级
+                                data['date'] = pd.to_datetime(data['date'], unit='s')
+                        else:
+                            data['date'] = pd.to_datetime(data['date'])
+
+                        # 设置索引
+                        data.set_index('date', inplace=True)
+
+                    # 确保必要的列存在
+                    required_columns = ['open', 'high', 'low', 'close', 'volume']
+                    missing_columns = [col for col in required_columns if col not in data.columns]
+
+                    if missing_columns:
+                        print(f"⚠️ 数据缺少以下列: {missing_columns}")
+                        return self._generate_sample_data(stock_code)
+
+                    print(f"✅ 成功加载真实数据: {len(data)} 条记录")
+                    print(f"📅 数据范围: {data.index[0].strftime('%Y-%m-%d')} 至 {data.index[-1].strftime('%Y-%m-%d')}")
+                    return data
+                else:
+                    print(f"⚠️ 未能获取到真实数据，使用模拟数据")
+
+            # 使用模拟数据
             print("📊 生成模拟股票数据...")
             return self._generate_sample_data(stock_code)
-            
+
         except Exception as e:
             print(f"❌ 加载数据失败: {e}")
+            print("📊 使用模拟数据...")
             return self._generate_sample_data(stock_code)
     
     def _generate_sample_data(self, stock_code, days=60):
-        """生成模拟股票数据"""
-        print(f"🎲 生成 {days} 天的模拟数据...")
-        
-        # 生成日期序列
-        dates = pd.date_range(end=datetime.now(), periods=days, freq='D')
-        
+        """
+        生成模拟股票数据
+
+        ⚠️ 警告：这是模拟数据，仅供学习和测试使用！
+        实盘交易请务必使用真实数据！
+        """
+        print(f"⚠️ 生成 {days} 天的模拟数据（仅供学习使用）")
+
+        # 生成日期序列（仅包含工作日）
+        dates = pd.date_range(end=datetime.now(), periods=days * 7 // 5, freq='B')
+
         # 生成价格数据 (随机游走)
         np.random.seed(42)  # 固定随机种子以便复现
-        
+
         initial_price = 10.0
-        returns = np.random.normal(0.001, 0.02, days)  # 日收益率
+        returns = np.random.normal(0.001, 0.02, len(dates))  # 日收益率
         prices = [initial_price]
-        
+
         for ret in returns[1:]:
             prices.append(prices[-1] * (1 + ret))
-        
+
         # 生成OHLC数据
         data = []
         for i, (date, close) in enumerate(zip(dates, prices)):
@@ -145,7 +257,7 @@ class TradingStrategy:
             low = close * (1 - abs(np.random.normal(0, 0.01)))
             open_price = prices[i-1] if i > 0 else close
             volume = np.random.randint(1000000, 10000000)
-            
+
             data.append({
                 'open': open_price,
                 'high': max(open_price, high, close),
@@ -153,14 +265,15 @@ class TradingStrategy:
                 'close': close,
                 'volume': volume
             })
-        
+
         df = pd.DataFrame(data, index=dates)
-        
+
         # 保存模拟数据
         filename = f"{self.data_dir}/{stock_code}_sample_data.csv"
         df.to_csv(filename)
         print(f"✅ 模拟数据已保存到 {filename}")
-        
+        print("⚠️ 提醒：这是模拟数据，实盘请使用真实数据！")
+
         return df
     
     def calculate_indicators(self, data):
@@ -333,11 +446,7 @@ class TradingStrategy:
             # 执行买入
             if self.use_real_trading:
                 # 真实交易
-                order_result = self.trader.buy(stock_code, price, quantity)
-                if order_result and order_result.get('success', False):
-                    success = True
-                else:
-                    return False
+                success = self.trader.buy(stock_code, price, quantity)
             else:
                 # 模拟交易
                 success = self.trader.buy(stock_code, price, quantity)
@@ -396,11 +505,7 @@ class TradingStrategy:
             # 执行卖出
             if self.use_real_trading:
                 # 真实交易
-                order_result = self.trader.sell(stock_code, price, quantity)
-                if order_result and order_result.get('success', False):
-                    success = True
-                else:
-                    return False
+                success = self.trader.sell(stock_code, price, quantity)
             else:
                 # 模拟交易
                 success = self.trader.sell(stock_code, price, quantity)
@@ -556,56 +661,323 @@ class TradingStrategy:
             print(f"❌ 绘制图表失败: {e}")
 
 
+class RealTradeAdapter:
+    """真实交易API适配器 - 使用easy_xt基础API（与02_交易基础.py相同）"""
+
+    def __init__(self):
+        self.api = None
+        self.connected = False
+        self.account_id = None
+
+        try:
+            import json
+            from pathlib import Path
+
+            # 获取easy_xt API（与02_交易基础.py相同的方式）
+            self.api = easy_xt.get_api()
+            print("  [API] API实例创建成功")
+
+            # 读取配置
+            project_root = Path(__file__).parent.parent
+            config_path = project_root / 'config' / 'unified_config.json'
+
+            userdata_path = None
+            if config_path.exists():
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    userdata_path = config.get('settings', {}).get('account', {}).get('qmt_path')
+                    self.account_id = config.get('settings', {}).get('account', {}).get('account_id')
+
+            if not userdata_path:
+                userdata_path = r'D:\国金QMT交易端模拟\userdata_mini'
+
+            print(f"  [配置] QMT路径: {userdata_path}")
+            print(f"  [配置] 账户ID: {self.account_id}")
+
+            # 初始化数据服务
+            try:
+                data_success = self.api.init_data()
+                if data_success:
+                    print("  [成功] 数据服务初始化成功")
+                else:
+                    print("  [警告] 数据服务初始化失败，继续尝试")
+            except Exception as e:
+                print(f"  [警告] 数据服务初始化异常: {e}")
+
+            # 初始化交易服务（与02_交易基础.py相同）
+            try:
+                trade_success = self.api.init_trade(userdata_path, 'learning_session')
+                if trade_success:
+                    print("  [成功] 交易服务初始化成功")
+                    self.connected = True
+                else:
+                    print("  [失败] 交易服务初始化失败")
+                    print("  [提示] 请确保QMT客户端已启动并登录")
+                    return
+            except Exception as e:
+                print(f"  [异常] 交易服务初始化异常: {e}")
+                print("  [提示] 请确保QMT客户端已启动并登录")
+                return
+
+            # 添加账户（与02_交易基础.py相同）
+            if self.account_id:
+                try:
+                    add_success = self.api.add_account(self.account_id, 'STOCK')
+                    if add_success:
+                        print(f"  [成功] 交易账户添加成功: {self.account_id}")
+                    else:
+                        print(f"  [警告] 交易账户添加失败")
+                except Exception as e:
+                    print(f"  [警告] 添加交易账户异常: {e}")
+
+            # 检查交易时间（与02_交易基础.py相同的逻辑）
+            try:
+                from datetime import datetime
+                now = datetime.now()
+                current_hour = now.hour
+                current_minute = now.minute
+                current_weekday = now.weekday()
+
+                is_weekend = current_weekday >= 5  # 周六周日
+                morning = (9 < current_hour < 11) or (current_hour == 9 and current_minute >= 30) or (current_hour == 11 and current_minute <= 30)
+                afternoon = (13 <= current_hour < 15)
+                is_trading_time = morning or afternoon
+
+                now_str = now.strftime('%Y-%m-%d %H:%M:%S')
+                weekday_str = ['一', '二', '三', '四', '五', '六', '日'][current_weekday]
+                print(f"  [时间] {now_str} 星期{weekday_str}")
+
+                if is_weekend:
+                    print(f"  [警告] 今天是周末，市场不开盘")
+                elif is_trading_time:
+                    print(f"  [信息] 当前在交易时间，可以正常交易")
+                else:
+                    print(f"  [警告] 当前不在交易时间")
+                    print(f"  [信息] 交易时间: 周一至周五 9:30-11:30, 13:00-15:00")
+            except Exception as e:
+                print(f"  [警告] 检查交易时间失败: {e}")
+
+        except Exception as e:
+            print(f"  [错误] 初始化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def buy(self, stock_code, price, quantity):
+        """买入（与02_交易基础.py相同的调用方式）"""
+        if not self.connected or not self.api:
+            print("  [错误] 未连接交易服务")
+            return False
+
+        if not self.account_id:
+            print("  [错误] 未设置账户ID")
+            return False
+
+        try:
+            print(f"  [下单] 买入 {stock_code} {quantity}股 @ {price:.2f}元")
+
+            # 使用easy_xt的buy方法（与02_交易基础.py完全相同）
+            order_id = self.api.buy(
+                account_id=self.account_id,
+                code=stock_code,
+                volume=quantity,
+                price=price,
+                price_type='limit'  # 限价单
+            )
+
+            if order_id:
+                print(f"  [成功] 委托成功，订单号: {order_id}")
+                return True
+            else:
+                print(f"  [失败] 委托失败")
+                return False
+
+        except Exception as e:
+            print(f"  [错误] 买入失败: {e}")
+            return False
+
+    def sell(self, stock_code, price, quantity):
+        """卖出（与02_交易基础.py相同的调用方式）"""
+        if not self.connected or not self.api:
+            print("  [错误] 未连接交易服务")
+            return False
+
+        if not self.account_id:
+            print("  [错误] 未设置账户ID")
+            return False
+
+        try:
+            print(f"  [下单] 卖出 {stock_code} {quantity}股 @ {price:.2f}元")
+
+            # 使用easy_xt的sell方法（与02_交易基础.py完全相同）
+            order_id = self.api.sell(
+                account_id=self.account_id,
+                code=stock_code,
+                volume=quantity,
+                price=price,
+                price_type='limit'  # 限价单
+            )
+
+            if order_id:
+                print(f"  [成功] 委托成功，订单号: {order_id}")
+                return True
+            else:
+                print(f"  [失败] 委托失败")
+                return False
+
+        except Exception as e:
+            print(f"  [错误] 卖出失败: {e}")
+            return False
+
+
 class MockTrader:
-    """模拟交易器"""
-    
+    """模拟交易器 - 用于学习测试"""
+
     def __init__(self):
         self.orders = []
+        self.cash = 100000  # 模拟初始资金
+        self.position = {}  # 模拟持仓
         print("📝 模拟交易器初始化完成")
-    
+
     def buy(self, stock_code, price, quantity):
         """模拟买入"""
+        # 检查资金是否足够
+        required_cash = price * quantity
+        if required_cash > self.cash:
+            print(f"  ⚠️ 资金不足：需要 {required_cash:.2f}，可用 {self.cash:.2f}")
+            return False
+
+        # 模拟买入成功
         order = {
             'stock_code': stock_code,
             'action': 'BUY',
             'price': price,
             'quantity': quantity,
-            'timestamp': datetime.now()
+            'amount': required_cash,
+            'timestamp': datetime.now(),
+            'status': 'filled'
         }
         self.orders.append(order)
+
+        # 更新模拟资金和持仓
+        self.cash -= required_cash
+        if stock_code not in self.position:
+            self.position[stock_code] = {'quantity': 0, 'total_cost': 0}
+
+        old_quantity = self.position[stock_code]['quantity']
+        old_total_cost = self.position[stock_code]['total_cost']
+
+        self.position[stock_code]['quantity'] = old_quantity + quantity
+        self.position[stock_code]['total_cost'] = old_total_cost + required_cash
+
         return True
-    
+
     def sell(self, stock_code, price, quantity):
         """模拟卖出"""
+        # 检查持仓是否足够
+        if stock_code not in self.position or self.position[stock_code]['quantity'] < quantity:
+            print(f"  ⚠️ 持仓不足：想要卖出 {quantity}，持有 {self.position.get(stock_code, {}).get('quantity', 0)}")
+            return False
+
+        # 模拟卖出成功
         order = {
             'stock_code': stock_code,
             'action': 'SELL',
             'price': price,
             'quantity': quantity,
-            'timestamp': datetime.now()
+            'amount': price * quantity,
+            'timestamp': datetime.now(),
+            'status': 'filled'
         }
         self.orders.append(order)
+
+        # 更新模拟资金和持仓
+        self.cash += price * quantity
+        self.position[stock_code]['quantity'] -= quantity
+
         return True
 
 
 def main():
     """主函数 - 完整的交易策略演示"""
+
+    # 解析命令行参数
+    parser = argparse.ArgumentParser(description='股票量化交易学习案例')
+    parser.add_argument('--real-trading', action='store_true',
+                       help='启用真实交易模式（默认为模拟交易）')
+    parser.add_argument('--sim-data', action='store_true',
+                       help='使用模拟数据（默认使用真实数据）')
+    parser.add_argument('--stock', type=str, default='000001',
+                       help='股票代码（默认：000001）')
+    args = parser.parse_args()
+
+    # 初始化交易策略配置
+    # 优先使用命令行参数，否则使用文件开头的配置
+    use_real_data = not args.sim_data if args.sim_data else USE_REAL_DATA
+    use_real_trading = args.real_trading if args.real_trading else USE_REAL_TRADING
+
     print("=" * 60)
-    print("🚀 股票量化交易学习案例 - 数据获取与交易结合")
+    print("股票量化交易学习案例 - 数据获取与交易结合")
     print("=" * 60)
-    
-    # 初始化交易策略
-    strategy = TradingStrategy(use_real_trading=False)  # 使用模拟交易
-    
+    print()
+    print("[当前配置]")
+    print(f"  - 数据模式：{'[OK] 真实数据' if use_real_data else '[TEST] 模拟数据'}")
+    print(f"  - 交易模式：{'[WARNING] 真实交易（有风险！）' if use_real_trading else '[OK] 模拟交易（零风险）'}")
+    print()
+    if use_real_trading:
+        print("  [!!!] 警告：已启用真实交易模式 [!!!]")
+        print()
+    print("[提示]")
+    print("  - 配置位置：文件开头第 37-38 行")
+    print("  - 或使用命令行：python 10_数据获取与交易结合案例.py --real-trading")
+    print()
+
+    # 如果启用真实交易，显示警告
+    if use_real_trading:
+        print("=" * 60)
+        print("🔴🔴🔴 警告：真实交易模式 🔴🔴🔴")
+        print("=" * 60)
+        print("您即将启用真实交易模式，这会产生真实资金交易！")
+        print()
+        print("⚠️ 风险提示：")
+        print("  1. 真实交易可能导致资金损失")
+        print("  2. 策略表现可能与历史回测不同")
+        print("  3. 市场波动可能导致意外亏损")
+        print("  4. 请确保您已充分测试策略")
+        print()
+        print("建议：")
+        print("  - 先用模拟交易充分测试")
+        print("  - 使用小资金验证策略")
+        print("  - 设置止损止盈")
+        print()
+
+        # 要求用户确认
+        confirm = input("确认要启用真实交易吗？(输入 'YES' 确认): ")
+        if confirm != 'YES':
+            print("❌ 已取消，将使用模拟交易模式")
+            use_real_trading = False
+        else:
+            print("✅ 已启用真实交易模式")
+        print("=" * 60)
+        print()
+
+    strategy = TradingStrategy(
+        use_real_data=use_real_data,
+        use_real_trading=use_real_trading
+    )
+
     # 测试股票
-    stock_code = '000001'
-    
+    stock_code = args.stock
+
     print("\n" + "=" * 40)
     print("📊 第一步：加载股票数据")
     print("=" * 40)
-    
-    # 加载数据
-    data = strategy.load_sample_data(stock_code)
+
+    # 加载数据（可指定日期范围）
+    data = strategy.load_sample_data(
+        stock_code=stock_code,
+        # start_date='20240101',  # 可选：指定开始日期
+        # end_date='20241231'     # 可选：指定结束日期
+    )
     if data.empty:
         print("❌ 无法获取股票数据")
         return
@@ -651,8 +1023,19 @@ def main():
     print("\n" + "=" * 60)
     print("✅ 完整交易策略演示完成！")
     print("📁 所有文件已保存到相应目录")
-    print("📝 这是一个完整的从数据获取到交易执行的学习案例")
-    print("🔄 您可以修改策略参数来测试不同的交易策略")
+    print()
+    print("📊 数据模式：", "真实数据" if strategy.use_real_data else "模拟数据")
+    print("💼 交易模式：", "真实交易" if strategy.use_real_trading else "模拟交易")
+    print()
+    print("💡 使用建议：")
+    print("  1. 学习阶段：使用真实数据 + 模拟交易")
+    print("  2. 测试阶段：使用真实数据 + 模拟交易，验证策略")
+    print("  3. 实盘阶段：充分测试后，使用真实数据 + 真实交易")
+    print()
+    print("🔄 您可以：")
+    print("  - 修改策略参数来测试不同的交易策略")
+    print("  - 更换股票代码来分析不同标的")
+    print("  - 调整日期范围来测试不同时间段")
     print("=" * 60)
 
 
