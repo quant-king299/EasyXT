@@ -280,7 +280,7 @@ PLAN.md
 archive/
 
 # 项目根目录的存档目录
-miniqmt扩展\.archive/
+.archive/
 
 # 101因子平台的开发文档（项目根docs已有完整版本）
 101因子/101因子分析平台/docs/

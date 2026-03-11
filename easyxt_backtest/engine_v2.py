@@ -63,19 +63,23 @@ class _BacktraderStrategyAdapter(bt.Strategy):
         ('user_strategy', None),  # 用户定义的 StrategyBase 实例
         ('data_manager', None),   # 数据管理器
         ('rebalance_dates', []),  # 调仓日期列表
+        ('rebalance_dates_set', set()),  # 调仓日期集合（快速查找）
+        ('trading_dates', []),    # 所有交易日列表
     )
 
     def __init__(self):
         self.user_strategy = self.params.user_strategy
         self.data_manager = self.params.data_manager
         self.rebalance_dates = self.params.rebalance_dates
+        self.rebalance_dates_set = self.params.rebalance_dates_set
+        self.trading_dates = self.params.trading_dates
 
-        # 记录交易历史
+        # 记录交易历史（格式：date, symbol, direction, volume, price, amount）
         self.trade_log = []
         self.portfolio_values = []
 
-        # 标记是否已初始化
-        self._initialized = False
+        # 记录已经调仓过的日期
+        self._rebalanced_dates = set()
 
     def next(self):
         """每个bar调用一次"""
@@ -117,18 +121,58 @@ class _BacktraderStrategyAdapter(bt.Strategy):
             print(f"    [WARNING] 记录净值失败: {e}")
             return
 
-        # 检查是否需要调仓
-        if current_date_str in self.rebalance_dates:
+        # ✅ 检查是否需要调仓（使用交易日匹配）
+        should_rebalance = False
+        matched_rebalance_date = None
+
+        # 方案1: 当前日期本身就是调仓日
+        if current_date_str in self.rebalance_dates_set:
+            should_rebalance = True
+            matched_rebalance_date = current_date_str
+        else:
+            # 方案2: 当前日期是某个调仓日之后的第一个交易日
+            # 例如：调仓日是20240101（非交易日），当前是20240102（交易日）→ 需要调仓
+            for rebalance_date in self.rebalance_dates:
+                if rebalance_date not in self._rebalanced_dates:  # 还没调仓过
+                    if current_date_str >= rebalance_date:
+                        should_rebalance = True
+                        matched_rebalance_date = rebalance_date
+                        break
+
+        # 执行调仓
+        if should_rebalance and matched_rebalance_date not in self._rebalanced_dates:
             try:
-                self._rebalance(current_date_str)
+                self._rebalance(matched_rebalance_date, current_date_str)
+                self._rebalanced_dates.add(matched_rebalance_date)
             except Exception as e:
                 print(f"  [ERROR] 调仓失败: {e}")
                 import traceback
                 traceback.print_exc()
 
-    def _rebalance(self, date_str: str):
-        """执行调仓"""
-        print(f"\n[{date_str}] 开始调仓...")
+        # 🔍 调试：每20个bar显示一次进度
+        try:
+            if len(self.portfolio_values) % 20 == 0:
+                rebalance_count = len(self._rebalanced_dates)
+                total_rebalance = len(self.rebalance_dates)
+                print(f"  [进度] 日期: {current_date_str}, 已调仓: {rebalance_count}/{total_rebalance}")
+        except:
+            pass
+
+    def _rebalance(self, rebalance_date_str: str, actual_date_str: str = None):
+        """执行调仓
+
+        Args:
+            rebalance_date_str: 计划调仓日期（例如：20240101）
+            actual_date_str: 实际执行日期（例如：20240102，如果调仓日不是交易日）
+        """
+        if actual_date_str is None:
+            actual_date_str = rebalance_date_str
+
+        date_display = f"{rebalance_date_str}" if rebalance_date_str == actual_date_str else f"{rebalance_date_str} (实际: {actual_date_str})"
+
+        print(f"\n{'='*70}")
+        print(f"[{date_display}] 🔔 触发调仓！")
+        print(f"{'='*70}")
 
         # 获取当前总资产
         try:
@@ -142,46 +186,84 @@ class _BacktraderStrategyAdapter(bt.Strategy):
             print(f"  [ERROR] 总资产无效 ({total_value})，跳过调仓")
             return
 
+        print(f"  当前总资产: {total_value:,.2f}")
+
         # 1. 选股
         try:
-            selected_stocks = self.user_strategy.select_stocks(date_str)
-            print(f"  选中股票: {len(selected_stocks)} 只")
+            print(f"  🔍 调用 select_stocks('{rebalance_date_str}')...")
+            selected_stocks = self.user_strategy.select_stocks(rebalance_date_str)
+            print(f"  ✅ 选中股票: {len(selected_stocks)} 只")
+            if selected_stocks:
+                print(f"     股票列表: {', '.join(selected_stocks[:5])}{'...' if len(selected_stocks) > 5 else ''}")
         except Exception as e:
-            print(f"  [ERROR] 选股失败: {e}")
+            print(f"  ❌ [ERROR] 选股失败: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         if not selected_stocks:
-            print("  [WARNING] 未选中任何股票，清仓")
+            print("  ⚠️  [WARNING] 未选中任何股票，清仓")
             self._close_all_positions()
             return
 
         # 2. 获取目标权重
         try:
-            target_weights = self.user_strategy.get_target_weights(date_str, selected_stocks)
-            print(f"  目标权重: {len(target_weights)} 只")
+            print(f"  🔍 调用 get_target_weights('{rebalance_date_str}', {len(selected_stocks)}只)...")
+            target_weights = self.user_strategy.get_target_weights(rebalance_date_str, selected_stocks)
+            print(f"  ✅ 目标权重: {len(target_weights)} 只")
+            if target_weights:
+                for symbol, weight in list(target_weights.items())[:3]:
+                    print(f"     {symbol}: {weight:.2%}")
+                if len(target_weights) > 3:
+                    print(f"     ... 共 {len(target_weights)} 只")
         except Exception as e:
-            print(f"  [ERROR] 获取目标权重失败: {e}")
+            print(f"  ❌ [ERROR] 获取目标权重失败: {e}")
+            import traceback
+            traceback.print_exc()
             return
 
         if not target_weights:
-            print("  [WARNING] 目标权重为空，清仓")
+            print("  ⚠️  [WARNING] 目标权重为空，清仓")
             self._close_all_positions()
             return
 
         # 3. 执行调仓
-        self._execute_rebalance(target_weights, date_str, total_value)
+        self._execute_rebalance(target_weights, rebalance_date_str, actual_date_str, total_value)
 
-    def _execute_rebalance(self, target_weights: Dict[str, float], date_str: str, total_value: float):
+    def _execute_rebalance(self, target_weights: Dict[str, float], rebalance_date_str: str, actual_date_str: str, total_value: float):
         """执行调仓逻辑（完全修复版）"""
-        print(f"  当前总资产: {total_value:,.2f}")
+        print(f"\n  📊 当前总资产: {total_value:,.2f}")
 
         # ✅ 保护：验证权重总和
         weight_sum = sum(target_weights.values())
         if weight_sum <= 0 or weight_sum > 1.5:  # 允许1.5的误差范围
-            print(f"  [ERROR] 权重总和异常 ({weight_sum:.2f})，跳过调仓")
+            print(f"  ❌ [ERROR] 权重总和异常 ({weight_sum:.2f})，跳过调仓")
             return
 
+        print(f"  ✅ 权重总和: {weight_sum:.2%}")
+
+        # 显示当前持仓
+        print(f"\n  📈 当前持仓:")
+        has_positions = False
+        for data in self.datas:
+            try:
+                position = self.getposition(data)
+                if position.size > 0:
+                    has_positions = True
+                    try:
+                        price = float(data.close[0])
+                        value = position.size * price
+                        print(f"     {data._name}: {position.size}股 × {price:.2f} = {value:,.2f}")
+                    except:
+                        print(f"     {data._name}: {position.size}股")
+            except:
+                pass
+        if not has_positions:
+            print(f"     (空仓)")
+
         # 第一遍：卖出不在目标中的股票
+        print(f"\n  🔻 第一步: 卖出非目标股票")
+        sell_count = 0
         for data in self.datas:
             try:
                 if data._name in target_weights:
@@ -189,18 +271,43 @@ class _BacktraderStrategyAdapter(bt.Strategy):
 
                 position = self.getposition(data)
                 if position.size > 0:
+                    # 获取卖出价格
+                    try:
+                        sell_price = float(data.close[0])
+                    except:
+                        sell_price = 0.0
+
+                    # 执行卖出
                     self.order = self.sell(data=data, size=position.size)
-                    print(f"    [SELL] {data._name} {position.size}股")
+                    print(f"     [SELL] {data._name} {position.size}股 @ {sell_price:.2f}")
+
+                    # 记录交易
+                    self.trade_log.append({
+                        'date': actual_date_str,
+                        'symbol': data._name,
+                        'direction': 'sell',
+                        'volume': int(position.size),
+                        'price': float(sell_price),
+                        'amount': float(position.size * sell_price)
+                    })
+                    sell_count += 1
             except Exception as e:
-                print(f"    [WARNING] 卖出 {data._name} 失败: {e}")
+                print(f"     [WARNING] 卖出 {data._name} 失败: {e}")
                 continue
 
+        if sell_count == 0:
+            print(f"     (无需卖出)")
+
         # 第二遍：买入/调整目标股票
+        print(f"\n  🔺 第二步: 买入/调整目标股票")
+        buy_count = 0
+        ok_count = 0
+
         for symbol, weight in target_weights.items():
             try:
                 # ✅ 保护：检查权重
                 if weight <= 0 or weight > 1:
-                    print(f"    [SKIP] {symbol} 权重无效 ({weight})")
+                    print(f"     [SKIP] {symbol} 权重无效 ({weight})")
                     continue
 
                 target_value = total_value * weight
@@ -213,12 +320,12 @@ class _BacktraderStrategyAdapter(bt.Strategy):
                         break
 
                 if target_data is None:
-                    print(f"    [SKIP] {symbol} 数据源不存在")
+                    print(f"     [SKIP] {symbol} 数据源不存在")
                     continue
 
                 # ✅ 保护：检查数据源是否有数据
                 if len(target_data) < 1:
-                    print(f"    [SKIP] {symbol} 数据不足（长度0）")
+                    print(f"     [SKIP] {symbol} 数据不足（长度0）")
                     continue
 
                 # 获取当前持仓
@@ -229,19 +336,19 @@ class _BacktraderStrategyAdapter(bt.Strategy):
                 try:
                     current_price = float(target_data.close[0])
                 except:
-                    print(f"    [SKIP] {symbol} 无法获取价格")
+                    print(f"     [SKIP] {symbol} 无法获取价格")
                     continue
 
                 # ✅ 保护：检查价格是否有效
                 if current_price <= 0 or np.isnan(current_price) or np.isinf(current_price):
-                    print(f"    [SKIP] {symbol} 价格无效 ({current_price})")
+                    print(f"     [SKIP] {symbol} 价格无效 ({current_price})")
                     continue
 
                 # 计算目标持仓数量
                 try:
                     target_size = int(target_value / current_price / 100) * 100  # 整手
                 except ZeroDivisionError:
-                    print(f"    [SKIP] {symbol} 价格为0，无法计算持仓数量")
+                    print(f"     [SKIP] {symbol} 价格为0，无法计算持仓数量")
                     continue
 
                 # 调整持仓
@@ -250,19 +357,50 @@ class _BacktraderStrategyAdapter(bt.Strategy):
                 if diff > 0:
                     # 需要买入
                     self.order = self.buy(data=target_data, size=diff)
-                    print(f"    [BUY] {symbol} {diff}股 @ {current_price:.2f}")
+                    cost = diff * current_price
+                    print(f"     [BUY] {symbol} {diff}股 @ {current_price:.2f} (成本: {cost:,.2f})")
+
+                    # 记录交易
+                    self.trade_log.append({
+                        'date': actual_date_str,
+                        'symbol': symbol,
+                        'direction': 'buy',
+                        'volume': int(diff),
+                        'price': float(current_price),
+                        'amount': float(cost)
+                    })
+                    buy_count += 1
                 elif diff < 0:
                     # 需要卖出
                     self.order = self.sell(data=target_data, size=abs(diff))
-                    print(f"    [SELL] {symbol} {abs(diff)}股 @ {current_price:.2f}")
+                    sell_amount = abs(diff) * current_price
+                    print(f"     [SELL] {symbol} {abs(diff)}股 @ {current_price:.2f}")
+
+                    # 记录交易
+                    self.trade_log.append({
+                        'date': actual_date_str,
+                        'symbol': symbol,
+                        'direction': 'sell',
+                        'volume': int(abs(diff)),
+                        'price': float(current_price),
+                        'amount': float(sell_amount)
+                    })
+                    buy_count += 1
                 else:
-                    print(f"    [OK] {symbol} 持仓已达标 ({current_size}股)")
+                    print(f"     [OK] {symbol} 持仓已达标 ({current_size}股, 价值: {current_size * current_price:,.2f})")
+                    ok_count += 1
 
             except Exception as e:
-                print(f"    [ERROR] 处理 {symbol} 失败: {e}")
+                print(f"     [ERROR] 处理 {symbol} 失败: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
+
+        if buy_count == 0 and ok_count == 0:
+            print(f"     (无任何交易)")
+
+        print(f"\n  📊 调仓完成: 买入/调整 {buy_count} 只, 保持 {ok_count} 只")
+        print(f"{'='*70}\n")
 
     def _close_all_positions(self):
         """清空所有持仓"""
@@ -276,44 +414,10 @@ class _BacktraderStrategyAdapter(bt.Strategy):
                 continue
 
     def notify_trade(self, trade):
-        """交易完成通知"""
-        if trade.isclosed:
-            try:
-                # ✅ 保护：安全获取交易信息
-                symbol = 'UNKNOWN'
-                pnl = 0.0
-                pnl_net = 0.0
-                commission = 0.0
-                date_str = 'UNKNOWN'
-
-                if hasattr(trade, 'data') and trade.data is not None:
-                    if hasattr(trade.data, '_name'):
-                        symbol = trade.data._name
-
-                if hasattr(self, 'data') and len(self.data) > 0:
-                    try:
-                        date_str = self.data.datetime.date(0).strftime('%Y%m%d')
-                    except:
-                        pass
-
-                if hasattr(trade, 'pnl'):
-                    pnl = float(trade.pnl) if not np.isnan(trade.pnl) else 0.0
-
-                if hasattr(trade, 'pnlcomm'):
-                    pnl_net = float(trade.pnlcomm) if not np.isnan(trade.pnlcomm) else 0.0
-
-                if hasattr(trade, 'commission'):
-                    commission = float(trade.commission) if not np.isnan(trade.commission) else 0.0
-
-                self.trade_log.append({
-                    'date': date_str,
-                    'symbol': symbol,
-                    'pnl': pnl,
-                    'pnl_net': pnl_net,
-                    'commission': commission,
-                })
-            except Exception as e:
-                print(f"    [WARNING] 记录交易失败: {e}")
+        """交易完成通知（已禁用，交易记录在买卖时直接记录）"""
+        # 我们已经在 _execute_rebalance 中记录了所有交易
+        # 这里不再重复记录，避免格式冲突
+        pass
 
 
 class BacktestEngineV2:
@@ -410,30 +514,18 @@ class BacktestEngineV2:
 
             if df is not None and not df.empty and len(df) > 0:
                 try:
-                    # ✅ 解析日期范围
-                    try:
-                        dt_start = pd.to_datetime(start_date, format='%Y%m%d')
-                        dt_end = pd.to_datetime(end_date, format='%Y%m%d')
-                    except:
-                        dt_start = None
-                        dt_end = None
-
-                    # ✅ 创建数据源，设置日期范围
-                    if dt_start is not None and dt_end is not None:
-                        data = bt.feeds.PandasData(
-                            dataname=df,
-                            name=symbol,
-                            fromdate=dt_start,
-                            todate=dt_end
-                        )
-                    else:
-                        data = bt.feeds.PandasData(
-                            dataname=df,
-                            name=symbol
-                        )
+                    # ✅ 不设置 fromdate/todate，让 Backtrader 使用 DataFrame 中的所有数据
+                    # 因为 DataFrame 已经被 _load_symbol_data 过滤到正确的日期范围了
+                    data = bt.feeds.PandasData(
+                        dataname=df,
+                        name=symbol
+                    )
 
                     cerebro.adddata(data)
                     valid_symbols.append(symbol)
+
+                    # 🔍 调试：显示数据范围
+                    print(f"  [DEBUG] {symbol}: {len(df)}条, {df.index[0]} ~ {df.index[-1]}")
                 except Exception as e:
                     print(f"  [WARNING] {symbol} 添加数据源失败: {e}")
             else:
@@ -451,13 +543,30 @@ class BacktestEngineV2:
             _BacktraderStrategyAdapter,
             user_strategy=strategy,
             data_manager=self.data_manager,
-            rebalance_dates=rebalance_dates
+            rebalance_dates=rebalance_dates,
+            rebalance_dates_set=set(rebalance_dates),  # 转换为集合以便快速查找
+            trading_dates=trading_days
         )
 
         # 运行回测
         print(f"\n开始执行回测...")
+
+        # 🔍 调试：显示数据源信息
+        print(f"\n[调试] Cerebro 数据源信息:")
+        for i, data in enumerate(cerebro.datas):
+            print(f"  数据源 {i+1}: {data._name if hasattr(data, '_name') else 'Unknown'}")
+            try:
+                print(f"    数据长度: {len(data)} 条")
+                if len(data) > 0:
+                    print(f"    第一条: {data.datetime.date(0)}")
+                    print(f"    最后一条: {data.datetime.date(-1)}")
+            except Exception as e:
+                print(f"    读取失败: {e}")
+
         try:
+            print(f"\n[调试] 开始调用 cerebro.run()...")
             results = cerebro.run()
+            print(f"[调试] cerebro.run() 完成，返回 {len(results)} 个策略")
         except Exception as e:
             print(f"\n[ERROR] 回测执行失败: {e}")
             import traceback
@@ -513,12 +622,22 @@ class BacktestEngineV2:
             if df is None or df.empty:
                 return None
 
-            # 重置索引
-            df = df.reset_index()
+            # 🔍 调试：检查原始数据结构
+            print(f"  [DEBUG] {symbol} 原始数据: 形状={df.shape}, 列={list(df.columns)}, 索引名={df.index.name}")
+            if len(df.index) > 0:
+                print(f"  [DEBUG] {symbol} 索引类型: {type(df.index)}")
+                print(f"  [DEBUG] {symbol} 第一个索引值: {df.index[0]} (类型: {type(df.index[0])})")
+                if isinstance(df.index, pd.MultiIndex):
+                    print(f"  [DEBUG] {symbol} MultiIndex级别: {df.index.names}")
+                    print(f"  [DEBUG] {symbol} MultiIndex前3个: {list(df.index[:3])}")
 
-            # 确保有必要的列
-            required_cols = ['date', 'open', 'high', 'low', 'close', 'volume']
+            # ✅ QMT 返回的数据：日期在索引中，但索引名可能是 None 或 'time'
+            # 需要保留索引作为日期，而不是 reset_index
+
+            # 确保有必要的列（不包括 date，因为 date 在索引中）
+            required_cols = ['open', 'high', 'low', 'close', 'volume']
             if not all(col in df.columns for col in required_cols):
+                print(f"  [ERROR] {symbol} 缺少必要的列: {df.columns}")
                 return None
 
             # ✅ 过滤掉所有无效数据
@@ -548,13 +667,34 @@ class BacktestEngineV2:
             if df.empty:
                 return None
 
-            # 设置日期为索引
+            # ✅ 核心修复：处理 QMT 返回的 MultiIndex 格式
+            # QMT 返回的 DataFrame 索引是 MultiIndex，格式：(date, symbol)
+            # date 是 Unix 时间戳（毫秒），symbol 是股票代码
             try:
-                df['datetime'] = pd.to_datetime(df['date'])
-            except:
-                return None
+                if isinstance(df.index, pd.MultiIndex):
+                    # MultiIndex 格式：(date, symbol)
+                    # 级别0是date（Unix时间戳），级别1是symbol
+                    df.index = df.index.get_level_values(0)  # 提取级别0（date）
+                    # 将 Unix 时间戳（毫秒）转换为 datetime
+                    df.index = pd.to_datetime(df.index, unit='ms')
+                    df.index.name = 'datetime'
+                    print(f"  [OK] {symbol} 从MultiIndex提取日期索引（Unix时间戳）")
+                elif not isinstance(df.index, pd.DatetimeIndex):
+                    # 普通索引，尝试转换
+                    df.index = pd.to_datetime(df.index)
+                    df.index.name = 'datetime'
+                else:
+                    # 已经是 DatetimeIndex，直接使用
+                    df.index.name = 'datetime'
 
-            df.set_index('datetime', inplace=True)
+                # 验证日期是否合理
+                if df.index.min().year < 2000 or df.index.max().year > 2100:
+                    print(f"  [WARNING] {symbol} 日期范围异常: {df.index.min()} ~ {df.index.max()}")
+                    return None
+
+            except Exception as e:
+                print(f"  [ERROR] {symbol} 日期解析失败: {e}, 索引类型: {type(df.index)}")
+                return None
 
             # 确保按日期排序
             df.sort_index(inplace=True)
@@ -562,10 +702,14 @@ class BacktestEngineV2:
             # 去重（保留最后一条）
             df = df[~df.index.duplicated(keep='last')]
 
+            print(f"  [OK] {symbol}: {len(df)}条, {df.index[0]} ~ {df.index[-1]}")
+
             return df
 
         except Exception as e:
             print(f"  [ERROR] {symbol} 数据加载失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _extract_result(self, strategy, trading_days: List[str]) -> BacktestResult:
@@ -577,8 +721,13 @@ class BacktestEngineV2:
         # 1. 交易记录
         if hasattr(strategy, 'trade_log') and strategy.trade_log:
             trades_df = pd.DataFrame(strategy.trade_log)
+            print(f"\n[调试] 交易记录: {len(trades_df)} 笔")
+            if not trades_df.empty:
+                print(f"[调试] 交易记录列: {list(trades_df.columns)}")
+                print(f"[调试] 前3笔交易:\n{trades_df.head(3)}")
         else:
             trades_df = pd.DataFrame()
+            print(f"\n[调试] 无交易记录")
 
         # 2. 持仓历史
         if hasattr(strategy, 'portfolio_values') and strategy.portfolio_values:
