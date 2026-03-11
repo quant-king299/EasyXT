@@ -279,6 +279,9 @@ PLAN.md
 **/archive/
 archive/
 
+# 项目根目录的存档目录
+miniqmt扩展\.archive/
+
 # 101因子平台的开发文档（项目根docs已有完整版本）
 101因子/101因子分析平台/docs/
 
@@ -337,3 +340,9 @@ check_*.py
 verify_*.py
 docs/market_cap_data_analysis.md
 docs/*数据*.md
+easyxt_backtest/README_V2.md
+easyxt_backtest/README_V3.md
+.archive/README.md
+101因子/101因子分析平台/scripts/test_datasource.py
+101因子/101因子分析平台/scripts/test_datasource.py
+101因子/101因子分析平台/scripts/test_datasource.py

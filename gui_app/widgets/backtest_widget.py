@@ -32,29 +32,23 @@ except ImportError:
     MATPLOTLIB_AVAILABLE = False
     print("[WARNING] matplotlib未安装，净值曲线将显示为占位符")
 
-# 导入回测模块
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# 导入回测模块（统一使用 easyxt_backtest）
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 try:
-    # 优先使用修复版引擎
-    from backtest.engine import AdvancedBacktestEngine, DualMovingAverageStrategy
-    print("[OK] 使用修复版回测引擎")
-except ImportError:
-    try:
-        from backtest.engine import AdvancedBacktestEngine, DualMovingAverageStrategy
-        print("[WARNING] 使用原版回测引擎")
-    except ImportError:
-        print("[ERROR] 回测引擎导入失败")
-        AdvancedBacktestEngine = None
-        DualMovingAverageStrategy = None
-
-try:
-    from backtest.data_manager import DataManager, DataSource
-    from backtest.risk_analyzer import RiskAnalyzer
-except ImportError:
-    print("⚠️ 回测模块导入失败，请检查模块路径")
+    from easyxt_backtest.api import TechnicalBacktestEngine
+    from easyxt_backtest.strategies.technical import DualMovingAverageStrategy
+    from easyxt_backtest.core import DataManager
+    from easyxt_backtest.performance import PerformanceAnalyzer
+    print("[OK] 使用统一回测框架 (easyxt_backtest v3)")
+    BACKTEST_ENGINE_AVAILABLE = True
+except ImportError as e:
+    print(f"[ERROR] 回测引擎导入失败: {e}")
+    print("请确保 easyxt_backtest 模块可用")
+    TechnicalBacktestEngine = None
+    DualMovingAverageStrategy = None
     DataManager = None
-    DataSource = None
-    RiskAnalyzer = None
+    PerformanceAnalyzer = None
+    BACKTEST_ENGINE_AVAILABLE = False
 
 
 class BacktestWorker(QThread):
@@ -75,55 +69,50 @@ class BacktestWorker(QThread):
         try:
             self.status_updated.emit("🚀 初始化回测引擎...")
             self.progress_updated.emit(10)
-            
-            # 创建回测引擎
-            engine = AdvancedBacktestEngine(
+
+            # 创建回测引擎（使用新的统一框架）
+            engine = TechnicalBacktestEngine(
                 initial_cash=self.backtest_params['initial_cash'],
                 commission=self.backtest_params['commission']
             )
-            
+
             self.status_updated.emit("📊 获取历史数据...")
             self.progress_updated.emit(30)
 
-            # 获取数据（支持复权）
-            data_manager = DataManager()
-            stock_data = data_manager.get_stock_data(
+            # 加载数据
+            data = engine.load_data(
                 stock_code=self.backtest_params['stock_code'],
                 start_date=self.backtest_params['start_date'],
-                end_date=self.backtest_params['end_date'],
-                adjust=self.backtest_params.get('adjust', 'none')  # ← 添加复权参数
+                end_date=self.backtest_params['end_date']
             )
-            
-            if stock_data.empty:
+
+            if data is None:
                 raise Exception("无法获取股票数据")
-            
+
             self.status_updated.emit("🔧 配置策略参数...")
             self.progress_updated.emit(50)
-            
-            # 添加数据和策略
-            engine.add_data(stock_data)
+
+            # 添加数据
+            engine.add_data(data)
+
+            # 添加策略
             engine.add_strategy(
                 DualMovingAverageStrategy,
                 short_period=self.backtest_params['short_period'],
-                long_period=self.backtest_params['long_period'],
-                rsi_period=self.backtest_params['rsi_period']
+                long_period=self.backtest_params['long_period']
             )
-            
+
             self.status_updated.emit("⚡ 执行回测计算...")
             self.progress_updated.emit(70)
-            
+
             # 运行回测
-            results = engine.run_backtest()
-            
-            self.status_updated.emit("📈 分析风险指标...")
+            results = engine.run()
+
+            self.status_updated.emit("📈 分析完成...")
             self.progress_updated.emit(90)
-            
-            # 获取详细结果
-            detailed_results = engine.get_detailed_results()
-            
-            # 风险分析
-            risk_analyzer = RiskAnalyzer()
-            portfolio_curve = detailed_results['portfolio_curve']
+
+            # 提取结果
+            performance_metrics = results
             
             # 提取净值序列用于风险分析
             if isinstance(portfolio_curve, dict) and 'values' in portfolio_curve:

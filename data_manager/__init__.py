@@ -13,10 +13,20 @@ if str(factor_platform_path) not in sys.path:
 
 # 直接从目标模块导入（避免循环导入）
 try:
-    import importlib
+    # 从完整的模块路径导入，避免循环导入
+    # 注意：不能直接 import_module('data_manager')，因为会导入当前模块
+    # 需要先临时修改 sys.path 或使用完整导入路径
+    import importlib.util
 
-    # 动态导入 101因子平台的数据管理模块
-    dm_module = importlib.import_module('data_manager')
+    # 方法1: 使用完整的文件路径导入
+    dm_init_path = factor_platform_path / "data_manager" / "__init__.py"
+    spec = importlib.util.spec_from_file_location("factor_data_manager", dm_init_path)
+    if spec and spec.loader:
+        dm_module = importlib.util.module_from_spec(spec)
+        sys.modules['factor_data_manager'] = dm_module
+        spec.loader.exec_module(dm_module)
+    else:
+        raise ImportError(f"无法找到 101因子平台的数据管理模块: {dm_init_path}")
 
     # 提取需要的类和变量
     LocalDataManager = getattr(dm_module, 'LocalDataManager', None)

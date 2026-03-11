@@ -2,7 +2,7 @@
 """
 策略回测页面
 提供完整的小市值策略回测功能
-使用importlib直接加载模块，绕过__init__.py的相对导入问题
+使用新的统一 easyxt_backtest 框架
 """
 import streamlit as st
 import pandas as pd
@@ -19,32 +19,19 @@ from datetime import datetime
 matplotlib.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei']
 matplotlib.rcParams['axes.unicode_minus'] = False
 
-# 添加项目路径
-project_root = Path(__file__).parent.parent.parent
+# 添加项目路径（使用绝对路径避免相对路径问题）
+project_root = Path(__file__).resolve().parent.parent.parent  # 101因子/101因子分析平台/
+main_project_root = project_root.parent.parent.resolve()  # miniqmt扩展/
+
 sys.path.insert(0, str(project_root))
+sys.path.insert(0, str(main_project_root))
 
-# 定义easyxt_backtest路径（但不加入sys.path，避免触发__init__.py）
-backtest_path = Path(r"C:\Users\Administrator\Desktop\miniqmt扩展\easyxt_backtest")
-if not backtest_path.exists():
-    print(f"[ERROR] easyxt_backtest not found at: {backtest_path}", file=sys.stderr)
-
-
-def load_module_from_file(module_name, file_path):
-    """直接从文件加载模块，绕过__init__.py避免相对导入错误"""
-    spec = importlib.util.spec_from_file_location(module_name, file_path)
-    module = importlib.util.module_from_spec(spec)
-
-    # 设置__package__属性，支持相对导入
-    # 根据文件路径确定包名
-    if 'strategies' in str(file_path):
-        module.__package__ = 'easyxt_backtest.strategies'
-    elif 'easyxt_backtest' in str(file_path) and module_name != 'strategy_base':
-        # 如果是easyxt_backtest下的文件（但不是strategy_base）
-        module.__package__ = 'easyxt_backtest'
-
-    sys.modules[module_name] = module
-    spec.loader.exec_module(module)
-    return module
+# 验证 easyxt_backtest 是否存在
+easyxt_backtest_path = main_project_root / "easyxt_backtest"
+if not easyxt_backtest_path.exists():
+    print(f"[WARNING] easyxt_backtest not found at: {easyxt_backtest_path}", file=sys.stderr)
+else:
+    print(f"[OK] easyxt_backtest found at: {easyxt_backtest_path}", file=sys.stderr)
 
 
 def check_market_cap_data(data_manager, start_date, end_date):
@@ -238,46 +225,12 @@ def render_config_panel():
 
 
 def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
-    """运行回测（完整功能版 - 使用importlib绕过相对导入）"""
+    """运行回测（使用新的统一框架）"""
     try:
-        backtest_path = Path(r"C:\Users\Administrator\Desktop\miniqmt扩展\easyxt_backtest")
-
-        # 首先创建父包模块，确保相对导入能找到父包
-        # 关键：添加__path__属性，让Python识别这是一个包
-        import types
-        if 'easyxt_backtest' not in sys.modules:
-            easyxt_backtest_pkg = types.ModuleType('easyxt_backtest')
-            easyxt_backtest_pkg.__path__ = [str(backtest_path)]
-            sys.modules['easyxt_backtest'] = easyxt_backtest_pkg
-
-        if 'easyxt_backtest.strategies' not in sys.modules:
-            strategies_pkg = types.ModuleType('easyxt_backtest.strategies')
-            strategies_pkg.__path__ = [str(backtest_path / 'strategies')]
-            sys.modules['easyxt_backtest.strategies'] = strategies_pkg
-
-        # 按照依赖顺序加载：strategy_base -> data_manager -> performance -> engine
-        load_module_from_file('strategy_base', backtest_path / 'strategy_base.py')
-
-        data_manager_module = load_module_from_file(
-            'data_manager',
-            backtest_path / 'data_manager.py'
-        )
-        DataManager = data_manager_module.DataManager
-
-        load_module_from_file('performance', backtest_path / 'performance.py')
-
-        engine_module = load_module_from_file(
-            'engine',
-            backtest_path / 'engine.py'
-        )
-        BacktestEngine = engine_module.BacktestEngine
-
-        # 使用importlib直接加载策略模块，绕过相对导入
-        strategies_module = load_module_from_file(
-            'strategies',
-            backtest_path / 'strategies' / 'small_cap_strategy.py'
-        )
-        SmallCapStrategy = strategies_module.SmallCapStrategy
+        # 使用新框架的 API
+        from easyxt_backtest.api import SelectionBacktestEngine
+        from easyxt_backtest.strategies.small_cap_strategy import SmallCapStrategy
+        from easyxt_backtest.data_manager import DataManager
 
         # 显示进度
         progress_bar = st.progress(0)
@@ -338,9 +291,9 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
             strategy = SmallCapStrategy(
                 index_code='399101.SZ',  # 中小板综指
                 select_num=num_stocks,
-                universe_size=universe_size if universe_size > 0 else None
+                universe_size=universe_size if universe_size > 0 else None,
+                data_manager=dm  # 传入数据管理器
             )
-            strategy.data_manager = dm
             status_text.text("策略实例创建成功")
         except Exception as e:
             import traceback
@@ -354,8 +307,11 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
         progress_bar.progress(30)
 
         try:
-            # 运行回测
-            engine = BacktestEngine(data_manager=dm, initial_cash=initial_cash)
+            # 使用新框架的回测引擎
+            engine = SelectionBacktestEngine(
+                initial_cash=initial_cash,
+                commission=0.001
+            )
             status_text.text("回测引擎初始化成功")
         except Exception as e:
             import traceback
@@ -630,26 +586,50 @@ def render_backtest_summary(results, initial_cash):
     with col2:
         st.markdown("#### ⏱️ 时间统计")
         # 使用真实的returns数据
-        if hasattr(results, 'returns') and results.returns is not None and not results.returns.empty:
-            # 处理字符串格式的日期索引（YYYYMMDD格式）
-            start_str = results.returns.index[0]
-            end_str = results.returns.index[-1]
+        if hasattr(results, 'returns') and results.returns is not None and not results.returns.empty and len(results.returns.index) > 0:
+            try:
+                # 处理字符串格式的日期索引（YYYYMMDD格式）
+                start_str = str(results.returns.index[0])
+                end_str = str(results.returns.index[-1])
 
-            # 转换为datetime对象以便计算天数
-            start = pd.to_datetime(start_str, format='%Y%m%d')
-            end = pd.to_datetime(end_str, format='%Y%m%d')
+                # ✅ 检查格式是否为 YYYYMMDD（8位数字）
+                if len(start_str) == 8 and start_str.isdigit() and len(end_str) == 8 and end_str.isdigit():
+                    # 转换为datetime对象以便计算天数
+                    start = pd.to_datetime(start_str, format='%Y%m%d')
+                    end = pd.to_datetime(end_str, format='%Y%m%d')
 
-            days = (end - start).days
-            years = days / 365.25
+                    days = (end - start).days
+                    years = days / 365.25
 
-            st.markdown(f"""
-            | 指标 | 数值 |
-            |------|------|
-            | 回测开始 | {start} |
-            | 回测结束 | {end} |
-            | 回测天数 | {days} 天 |
-            | 回测年限 | {years:.2f} 年 |
-            """)
+                    st.markdown(f"""
+                    | 指标 | 数值 |
+                    |------|------|
+                    | 回测开始 | {start.strftime('%Y-%m-%d')} |
+                    | 回测结束 | {end.strftime('%Y-%m-%d')} |
+                    | 回测天数 | {days} 天 |
+                    | 回测年限 | {years:.2f} 年 |
+                    """)
+                else:
+                    # 尝试直接解析（可能是 datetime 对象或其他格式）
+                    start = pd.to_datetime(results.returns.index[0])
+                    end = pd.to_datetime(results.returns.index[-1])
+                    days = (end - start).days
+                    years = days / 365.25
+
+                    st.markdown(f"""
+                    | 指标 | 数值 |
+                    |------|------|
+                    | 回测开始 | {start.strftime('%Y-%m-%d')} |
+                    | 回测结束 | {end.strftime('%Y-%m-%d')} |
+                    | 回测天数 | {days} 天 |
+                    | 回测年限 | {years:.2f} 年 |
+                    """)
+            except Exception as e:
+                st.markdown(f"""
+                | 指标 | 数值 |
+                |------|------|
+                | 时间数据 | 解析失败: {str(e)[:50]} |
+                """)
         else:
             st.markdown("""
             | 指标 | 数值 |

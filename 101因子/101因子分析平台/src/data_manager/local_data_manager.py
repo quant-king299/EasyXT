@@ -122,7 +122,7 @@ class LocalDataManager:
                 if str(workspace_dir) not in sys.path:
                     sys.path.insert(0, str(workspace_dir))
 
-                from gui_app.backtest.data_manager import DataManager as SourceManager
+                from easyxt_backtest.core import DataManager as SourceManager
 
                 # 尝试从unified_config.json加载配置
                 config_path = workspace_dir / 'config' / 'unified_config.json'

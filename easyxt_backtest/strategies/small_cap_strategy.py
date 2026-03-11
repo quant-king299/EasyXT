@@ -1,12 +1,15 @@
 # -*- coding: utf-8 -*-
 """
 小市值策略 - 基于市值选股
+
+使用新的统一回测框架
 """
 from typing import List, Dict
 import pandas as pd
 
+# 使用新框架的导入路径
 from easyxt_backtest.strategy_base import StrategyBase
-from easyxt_backtest.data_manager import DataManager
+from easyxt_backtest.data_manager import DataManager  # 完整的数据管理器（支持市值数据）
 
 
 class SmallCapStrategy(StrategyBase):
