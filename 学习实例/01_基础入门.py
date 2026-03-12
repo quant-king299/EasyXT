@@ -237,7 +237,7 @@ def lesson_05_current_price():
 
     # 2. 获取五档行情数据（新增）
     print("\n2. 获取五档行情数据（买卖盘口）")
-    print("💡 提示：需要先订阅行情才能获取五档数据")
+    print("💡 提示：直接调用 get_full_tick 获取，无需预先订阅")
     print("💡 建议：在交易时间内运行，数据更准确")
 
     try:
@@ -245,9 +245,7 @@ def lesson_05_current_price():
 
         # 使用easy_xt的get_order_book获取五档行情
         print(f"\n使用easy_xt获取 {code} 的五档行情...")
-        print("步骤1: 订阅tick行情...")
-        print("步骤2: 获取完整tick数据...")
-        print("步骤3: 提取五档行情数据...")
+        print("正在获取五档盘口数据...")
 
         order_book = api.get_order_book(code)
 
