@@ -24,11 +24,20 @@ from .engine import BacktestEngine as BacktestEngineV1
 from .performance import PerformanceAnalyzer
 
 # API
-from .api import TechnicalBacktestEngine, SelectionBacktestEngine, backtest_dual_ma
+from .api import (
+    TechnicalBacktestEngine,
+    SelectionBacktestEngine,
+    GridBacktestEngine,
+    backtest_dual_ma,
+    backtest_grid_fixed,
+    backtest_grid_adaptive,
+    backtest_grid_atr
+)
 
 # 策略示例
 from .strategies.small_cap_strategy import SmallCapStrategy
 from .strategies.technical import DualMovingAverageStrategy, RSIStrategy, BollingerBandsStrategy
+from .strategies.grid_strategy import GridStrategy, AdaptiveGridStrategy, ATRGridStrategy
 
 # 默认使用选股策略引擎
 BacktestEngine = BacktestEngineV2
@@ -51,9 +60,13 @@ __all__ = [
     'BacktestResult',
 
     # API
-    'TechnicalBacktestEngine',  # 技术指标策略引擎
-    'SelectionBacktestEngine',  # 选股策略引擎
-    'backtest_dual_ma',         # 双均线快速回测
+    'TechnicalBacktestEngine',   # 技术指标策略引擎
+    'SelectionBacktestEngine',   # 选股策略引擎
+    'GridBacktestEngine',        # 网格交易策略引擎
+    'backtest_dual_ma',          # 双均线快速回测
+    'backtest_grid_fixed',       # 固定网格快速回测
+    'backtest_grid_adaptive',    # 自适应网格快速回测
+    'backtest_grid_atr',         # ATR网格快速回测
 
     # 性能分析
     'PerformanceAnalyzer',
@@ -63,4 +76,7 @@ __all__ = [
     'DualMovingAverageStrategy',
     'RSIStrategy',
     'BollingerBandsStrategy',
+    'GridStrategy',
+    'AdaptiveGridStrategy',
+    'ATRGridStrategy',
 ]

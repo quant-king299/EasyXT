@@ -261,6 +261,9 @@ easy_xt/realtime_data/config/server_config.json
 !launch_grid_backtest.py
 # 数据管理工具（重要）
 !diagnose_grid_trades.py
+# Streamlit页面（重要，包含backtest关键词）
+!101因子/101因子分析平台/src/workflow/grid_backtest_page.py
+!101因子/101因子分析平台/src/workflow/*backtest*.py
 
 # 临时目录和文件
 examples/

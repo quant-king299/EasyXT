@@ -32,6 +32,7 @@ def render_main_page():
     ### 🎯 策略回测
     - 完整的回测框架
     - 小市值策略
+    - 网格交易策略（固定/自适应/ATR）
     - 因子策略
     - 自定义策略
 
@@ -117,6 +118,7 @@ def main():
             [
                 "🏠 主页",
                 "🎯 策略回测",
+                "🔄 网格回测",
                 "📊 因子工作流",
                 "📈 因子分析"
             ],
@@ -142,6 +144,10 @@ def main():
     elif page == "🎯 策略回测":
         from src.workflow.strategy_backtest_page import render_strategy_backtest_page
         render_strategy_backtest_page()
+
+    elif page == "🔄 网格回测":
+        from src.workflow.grid_backtest_page import page as grid_backtest_page
+        grid_backtest_page()
 
     elif page == "📊 因子工作流":
         # 使用原有的工作流UI

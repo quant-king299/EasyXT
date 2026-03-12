@@ -1,8 +1,33 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-511380.SH 网格策略回测
-专门针对债券ETF的网格策略实现和参数优化
+511380.SH 网格策略回测示例
+
+⚠️ 框架迁移说明（2024年3月）：
+   ========================================
+   此文件已迁移到新的统一回测框架 v3.0
+
+   新框架位置：
+   - 策略实现：easyxt_backtest/strategies/grid_strategy.py
+   - API接口：easyxt_backtest/api/grid_api.py
+   - Web界面：101因子/101因子分析平台/src/workflow/grid_backtest_page.py
+
+   推荐使用方式：
+   1. 交互式回测 → Web UI (http://localhost:8501/)
+   2. Python代码 → from easyxt_backtest import GridBacktestEngine
+   3. 批量运行 → 使用本文件作为参考
+
+   此文件保留作为：
+   - 使用示例和参考代码
+   - 批量回测和参数优化脚本
+   - 向后兼容的旧接口
+
+   新框架优势：
+   ✅ 统一的HybridDataManager（DuckDB + QMT + Tushare）
+   ✅ 修复了所有已知的除零错误
+   ✅ 支持选股策略、技术指标、网格交易
+   ✅ 完整的Web界面和可视化
+   ========================================
 """
 
 import sys
@@ -26,7 +51,116 @@ except ImportError:
     BACKTRADER_AVAILABLE = False
     print("[ERROR] Backtrader未安装，请先安装: pip install backtrader")
 
-from data_manager import LocalDataManager
+# 使用新的数据管理器
+try:
+    from core.data_manager import HybridDataManager
+    print("[OK] 使用新的 HybridDataManager")
+except ImportError:
+    # 回退到旧的数据管理器
+    try:
+        from data_manager import LocalDataManager
+        print("[WARNING] 使用旧的 LocalDataManager（建议升级到HybridDataManager）")
+    except ImportError:
+        print("[ERROR] 无法导入数据管理器")
+        LocalDataManager = None
+
+
+# ========================================
+# 新框架使用示例
+# ========================================
+
+def example_new_framework():
+    """
+    使用新框架的示例代码
+    """
+    print("\n" + "="*60)
+    print("新框架使用示例")
+    print("="*60)
+
+    try:
+        from easyxt_backtest import GridBacktestEngine, backtest_grid_fixed
+        from core.data_manager import HybridDataManager
+
+        # 方式1：使用GridBacktestEngine（推荐）
+        print("\n方式1：使用 GridBacktestEngine")
+        print("```python")
+        print("from easyxt_backtest import GridBacktestEngine")
+        print("from core.data_manager import HybridDataManager")
+        print("")
+        print("# 初始化数据管理器")
+        print("data_manager = HybridDataManager()")
+        print("")
+        print("# 创建回测引擎")
+        print("engine = GridBacktestEngine(")
+        print("    initial_cash=100000,")
+        print("    commission=0.0001,")
+        print("    data_manager=data_manager")
+        print(")")
+        print("")
+        print("# 运行回测")
+        print("result = engine.run_backtest(")
+        print("    stock_code='511380.SH',")
+        print("    start_date='2024-01-01',")
+        print("    end_date='2024-12-31',")
+        print("    strategy_mode='fixed',")
+        print("    grid_count=15,")
+        print("    price_range=0.05")
+        print(")")
+        print("```")
+
+        # 方式2：使用快速回测函数
+        print("\n方式2：使用快速回测函数")
+        print("```python")
+        print("from easyxt_backtest import backtest_grid_fixed")
+        print("")
+        print("result = backtest_grid_fixed(")
+        print("    stock_code='511380.SH',")
+        print("    start_date='2024-01-01',")
+        print("    end_date='2024-12-31',")
+        print("    grid_count=15,")
+        print("    price_range=0.05")
+        print(")")
+        print("```")
+
+        # 方式3：使用Web界面
+        print("\n方式3：使用Web界面（推荐）")
+        print("```bash")
+        print("# 启动Streamlit应用")
+        print("cd 101因子/101因子分析平台")
+        print("streamlit run main_app.py")
+        print("")
+        print("# 然后访问 http://localhost:8501/")
+        print("# 选择「网格策略回测」页面")
+        print("```")
+
+    except ImportError as e:
+        print(f"[ERROR] 无法导入新框架: {e}")
+
+
+if __name__ == "__main__":
+    # 显示新框架使用示例
+    example_new_framework()
+
+    # 询问用户是否继续使用旧代码
+    print("\n" + "="*60)
+    print("是否继续使用旧代码？（不推荐）")
+    print("建议：使用新框架（见上面的示例）")
+    print("="*60)
+
+    user_input = input("\n输入 'y' 继续使用旧代码，其他键退出: ")
+
+    if user_input.lower() != 'y':
+        print("\n请使用新框架进行回测。")
+        print("启动Web界面：streamlit run main_app.py")
+        sys.exit(0)
+
+
+# ========================================
+# 旧代码保留（向后兼容）
+# ========================================
+# 以下代码保留用于向后兼容
+# 新代码请使用：easyxt_backtest/strategies/grid_strategy.py
+# ========================================
 
 
 class GridStrategy(bt.Strategy):
