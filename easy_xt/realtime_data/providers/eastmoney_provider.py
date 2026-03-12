@@ -65,16 +65,13 @@ class EastmoneyDataProvider(BaseDataProvider):
             'bj': '0'   # 北京
         }
 
-        # 数据字段映射（添加五档盘口字段）
+        # 数据字段映射（基础字段，不含五档盘口）
+        # 注：东方财富API的五档盘口字段映射不稳定，暂时不提供
         self.quote_fields = [
             'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'f9', 'f10',
             'f11', 'f12', 'f13', 'f14', 'f15', 'f16', 'f17', 'f18', 'f20',
-            'f21', 'f23', 'f24', 'f25', 'f22', 'f33', 'f11', 'f62', 'f128',
-            'f136', 'f115', 'f152',
-            # 五档盘口字段
-            'f31', 'f32', 'f33', 'f34',  # 买一价、卖一价、买一量、卖一量
-            'f35', 'f36', 'f39', 'f40',  # 买二价、卖二价、买二量、卖二量
-            'f37', 'f38', 'f41', 'f42'   # 买三价、卖三价、买三量、卖三量
+            'f21', 'f23', 'f24', 'f25', 'f22', 'f62', 'f128',
+            'f136', 'f115', 'f152'
         ]
 
         self._connected = False
@@ -409,29 +406,26 @@ class EastmoneyDataProvider(BaseDataProvider):
                 'high': safe_float(item.get('f15')),
                 'low': safe_float(item.get('f16')),
                 'pre_close': safe_float(item.get('f18')),
-                # 五档买价
-                'bid1': safe_float(item.get('f31')),
-                'bid2': safe_float(item.get('f35')),
-                'bid3': safe_float(item.get('f37')),
-                # 五档卖价
-                'ask1': safe_float(item.get('f32')),
-                'ask2': safe_float(item.get('f36')),
-                'ask3': safe_float(item.get('f38')),
-                # 三档买量（东方财富API只返回3档，单位已经是"股"，无需乘以100）
-                'bid1_vol': safe_int(item.get('f33')),
-                'bid2_vol': safe_int(item.get('f39')),
-                'bid3_vol': safe_int(item.get('f41')),
-                # 三档卖量（东方财富API只返回3档，单位已经是"股"，无需乘以100）
-                'ask1_vol': safe_int(item.get('f34')),
-                'ask2_vol': safe_int(item.get('f40')),
-                'ask3_vol': safe_int(item.get('f42')),
-                # bid4/bid5/ask4/ask5不支持（东方财富API只返回3档）
+                # 注：东方财富API的五档盘口字段映射不稳定，暂时不提供
+                # 建议：使用TDX或QMT获取五档盘口数据
+                'bid1': 0.0,
+                'bid2': 0.0,
+                'bid3': 0.0,
                 'bid4': 0.0,
                 'bid5': 0.0,
+                'ask1': 0.0,
+                'ask2': 0.0,
+                'ask3': 0.0,
                 'ask4': 0.0,
                 'ask5': 0.0,
+                'bid1_vol': 0,
+                'bid2_vol': 0,
+                'bid3_vol': 0,
                 'bid4_vol': 0,
                 'bid5_vol': 0,
+                'ask1_vol': 0,
+                'ask2_vol': 0,
+                'ask3_vol': 0,
                 'ask4_vol': 0,
                 'ask5_vol': 0,
                 'timestamp': int(time.time()),
