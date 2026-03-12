@@ -186,7 +186,10 @@ xtquant/
 启动*.bat
 claude-start.bat
 mock_*.py
-qmt_*.py
+# QMT相关文件 - 只忽略测试文件，保留核心代码
+test_qmt*.py
+qmt_test*.py
+*_test_qmt*.py
 example*.py
 simple_*.py
 verify_*.py
@@ -198,9 +201,15 @@ comprehensive_*.py
 # Alpha分析平台的核心文件
 !easy_xt/alpha_analysis/test_alpha_analysis.py
 !easy_xt/alpha_analysis/example_usage.py
+
 # JQ2QMT策略的核心文件
 !strategies/jq2qmt/qmt_signal_client.py
 !strategies/jq2qmt/qmt_client_mini.py
+
+# QMT相关核心文件（不忽略！）
+!core/data_manager/sources/qmt_source.py
+!easy_xt/qmt_paths.py
+!strategies/conditional_orders/qmt_advanced_stop_loss.py
 
 # tools目录下的重要工具和测试脚本
 !tools/测试订阅接口.py
