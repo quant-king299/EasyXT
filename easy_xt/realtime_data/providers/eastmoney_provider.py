@@ -228,13 +228,17 @@ class EastmoneyDataProvider(BaseDataProvider):
         return {
             'name': '东方财富',
             'code': 'eastmoney_v2',
-            'description': '东方财富实时行情数据源（更新版）',
+            'description': '东方财富实时行情数据源（更新版，使用腾讯API补充五档盘口）',
             'supported_markets': ['沪A', '深A', '创业板', '科创板', '北交所'],
             'supported_data_types': [
-                '实时行情', '资金流向', '热门股票', '板块数据',
+                '实时行情', '五档盘口', '资金流向', '热门股票', '板块数据',
                 'K线数据', '分时数据'
             ],
             'update_frequency': '实时',
+            'data_sources': [
+                '东方财富API（基础行情、K线、热度）',
+                '腾讯API（五档盘口）'
+            ],
             'connected': self.is_connected()
         }
 
@@ -286,7 +290,7 @@ class EastmoneyDataProvider(BaseDataProvider):
         return None
 
     def get_realtime_quotes(self, codes: List[str]) -> List[Dict[str, Any]]:
-        """获取实时行情数据
+        """获取实时行情数据（使用腾讯API补充五档盘口）
 
         Args:
             codes: 股票代码列表，格式如 ['000001', '000002']
@@ -335,6 +339,7 @@ class EastmoneyDataProvider(BaseDataProvider):
                 }
             ]
 
+            quotes = []
             for endpoint in api_endpoints:
                 try:
                     response = self._make_request(endpoint['url'], endpoint['params'])
@@ -345,8 +350,6 @@ class EastmoneyDataProvider(BaseDataProvider):
                     data = response.json()
 
                     if data.get('rc') == 0 and 'data' in data and data['data']:
-                        quotes = []
-
                         for item in data['data'].get('diff', []):
                             quote_info = self._parse_quote_data(item)
                             if quote_info:
@@ -354,17 +357,119 @@ class EastmoneyDataProvider(BaseDataProvider):
 
                         if quotes:
                             self.logger.info(f"成功获取实时行情: {len(quotes)}只股票")
-                            return quotes
+                            break
 
                 except Exception as e:
                     self.logger.debug(f"端点 {endpoint['url']} 获取失败: {e}")
                     continue
+
+            # 使用腾讯API补充五档盘口数据
+            if quotes:
+                quotes = self._enrich_with_tencent_5level(quotes)
+                return quotes
 
             return []
 
         except Exception as e:
             self.logger.error(f"获取实时行情失败: {e}")
             return []
+
+    def _enrich_with_tencent_5level(self, quotes: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """使用腾讯API补充五档盘口数据
+
+        Args:
+            quotes: 东方财富API返回的行情数据
+
+        Returns:
+            List[Dict]: 补充了五档数据后的行情数据
+        """
+        try:
+            import requests as req_direct
+
+            for quote in quotes:
+                try:
+                    symbol = quote.get('symbol', '')
+                    if not symbol:
+                        continue
+
+                    # 转换代码格式：000001 -> sz000001, 600000 -> sh600000
+                    if symbol.startswith('6'):
+                        tencent_code = f'sh{symbol}'
+                    else:
+                        tencent_code = f'sz{symbol}'
+
+                    # 请求腾讯API
+                    url = f'https://qt.gtimg.cn/q={tencent_code}'
+                    response = req_direct.get(url, timeout=5)
+
+                    if response.status_code == 200:
+                        content = response.text
+                        if content.startswith(f'v_{tencent_code}'):
+                            data_str = content.split('=\"')[1].split('\";')[0]
+                            fields = data_str.split('~')
+
+                            # 解析五档盘口（腾讯API字段映射）
+                            # 买一到买五: 9, 11, 13, 15, 17 (价格)
+                            #           10, 12, 14, 16, 18 (量)
+                            # 卖一到卖五: 19, 21, 23, 25, 27 (价格)
+                            #           20, 22, 24, 26, 28 (量)
+
+                            # 五档买价
+                            quote['bid1'] = self._safe_float(fields, 9)
+                            quote['bid2'] = self._safe_float(fields, 11)
+                            quote['bid3'] = self._safe_float(fields, 13)
+                            quote['bid4'] = self._safe_float(fields, 15)
+                            quote['bid5'] = self._safe_float(fields, 17)
+
+                            # 五档卖价
+                            quote['ask1'] = self._safe_float(fields, 19)
+                            quote['ask2'] = self._safe_float(fields, 21)
+                            quote['ask3'] = self._safe_float(fields, 23)
+                            quote['ask4'] = self._safe_float(fields, 25)
+                            quote['ask5'] = self._safe_float(fields, 27)
+
+                            # 五档买量（腾讯API单位是"手"，需要乘以100转换为"股"）
+                            quote['bid1_vol'] = self._safe_int(fields, 10) * 100
+                            quote['bid2_vol'] = self._safe_int(fields, 12) * 100
+                            quote['bid3_vol'] = self._safe_int(fields, 14) * 100
+                            quote['bid4_vol'] = self._safe_int(fields, 16) * 100
+                            quote['bid5_vol'] = self._safe_int(fields, 18) * 100
+
+                            # 五档卖量
+                            quote['ask1_vol'] = self._safe_int(fields, 20) * 100
+                            quote['ask2_vol'] = self._safe_int(fields, 22) * 100
+                            quote['ask3_vol'] = self._safe_int(fields, 24) * 100
+                            quote['ask4_vol'] = self._safe_int(fields, 26) * 100
+                            quote['ask5_vol'] = self._safe_int(fields, 28) * 100
+
+                except Exception as e:
+                    self.logger.debug(f"获取{quote.get('symbol')}五档数据失败: {e}")
+                    continue
+
+            self.logger.info(f"使用腾讯API补充了{len(quotes)}只股票的五档数据")
+            return quotes
+
+        except Exception as e:
+            self.logger.warning(f"腾讯API补充五档数据失败: {e}")
+            return quotes
+
+    def _safe_float(self, fields: List[str], index: int, default=0.0) -> float:
+        """安全获取浮点数"""
+        try:
+            if len(fields) > index and fields[index]:
+                return float(fields[index])
+            return default
+        except (ValueError, TypeError):
+            return default
+
+    def _safe_int(self, fields: List[str], index: int, default=0) -> int:
+        """安全获取整数"""
+        try:
+            if len(fields) > index and fields[index]:
+                return int(float(fields[index]))
+            return default
+        except (ValueError, TypeError):
+            return default
 
     def _parse_quote_data(self, item: Dict) -> Optional[Dict[str, Any]]:
         """解析行情数据
@@ -395,6 +500,7 @@ class EastmoneyDataProvider(BaseDataProvider):
                     return default
 
             return {
+                'code': item.get('f12', ''),
                 'symbol': item.get('f12', ''),
                 'name': item.get('f14', ''),
                 'price': safe_float(item.get('f2')),
@@ -406,28 +512,11 @@ class EastmoneyDataProvider(BaseDataProvider):
                 'high': safe_float(item.get('f15')),
                 'low': safe_float(item.get('f16')),
                 'pre_close': safe_float(item.get('f18')),
-                # 注：东方财富API的五档盘口字段映射不稳定，暂时不提供
-                # 建议：使用TDX或QMT获取五档盘口数据
-                'bid1': 0.0,
-                'bid2': 0.0,
-                'bid3': 0.0,
-                'bid4': 0.0,
-                'bid5': 0.0,
-                'ask1': 0.0,
-                'ask2': 0.0,
-                'ask3': 0.0,
-                'ask4': 0.0,
-                'ask5': 0.0,
-                'bid1_vol': 0,
-                'bid2_vol': 0,
-                'bid3_vol': 0,
-                'bid4_vol': 0,
-                'bid5_vol': 0,
-                'ask1_vol': 0,
-                'ask2_vol': 0,
-                'ask3_vol': 0,
-                'ask4_vol': 0,
-                'ask5_vol': 0,
+                # 五档盘口由腾讯API补充（在get_realtime_quotes中）
+                'bid1': 0.0, 'bid2': 0.0, 'bid3': 0.0, 'bid4': 0.0, 'bid5': 0.0,
+                'ask1': 0.0, 'ask2': 0.0, 'ask3': 0.0, 'ask4': 0.0, 'ask5': 0.0,
+                'bid1_vol': 0, 'bid2_vol': 0, 'bid3_vol': 0, 'bid4_vol': 0, 'bid5_vol': 0,
+                'ask1_vol': 0, 'ask2_vol': 0, 'ask3_vol': 0, 'ask4_vol': 0, 'ask5_vol': 0,
                 'timestamp': int(time.time()),
                 'source': 'eastmoney_v2'
             }
