@@ -149,7 +149,7 @@
 from easy_xt import get_api
 
 api = get_api()
-data = api.get_full_history(['000001.SZ'], period='1d', start_time='20240101')
+data = api.get_price(['000001.SZ'], start='20240101', period='1d')
 print(data.head())
 # 就这么简单，获取股票数据
 ```
@@ -301,11 +301,11 @@ api = get_api()
 # 优先级：DuckDB > QMT > Tushare > akshare > qstock
 
 # 获取股票数据
-data = api.get_full_history(
+data = api.get_price(
     ['000001.SZ'],
-    period='1d',      # 日线
-    start_time='20240101',
-    end_time='20241231'
+    start='20240101',  # 开始日期
+    end='20241231',     # 结束日期
+    period='1d'         # 日线
 )
 ```
 
@@ -491,7 +491,7 @@ xtdata.get_full_history(stock_code, period, start_time, end_time);
 # Python 代码
 from easy_xt import get_api
 api = get_api()
-data = api.get_full_history(['000001.SZ'], period='1d', start_time='20240101')
+data = api.get_price(['000001.SZ'], start='20240101', period='1d')
 # 就这么简单！
 ```
 

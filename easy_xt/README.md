@@ -107,7 +107,7 @@ api = get_api()
 ext = ExtendedAPI()
 
 # 示例：获取股票行情
-data = ext.get_full_history(['000001.SZ'], period='1d', start_time='20240101')
+data = ext.get_price(['000001.SZ'], start='20240101', period='1d')
 ```
 
 ---

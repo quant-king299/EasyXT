@@ -132,10 +132,10 @@ from easy_xt import get_api
 api = get_api()
 
 # 获取行情数据
-data = api.get_full_history(
+data = api.get_price(
     ['000001.SZ'],
-    period='1d',
-    start_time='20240101'
+    start='20240101',
+    period='1d'
 )
 ```
 
@@ -655,7 +655,7 @@ python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-
 from easy_xt import get_api
 
 api = get_api()
-data = api.get_full_history(['000001.SZ'], period='1d', start_time='20240101')
+data = api.get_price(['000001.SZ'], start='20240101', period='1d')
 ```
 
 ### Q4: 101因子平台必须配合easy_xt使用吗？
