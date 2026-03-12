@@ -348,18 +348,18 @@ class TdxDataProvider(BaseDataProvider):
                 'ask3': float(quote.get('ask3', 0)) / price_divisor,
                 'ask4': float(quote.get('ask4', 0)) / price_divisor,
                 'ask5': float(quote.get('ask5', 0)) / price_divisor,
-                # 五档买量
-                'bid1_vol': int(quote.get('bid1_vol', 0)),
-                'bid2_vol': int(quote.get('bid2_vol', 0)),
-                'bid3_vol': int(quote.get('bid3_vol', 0)),
-                'bid4_vol': int(quote.get('bid4_vol', 0)),
-                'bid5_vol': int(quote.get('bid5_vol', 0)),
-                # 五档卖量
-                'ask1_vol': int(quote.get('ask1_vol', 0)),
-                'ask2_vol': int(quote.get('ask2_vol', 0)),
-                'ask3_vol': int(quote.get('ask3_vol', 0)),
-                'ask4_vol': int(quote.get('ask4_vol', 0)),
-                'ask5_vol': int(quote.get('ask5_vol', 0)),
+                # 五档买量（pytdx返回的是"手"，需要乘以100转换为"股"）
+                'bid1_vol': int(quote.get('bid1_vol', 0)) * 100,
+                'bid2_vol': int(quote.get('bid2_vol', 0)) * 100,
+                'bid3_vol': int(quote.get('bid3_vol', 0)) * 100,
+                'bid4_vol': int(quote.get('bid4_vol', 0)) * 100,
+                'bid5_vol': int(quote.get('bid5_vol', 0)) * 100,
+                # 五档卖量（pytdx返回的是"手"，需要乘以100转换为"股"）
+                'ask1_vol': int(quote.get('ask1_vol', 0)) * 100,
+                'ask2_vol': int(quote.get('ask2_vol', 0)) * 100,
+                'ask3_vol': int(quote.get('ask3_vol', 0)) * 100,
+                'ask4_vol': int(quote.get('ask4_vol', 0)) * 100,
+                'ask5_vol': int(quote.get('ask5_vol', 0)) * 100,
                 'timestamp': int(time.time()),
                 'source': 'tdx'
             }
