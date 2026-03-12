@@ -24,7 +24,7 @@ class TdxDataProvider(BaseDataProvider):
     
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         """初始化通达信数据提供者
-        
+
         Args:
             config: 配置字典，包含服务器列表、超时设置等
         """
@@ -32,53 +32,151 @@ class TdxDataProvider(BaseDataProvider):
         self.config = config or {}
         self.api = TdxHq_API()
         self.current_server = None
+
+        # 服务器性能统计（用于记住最快的服务器）
+        # 格式：{host: {'avg_time': float, 'success_count': int, 'fail_count': int}}
+        self.server_stats = {}
         self.servers = self.config.get('servers', [
-            {"host": "115.238.56.198", "port": 7709, "name": "杭州主站"},  # 已验证可用
-            {"host": "115.238.90.165", "port": 7709, "name": "南京主站"},  # 已验证可用
-            {"host": "119.147.212.81", "port": 7709, "name": "深圳主站"},
-            {"host": "114.80.63.12", "port": 7709, "name": "上海主站"},
-            {"host": "180.153.39.51", "port": 7709, "name": "广州主站"},
-            {"host": "123.125.108.23", "port": 7709, "name": "北京主站"},
-            {"host": "180.153.18.171", "port": 7709, "name": "福州主站"},
-            {"host": "103.48.67.20", "port": 7709, "name": "厦门主站"}
+            # 优先级1：已验证可用的服务器
+            {"host": "115.238.56.198", "port": 7709, "name": "杭州主站", "priority": 1},
+            {"host": "115.238.90.165", "port": 7709, "name": "南京主站", "priority": 1},
+
+            # 优先级2：主要城市服务器
+            {"host": "119.147.212.81", "port": 7709, "name": "深圳主站", "priority": 2},
+            {"host": "114.80.63.12", "port": 7709, "name": "上海主站", "priority": 2},
+            {"host": "180.153.39.51", "port": 7709, "name": "广州主站", "priority": 2},
+            {"host": "123.125.108.23", "port": 7709, "name": "北京主站", "priority": 2},
+            {"host": "218.108.98.244", "port": 7709, "name": "四川主站", "priority": 2},
+            {"host": "218.108.47.69", "port": 7709, "name": "重庆主站", "priority": 2},
+
+            # 优先级3：其他地区服务器
+            {"host": "180.153.18.171", "port": 7709, "name": "福州主站", "priority": 3},
+            {"host": "103.48.67.20", "port": 7709, "name": "厦门主站", "priority": 3},
+            {"host": "218.25.152.90", "port": 7709, "name": "武汉主站", "priority": 3},
+            {"host": "218.60.29.136", "port": 7709, "name": "沈阳主站", "priority": 3},
+            {"host": "124.74.236.94", "port": 7709, "name": "西安主站", "priority": 3},
+            {"host": "61.152.107.141", "port": 7709, "name": "济南主站", "priority": 3},
+
+            # 优先级4：备用服务器
+            {"host": "202.108.253.130", "port": 7709, "name": "备用1", "priority": 4},
+            {"host": "202.108.253.131", "port": 7709, "name": "备用2", "priority": 4},
+            {"host": "14.215.128.18", "port": 7709, "name": "备用3", "priority": 4},
+            {"host": "140.207.202.181", "port": 7709, "name": "备用4", "priority": 4}
         ])
         self.timeout = self.config.get('timeout', 10)
         self.retry_count = self.config.get('retry_count', 3)
         self.retry_delay = self.config.get('retry_delay', 1)
         
     def connect(self) -> bool:
-        """连接到通达信服务器
-        
+        """连接到通达信服务器（智能选择最快服务器）
+
         Returns:
             bool: 连接是否成功
         """
         if self.connected:
             return True
-            
-        # V3优化：严格按照配置的优先级顺序连接服务器，不随机打乱
-        # 这样可以确保优先连接到验证可用的快速服务器
-        servers = self.servers.copy()
-        # 移除 random.shuffle(servers) - 保持配置的优先级顺序
-        
+
+        # 根据历史性能排序服务器（优先选择历史上最快的）
+        servers = self._sort_servers_by_performance()
+
         for server in servers:
             try:
-                self.logger.info(f"尝试连接服务器: {server['host']}:{server['port']}")
+                self.logger.info(f"尝试连接服务器: {server['name']} ({server['host']}:{server['port']})")
+
+                # 记录开始时间
+                import time
+                start_time = time.time()
+
                 result = self.api.connect(server['host'], server['port'], time_out=self.timeout)
-                
+
+                # 计算连接耗时
+                connect_time = time.time() - start_time
+
                 if result:
                     self.connected = True
                     self.current_server = server
-                    self.logger.info(f"连接成功: {server['host']}:{server['port']}")
+                    self.logger.info(f"连接成功: {server['name']} (耗时: {connect_time:.2f}秒)")
+
+                    # 记录成功的连接时间
+                    self._record_server_performance(server['host'], connect_time, success=True)
                     return True
                 else:
-                    self.logger.warning(f"连接失败: {server['host']}:{server['port']}")
-                    
+                    self.logger.warning(f"连接失败: {server['name']}")
+                    # 记录失败的连接
+                    self._record_server_performance(server['host'], connect_time, success=False)
+
             except Exception as e:
-                self.logger.error(f"连接异常: {server['host']}:{server['port']}, 错误: {e}")
+                connect_time = time.time() - start_time
+                self.logger.error(f"连接异常: {server['name']}, 错误: {e}")
+                # 记录异常的连接
+                self._record_server_performance(server['host'], connect_time, success=False)
                 continue
-        
+
         self.logger.error("所有服务器连接失败")
         return False
+
+    def _sort_servers_by_performance(self) -> List[Dict]:
+        """根据历史性能排序服务器
+
+        优先级规则：
+        1. 有历史记录的服务器按平均响应时间排序
+        2. 无历史记录的服务器按配置的优先级排序
+        3. 同优先级内，有记录的优于无记录的
+
+        Returns:
+            List[Dict]: 排序后的服务器列表
+        """
+        servers = self.servers.copy()
+
+        def get_sort_key(server):
+            host = server['host']
+            priority = server.get('priority', 99)
+
+            # 如果有历史性能数据
+            if host in self.server_stats and self.server_stats[host]['success_count'] > 0:
+                stats = self.server_stats[host]
+                avg_time = stats['avg_time']
+                # 成功率
+                total = stats['success_count'] + stats['fail_count']
+                success_rate = stats['success_count'] / total if total > 0 else 0
+
+                # 排序键：(优先级, 平均响应时间, 成功率)
+                # 平均时间越短越好，成功率越高越好
+                return (priority, avg_time, -success_rate)
+            else:
+                # 无历史数据，排在同优先级的最后
+                return (priority, 999, 0)
+
+        return sorted(servers, key=get_sort_key)
+
+    def _record_server_performance(self, host: str, connect_time: float, success: bool):
+        """记录服务器性能数据
+
+        Args:
+            host: 服务器地址
+            connect_time: 连接耗时（秒）
+            success: 是否连接成功
+        """
+        if host not in self.server_stats:
+            self.server_stats[host] = {
+                'avg_time': 0,
+                'success_count': 0,
+                'fail_count': 0,
+                'total_time': 0,
+                'total_count': 0
+            }
+
+        stats = self.server_stats[host]
+
+        if success:
+            # 更新成功的连接时间（使用移动平均）
+            stats['success_count'] += 1
+            stats['total_time'] += connect_time
+            stats['total_count'] += 1
+            stats['avg_time'] = stats['total_time'] / stats['total_count']
+        else:
+            stats['fail_count'] += 1
+            stats['total_count'] += 1
     
     def disconnect(self) -> None:
         """断开连接"""
@@ -387,18 +485,18 @@ class TdxDataProvider(BaseDataProvider):
     
     def get_market_status(self) -> Dict[str, Any]:
         """获取市场状态信息
-        
+
         Returns:
             Dict: 市场状态信息
         """
         try:
             if not self._ensure_connected():
                 return {}
-            
+
             # 获取市场信息
             sz_count = self.api.get_security_count(0)  # 深圳市场
             sh_count = self.api.get_security_count(1)  # 上海市场
-            
+
             return {
                 'sz_market_count': sz_count,
                 'sh_market_count': sh_count,
@@ -407,10 +505,65 @@ class TdxDataProvider(BaseDataProvider):
                 'connected': self.connected,
                 'timestamp': int(time.time())
             }
-            
+
         except Exception as e:
             self.logger.error(f"获取市场状态失败: {e}")
             return {}
+
+    def get_server_performance_stats(self) -> Dict[str, Any]:
+        """获取服务器性能统计信息
+
+        Returns:
+            Dict: 服务器性能统计
+            {
+                'current_server': 当前连接的服务器,
+                'servers': [
+                    {
+                        'host': 服务器地址,
+                        'avg_time': 平均响应时间,
+                        'success_count': 成功次数,
+                        'fail_count': 失败次数,
+                        'success_rate': 成功率
+                    },
+                    ...
+                ]
+            }
+        """
+        server_list = []
+
+        for server in self.servers:
+            host = server['host']
+            if host in self.server_stats:
+                stats = self.server_stats[host]
+                total = stats['success_count'] + stats['fail_count']
+                success_rate = stats['success_count'] / total if total > 0 else 0
+
+                server_list.append({
+                    'name': server['name'],
+                    'host': host,
+                    'avg_time': round(stats['avg_time'], 3),
+                    'success_count': stats['success_count'],
+                    'fail_count': stats['fail_count'],
+                    'success_rate': round(success_rate * 100, 2)
+                })
+            else:
+                # 无历史数据
+                server_list.append({
+                    'name': server['name'],
+                    'host': host,
+                    'avg_time': None,
+                    'success_count': 0,
+                    'fail_count': 0,
+                    'success_rate': 0
+                })
+
+        # 按平均响应时间排序
+        server_list.sort(key=lambda x: x['avg_time'] or 999)
+
+        return {
+            'current_server': self.current_server,
+            'servers': server_list
+        }
 
     def get_index_quotes(self, codes: List[str]) -> List[Dict[str, Any]]:
         """获取指数行情数据

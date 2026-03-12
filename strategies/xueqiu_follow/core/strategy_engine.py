@@ -36,19 +36,55 @@ class StrategyEngine:
     def __init__(self, config_manager: ConfigManager):
         self.logger = setup_logger("StrategyEngine")
         self.config_manager = config_manager
-        
+
         # 核心组件
         self.collector: Optional[XueqiuCollectorReal] = None
         self.trader_api = get_advanced_api()
         self.data_api = get_api()  # 添加数据API用于获取实时价格
         self.risk_manager: Optional[RiskManager] = None
-        
+
+        # 备用行情数据源（单例模式，避免重复创建连接）
+        self._tdx_provider = None
+        self._eastmoney_provider = None
+
         # 运行状态
         self.is_running = False
         self.current_positions: Dict[str, Dict[str, Any]] = {}
         self.callbacks: List[Callable] = []
         self.last_export_date: Optional[str] = None  # 记录上次导出的日期
-    
+
+    def _get_tdx_provider(self):
+        """获取或创建TDX数据提供者实例（懒加载单例模式）
+
+        Returns:
+            TdxDataProvider: TDX数据提供者实例
+        """
+        if self._tdx_provider is None:
+            try:
+                from easy_xt.realtime_data.providers.tdx_provider import TdxDataProvider
+                self._tdx_provider = TdxDataProvider()
+                self.logger.info("TDX数据提供者已初始化（单例模式）")
+            except Exception as e:
+                self.logger.error(f"TDX数据提供者初始化失败: {e}")
+                self._tdx_provider = False  # 标记为失败，避免重复尝试
+        return self._tdx_provider if self._tdx_provider is not False else None
+
+    def _get_eastmoney_provider(self):
+        """获取或创建东方财富数据提供者实例（懒加载单例模式）
+
+        Returns:
+            EastmoneyDataProvider: 东方财富数据提供者实例
+        """
+        if self._eastmoney_provider is None:
+            try:
+                from easy_xt.realtime_data.providers.eastmoney_provider import EastmoneyDataProvider
+                self._eastmoney_provider = EastmoneyDataProvider()
+                self.logger.info("东方财富数据提供者已初始化（单例模式）")
+            except Exception as e:
+                self.logger.error(f"东方财富数据提供者初始化失败: {e}")
+                self._eastmoney_provider = False  # 标记为失败，避免重复尝试
+        return self._eastmoney_provider if self._eastmoney_provider is not False else None
+
     def _normalize_symbol(self, symbol: str) -> str:
         """统一证券代码为后缀格式 000000.SZ/000000.SH"""
         try:
@@ -1063,13 +1099,9 @@ class StrategyEngine:
             
             # 方法3: 尝试easy_xt提供的行情提供者
             try:
-                # 导入easy_xt的行情提供者
-                from easy_xt.realtime_data.providers.tdx_provider import TdxDataProvider
-                from easy_xt.realtime_data.providers.eastmoney_provider import EastmoneyDataProvider
-                
-                # 尝试通达信提供者
-                tdx_provider = TdxDataProvider()
-                if hasattr(tdx_provider, 'get_realtime_quotes'):
+                # 使用单例模式的provider（避免重复创建连接）
+                tdx_provider = self._get_tdx_provider()
+                if tdx_provider and hasattr(tdx_provider, 'get_realtime_quotes'):
                     # 转换股票代码格式为通达信纯6位：SH600642/SZ000001/000001.SZ -> 000001
                     tdx_symbol = symbol.replace('.SH', '').replace('.SZ', '').replace('SH', '').replace('SZ', '')
                     quotes = tdx_provider.get_realtime_quotes([tdx_symbol])
@@ -1077,10 +1109,10 @@ class StrategyEngine:
                         price = quotes[0]['price']
                         self.logger.info(f"TDX提供者获取到 {symbol} 实时价格: {price}")
                         return float(price)
-                
-                # 尝试东方财富提供者
-                em_provider = EastmoneyDataProvider()
-                if hasattr(em_provider, 'get_realtime_quotes'):
+
+                # 使用单例模式的东方财富provider
+                em_provider = self._get_eastmoney_provider()
+                if em_provider and hasattr(em_provider, 'get_realtime_quotes'):
                     # 东方财富使用后缀格式：SH600642/SZ000001 -> 600642.SH / 000001.SZ；若已是后缀则保持
                     s = str(symbol).strip().upper()
                     if s.startswith('SH') or s.startswith('SZ'):
