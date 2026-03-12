@@ -13,6 +13,12 @@ import logging
 from typing import Dict, List, Any, Optional
 from urllib.parse import urlencode
 
+# 重新导入requests以供直接使用
+try:
+    import requests as req_direct
+except ImportError:
+    req_direct = requests
+
 try:
     from .base_provider import BaseDataProvider
 except ImportError:
@@ -222,8 +228,11 @@ class EastmoneyDataProvider(BaseDataProvider):
             'name': '东方财富',
             'code': 'eastmoney_v2',
             'description': '东方财富实时行情数据源（更新版）',
-            'supported_markets': ['沪A', '深A', '创业板', '科创板'],
-            'supported_data_types': ['实时行情', '资金流向', '热门股票', '板块数据'],
+            'supported_markets': ['沪A', '深A', '创业板', '科创板', '北交所'],
+            'supported_data_types': [
+                '实时行情', '资金流向', '热门股票', '板块数据',
+                'K线数据', '分时数据'
+            ],
             'update_frequency': '实时',
             'connected': self.is_connected()
         }
@@ -614,6 +623,225 @@ class EastmoneyDataProvider(BaseDataProvider):
                 'timestamp': int(time.time()),
                 'source': 'eastmoney_v2'
             }
+
+    def get_kline_data(self, code: str, period: str = 'D', count: int = 100,
+                       start_date: str = None, end_date: str = None) -> List[Dict[str, Any]]:
+        """获取K线数据
+
+        Args:
+            code: 股票代码 (如 '000001' 或 '000001.SZ')
+            period: 周期 ('1'=1分钟, '5'=5分钟, '15'=15分钟, '30'=30分钟, '60'=1小时, 'D'=日, 'W'=周, 'M'=月)
+            count: 获取数量
+            start_date: 开始日期 (YYYYMMDD)
+            end_date: 结束日期 (YYYYMMDD)
+
+        Returns:
+            List[Dict]: K线数据
+            [
+                {
+                    'code': '000001',
+                    'datetime': '2024-01-01',
+                    'open': 10.50,
+                    'high': 10.80,
+                    'low': 10.40,
+                    'close': 10.70,
+                    'volume': 1500000,
+                    'amount': 16000000.0,
+                    'change_pct': 1.92,
+                    'turnover': 0.5,
+                    'source': 'eastmoney'
+                },
+                ...
+            ]
+        """
+        try:
+            # 标准化股票代码
+            std_code = code.replace('.SZ', '').replace('.SH', '').replace('.BJ', '')
+
+            # 确定市场代码
+            if std_code.startswith('6'):
+                market = '1'  # 上海
+            elif std_code.startswith(('8', '4')):
+                market = '0'  # 北京
+            else:
+                market = '0'  # 深圳
+
+            secid = f"{market}.{std_code}"
+
+            # 周期映射
+            period_map = {
+                '1': '1',    # 1分钟
+                '5': '5',    # 5分钟
+                '15': '15',  # 15分钟
+                '30': '30',  # 30分钟
+                '60': '60',  # 60分钟
+                'D': '101',  # 日K
+                'W': '102',  # 周K
+                'M': '103'   # 月K
+            }
+
+            klt = period_map.get(period, '101')
+
+            # 构建请求参数
+            url = 'https://push2his.eastmoney.com/api/qt/stock/kline/get'
+
+            params = {
+                'secid': secid,
+                'fields1': 'f1,f2,f3,f4,f5,f6',
+                'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+                'klt': klt,
+                'fqt': '1',  # 前复权
+                'beg': start_date if start_date else '0',
+                'end': end_date if end_date else '20500101',
+                'lmt': str(count)
+            }
+
+            response = self._make_request(url, params)
+            if not response:
+                return []
+
+            data = response.json()
+
+            if data.get('rc') == 0 and 'data' in data:
+                kline_info = data['data']
+                klines = kline_info.get('klines', [])
+
+                if not klines:
+                    self.logger.warning(f"未获取到K线数据: {code}")
+                    return []
+
+                formatted_data = []
+                for kline_str in klines:
+                    # 解析K线字符串: 日期,开盘,最高,最低,收盘,成交量,成交额,振幅,涨跌幅,涨跌额,换手率
+                    parts = kline_str.split(',')
+
+                    if len(parts) >= 7:
+                        formatted_data.append({
+                            'code': code,
+                            'datetime': parts[0],
+                            'open': float(parts[1]),
+                            'high': float(parts[2]),
+                            'low': float(parts[3]),
+                            'close': float(parts[4]),
+                            'volume': int(float(parts[5])),
+                            'amount': float(parts[6]),
+                            'change_pct': float(parts[8]) if len(parts) > 8 else 0.0,
+                            'turnover': float(parts[10]) if len(parts) > 10 else 0.0,
+                            'source': 'eastmoney'
+                        })
+
+                self.logger.info(f"成功获取K线数据: {code}, 周期: {period}, 数量: {len(formatted_data)}")
+                return formatted_data
+
+            return []
+
+        except Exception as e:
+            self.logger.error(f"获取K线数据失败: {e}")
+            return []
+
+    def get_minute_data(self, code: str, count: int = 240) -> List[Dict[str, Any]]:
+        """获取分时数据
+
+        Args:
+            code: 股票代码 (如 '000001' 或 '000001.SZ')
+            count: 获取数量 (默认240条，包含盘前盘后)
+
+        Returns:
+            List[Dict]: 分时数据
+            [
+                {
+                    'code': '000001',
+                    'datetime': '2024-01-01 09:30',
+                    'price': 10.50,
+                    'volume': 15000,
+                    'amount': 157500.0,
+                    'avg_price': 10.50,
+                    'source': 'eastmoney'
+                },
+                ...
+            ]
+        """
+        try:
+            # 标准化股票代码
+            std_code = code.replace('.SZ', '').replace('.SH', '').replace('.BJ', '')
+
+            # 确定市场代码
+            if std_code.startswith('6'):
+                market = '1'  # 上海
+            elif std_code.startswith(('8', '4')):
+                market = '0'  # 北京
+            else:
+                market = '0'  # 深圳
+
+            secid = f"{market}.{std_code}"
+
+            # 构建请求参数 - 使用更稳定的端点
+            url = 'https://push2his.eastmoney.com/api/qt/stock/trends2/get'
+
+            params = {
+                'secid': secid,
+                'fields1': 'f1,f2,f3,f4,f5,f6',
+                'fields2': 'f51,f52,f53,f54,f55,f56,f57,f58',
+                'iscr': '0',
+                'ndays': '1'
+            }
+
+            # 直接使用requests，绕过session的重试机制
+            try:
+                response = req_direct.get(
+                    url,
+                    params=params,
+                    headers=self._get_headers(),
+                    timeout=15,
+                    allow_redirects=True
+                )
+
+                if response.status_code != 200:
+                    self.logger.warning(f"分时数据请求失败，状态码: {response.status_code}")
+                    return []
+
+                data = response.json()
+
+                if data.get('rc') == 0 and 'data' in data:
+                    trend_data = data['data']
+                    trends = trend_data.get('trends', [])
+
+                    if not trends:
+                        self.logger.warning(f"未获取到分时数据: {code}")
+                        return []
+
+                    # 限制返回数量
+                    if count > 0:
+                        trends = trends[-count:]
+
+                    formatted_data = []
+                    for trend_str in trends:
+                        # 解析分时字符串: 时间,开盘,最高,最低,收盘,成交量,成交额,均价
+                        parts = trend_str.split(',')
+
+                        if len(parts) >= 8:
+                            formatted_data.append({
+                                'code': code,
+                                'datetime': parts[0],
+                                'price': float(parts[1]),  # 当前价
+                                'volume': int(float(parts[5])),
+                                'amount': float(parts[6]),
+                                'avg_price': float(parts[7]),
+                                'source': 'eastmoney'
+                            })
+
+                    self.logger.info(f"成功获取分时数据: {code}, 数量: {len(formatted_data)}")
+                    return formatted_data
+
+                return []
+
+            except Exception as e:
+                self.logger.debug(f"直接请求分时数据失败: {e}")
+                return []
+
+        except Exception as e:
+            self.logger.error(f"获取分时数据失败: {e}")
+            return []
 
     def __del__(self):
         """析构函数"""
