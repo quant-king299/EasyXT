@@ -18,15 +18,55 @@ xtquant_path = os.path.join(project_root, 'xtquant')
 if xtquant_path not in sys.path:
     sys.path.insert(0, xtquant_path)
 
+# 延迟导入xtquant，只在需要时才导入
+# 避免在只使用数据功能时显示不必要的警告
+_xt_trader_available = False
+_xt_trader = None
+_xt_type = None
+_xt_const = None
+_xtdata = None
+
+def _ensure_xt_trader():
+    """确保xtquant已导入，延迟加载"""
+    global _xt_trader_available, _xt_trader, _xt_type, _xt_const, _xtdata
+
+    if _xt_trader_available:
+        return True
+
+    try:
+        import xtquant.xttrader as xt_trader
+        import xtquant.xttype as xt_type
+        import xtquant.xtconstant as xt_const
+        from xtquant import xtdata
+
+        _xt_trader = xt_trader
+        _xt_type = xt_type
+        _xt_const = xt_const
+        _xtdata = xtdata
+        _xt_trader_available = True
+        print("[OK] xtquant.xttrader 导入成功")
+        return True
+    except ImportError as e:
+        print(f"[INFO] xtquant.xttrader 未安装或不可用")
+        print(f"[INFO] 如需交易功能，请安装QMT客户端")
+        print(f"[INFO] 数据功能可正常使用，不受影响")
+        return False
+
+# 旧代码保持兼容（已弃用）
 try:
     import xtquant.xttrader as xt_trader
     import xtquant.xttype as xt_type
     import xtquant.xtconstant as xt_const
-    from xtquant import xtdata  # 关键导入！这是成交查询成功的关键
-    print("[OK] xtquant.xttrader 导入成功")
-except ImportError as e:
-    print(f"[WARNING] xtquant.xttrader 导入失败: {e}")
-    print("[WARNING] 交易服务未连接")
+    from xtquant import xtdata
+    _xt_trader_available = True
+    _xt_trader = xt_trader
+    _xt_type = xt_type
+    _xt_const = xt_const
+    _xtdata = xtdata
+    xt_trader = xt_trader
+    xt_type = xt_type
+    xt_const = xt_const
+except ImportError:
     xt_trader = None
     xt_type = None
     xt_const = None
@@ -34,55 +74,63 @@ except ImportError as e:
 from .utils import StockCodeUtils, ErrorHandler
 from .config import config
 
-class SimpleCallback(xt_trader.XtQuantTraderCallback):
-    """简化的交易回调类"""
-    
-    def __init__(self):
-        super().__init__()
-        self.connected = False
-        self.orders = {}
-        self.trades = {}
-        self.positions = {}
-        self.assets = {}
-        self.errors = []
-        
-        # 事件通知
-        self.order_event = Event()
-        self.trade_event = Event()
-        
-    def on_connected(self):
-        """连接成功"""
-        self.connected = True
-        print("交易连接成功")
-    
-    def on_disconnected(self):
-        """连接断开"""
-        self.connected = False
-        print("交易连接断开")
-    
-    def on_stock_order(self, order):
-        """委托回调"""
-        self.orders[order.order_id] = order
-        self.order_event.set()
-        
-    def on_stock_trade(self, trade):
-        """成交回调"""
-        self.trades[trade.traded_id] = trade
-        self.trade_event.set()
-        
-    def on_stock_position(self, position):
-        """持仓回调"""
-        key = f"{position.account_id}_{position.stock_code}"
-        self.positions[key] = position
-        
-    def on_stock_asset(self, asset):
-        """资产回调"""
-        self.assets[asset.account_id] = asset
-        
-    def on_order_error(self, order_error):
-        """委托错误回调"""
-        self.errors.append(order_error)
-        print(f"委托错误: {order_error.error_msg}")
+# 条件定义SimpleCallback类
+if xt_trader is not None:
+    class SimpleCallback(xt_trader.XtQuantTraderCallback):
+        """简化的交易回调类"""
+
+        def __init__(self):
+            super().__init__()
+            self.connected = False
+            self.orders = {}
+            self.trades = {}
+            self.positions = {}
+            self.assets = {}
+            self.errors = []
+
+            # 事件通知
+            self.order_event = Event()
+            self.trade_event = Event()
+
+        def on_connected(self):
+            """连接成功"""
+            self.connected = True
+            print("交易连接成功")
+
+        def on_disconnected(self):
+            """连接断开"""
+            self.connected = False
+            print("交易连接断开")
+
+        def on_stock_order(self, order):
+            """委托回调"""
+            self.orders[order.order_id] = order
+            self.order_event.set()
+
+        def on_stock_trade(self, trade):
+            """成交回调"""
+            self.trades[trade.traded_id] = trade
+            self.trade_event.set()
+
+        def on_stock_position(self, position):
+            """持仓回调"""
+            key = f"{position.account_id}_{position.stock_code}"
+            self.positions[key] = position
+
+        def on_stock_asset(self, asset):
+            """资产回调"""
+            self.assets[asset.account_id] = asset
+
+        def on_order_error(self, order_error):
+            """委托错误回调"""
+            self.errors.append(order_error)
+            print(f"委托错误: {order_error.error_msg}")
+else:
+    # xtquant不可用时的占位符类
+    class SimpleCallback:
+        """占位符回调类（xtquant不可用时）"""
+        def __init__(self):
+            pass
 
 class TradeAPI:
     """交易API封装类"""

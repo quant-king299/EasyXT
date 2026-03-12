@@ -18,9 +18,16 @@ class EasyXT:
     
     def __init__(self):
         self.data = DataAPI()
-        self.trade = TradeAPI()
+        self._trade = None  # 延迟加载，只在需要时创建
         self._data_connected = False
         self._trade_connected = False
+
+    @property
+    def trade(self):
+        """延迟加载交易API，只在需要时创建"""
+        if self._trade is None:
+            self._trade = TradeAPI()
+        return self._trade
     
     def init_data(self) -> bool:
         """
