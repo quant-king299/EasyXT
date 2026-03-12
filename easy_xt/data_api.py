@@ -31,12 +31,39 @@ xtquant_path = os.path.join(project_root, 'xtquant')
 if xtquant_path not in sys.path:
     sys.path.insert(0, xtquant_path)
 
+# 尝试导入 xtquant（QMT数据源）
+xt_available = False
+xt = None
 try:
     import xtquant.xtdata as xt
-    print("[OK] xtquant.xtdata imported successfully")
-except ImportError as e:
-    print(f"[ERROR] xtquant.xtdata import failed: {e}")
-    xt = None
+    xt_available = True
+    print("[OK] QMT (xtquant.xtdata) imported successfully")
+except ImportError:
+    # QMT不可用是正常的，继续尝试其他数据源
+    pass
+
+# 尝试导入多数据源
+TDX_AVAILABLE = False
+try:
+    from .realtime_data.providers.tdx_provider import TdxDataProvider
+    TDX_AVAILABLE = True
+    print("[OK] TDX (通达信) provider available")
+except ImportError:
+    print("[INFO] TDX provider not available")
+
+EASTMONEY_AVAILABLE = False
+try:
+    from .realtime_data.providers.eastmoney_provider import EastmoneyDataProvider
+    EASTMONEY_AVAILABLE = True
+    print("[OK] Eastmoney (东方财富) provider available")
+except ImportError:
+    print("[INFO] Eastmoney provider not available")
+
+# 打印数据源状态总结
+if not (xt_available or TDX_AVAILABLE or EASTMONEY_AVAILABLE):
+    print("\n[WARN] 所有数据源都不可用，请至少安装一个：")
+    print("  - QMT (推荐用于实盘)")
+    print("  - 或使用 TDX/Eastmoney (可用于回测)")
 
 from .utils import StockCodeUtils, TimeUtils, DataUtils, ErrorHandler
 from .config import config
@@ -122,64 +149,146 @@ def validate_stock_codes(codes: Union[str, List[str]]) -> tuple[bool, str]:
     return True, "股票代码验证通过"
 
 class DataAPI:
-    """数据API封装类"""
+    """数据API封装类 - 支持多数据源自动降级"""
 
     # 类级别的线程锁，用于保护 xtdata 的下载操作
-    # 确保 download_history_data2 等方法在同一时间只有一个线程调用
     _download_lock = threading.Lock()
 
     def __init__(self):
         self.xt = xt
         self._connected = False
-    
+
+        # 多数据源支持
+        self._active_source = None  # 当前使用的数据源: 'qmt', 'tdx', 'eastmoney'
+        self._tdx_provider = None
+        self._eastmoney_provider = None
+
     def connect(self) -> bool:
-        """连接数据服务"""
+        """连接数据服务 - 自动选择最佳数据源"""
+        print("\n[Connecting to data source...]")
+
+        # 优先级1: 尝试连接 QMT
+        if xt_available:
+            print("  Trying QMT (xtquant)...")
+            if self._connect_qmt():
+                self._active_source = 'qmt'
+                print("[OK] Using QMT (xtquant) as data source")
+                return True
+            print("  [WARN] QMT connection failed")
+
+        # 优先级2: 降级到 TDX
+        if TDX_AVAILABLE:
+            print("  Trying TDX (通达信)...")
+            if self._connect_tdx():
+                self._active_source = 'tdx'
+                print("[OK] Using TDX (通达信) as data source")
+                return True
+            print("  [WARN] TDX connection failed")
+
+        # 优先级3: 降级到 Eastmoney
+        if EASTMONEY_AVAILABLE:
+            print("  Trying Eastmoney (东方财富)...")
+            if self._connect_eastmoney():
+                self._active_source = 'eastmoney'
+                print("[OK] Using Eastmoney (东方财富) as data source")
+                return True
+            print("  [WARN] Eastmoney connection failed")
+
+        # 所有数据源都失败
+        print("[ERROR] All data sources failed to connect")
+        return False
+
+    def _connect_qmt(self) -> bool:
+        """连接QMT数据源"""
         if not self.xt:
-            ErrorHandler.log_error("xtquant未正确导入")
             return False
-        
+
         try:
-            # 尝试获取客户端连接
             client = self.xt.get_client()
-            self._connected = client.is_connected() if client else False
-            
-            if self._connected:
-                print("[OK] Data service connected successfully")
-            else:
-                print("[ERROR] Cannot connect to Xt client")
-                print("[TIPS] Please ensure Xt client is running and logged in")
-            
-            return self._connected
+            connected = client.is_connected() if client else False
+            if connected:
+                self._connected = True  # ✓ 设置连接状态
+            return connected
         except Exception as e:
-            ErrorHandler.log_error(f"连接数据服务失败: {str(e)}")
+            print(f"  [INFO] QMT connection failed: {e}")
             return False
+
+    def _connect_tdx(self) -> bool:
+        """连接TDX数据源"""
+        try:
+            if self._tdx_provider is None:
+                self._tdx_provider = TdxDataProvider()
+            connected = self._tdx_provider.connect()
+            if connected:
+                self._connected = True  # ✓ 设置连接状态
+            return connected
+        except Exception as e:
+            print(f"  [INFO] TDX connection failed: {e}")
+            return False
+
+    def _connect_eastmoney(self) -> bool:
+        """连接东方财富数据源"""
+        try:
+            if self._eastmoney_provider is None:
+                self._eastmoney_provider = EastmoneyDataProvider()
+            connected = self._eastmoney_provider.connect()
+            if connected:
+                self._connected = True  # ✓ 设置连接状态
+            return connected
+        except Exception as e:
+            print(f"  [INFO] Eastmoney connection failed: {e}")
+            return False
+
+    def _connect_tdx(self) -> bool:
+        """连接TDX数据源"""
+        try:
+            if self._tdx_provider is None:
+                self._tdx_provider = TdxDataProvider()
+            return self._tdx_provider.connect()
+        except Exception as e:
+            print(f"  [INFO] TDX connection failed: {e}")
+            return False
+
+    def _connect_eastmoney(self) -> bool:
+        """连接东方财富数据源"""
+        try:
+            if self._eastmoney_provider is None:
+                self._eastmoney_provider = EastmoneyDataProvider()
+            return self._eastmoney_provider.connect()
+        except Exception as e:
+            print(f"  [INFO] Eastmoney connection failed: {e}")
+            return False
+
+    def get_active_source(self) -> str:
+        """获取当前使用的数据源"""
+        return self._active_source if self._active_source else "None"
     
     @ErrorHandler.handle_api_error
-    def get_price(self, 
-                  codes: Union[str, List[str]], 
-                  start: Optional[str] = None, 
-                  end: Optional[str] = None, 
+    def get_price(self,
+                  codes: Union[str, List[str]],
+                  start: Optional[str] = None,
+                  end: Optional[str] = None,
                   period: str = '1d',
                   count: Optional[int] = None,
                   fields: Optional[List[str]] = None,
                   adjust: str = 'front') -> pd.DataFrame:
         """
-        获取股票价格数据
-        
+        获取股票价格数据 - 支持多数据源自动降级
+
         Args:
             codes: 股票代码，支持单个或多个
             start: 开始日期，支持多种格式
-            end: 结束日期，支持多种格式  
+            end: 结束日期，支持多种格式
             period: 周期，支持的周期类型见SUPPORTED_PERIODS
             count: 数据条数，如果指定则忽略start
             fields: 字段列表，默认['open', 'high', 'low', 'close', 'volume']
             adjust: 复权类型，'front'前复权, 'back'后复权, 'none'不复权
-            
+
         Returns:
             DataFrame: 价格数据
-            
+
         Raises:
-            ConnectionError: 连接失败
+            ConnectionError: 所有数据源都连接失败
             DataError: 数据获取失败
             ValueError: 不支持的周期类型或股票代码无效
         """
@@ -187,9 +296,21 @@ class DataAPI:
         if not validate_period(period):
             supported_list = ', '.join(SUPPORTED_PERIODS.keys())
             raise ValueError(f"不支持的数据周期 '{period}'。支持的周期: {supported_list}")
-        # 如果xtquant不可用，直接报错
+
+        # 根据当前使用的数据源调用相应方法
+        if self._active_source == 'qmt':
+            return self._get_price_qmt(codes, start, end, period, count, fields, adjust)
+        elif self._active_source == 'tdx':
+            return self._get_price_tdx(codes, start, end, period, count, fields, adjust)
+        elif self._active_source == 'eastmoney':
+            return self._get_price_eastmoney(codes, start, end, period, count, fields, adjust)
+        else:
+            raise ConnectionError("数据服务未连接，请先调用init_data()")
+
+    def _get_price_qmt(self, codes, start, end, period, count, fields, adjust):
+        """使用QMT获取价格数据（原有逻辑）"""
         if not self.xt:
-            raise ConnectionError("xtquant未正确导入，无法获取数据")
+            raise ConnectionError("QMT (xtquant) 不可用")
         
         if not self._connected:
             raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
