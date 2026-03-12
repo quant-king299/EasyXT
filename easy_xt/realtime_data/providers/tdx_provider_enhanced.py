@@ -184,22 +184,26 @@ class TdxDataProviderEnhanced(BaseDataProvider):
     
     def _parse_stock_code(self, code: str) -> Tuple[int, str]:
         """解析股票代码，返回市场ID和标准代码
-        
+
         Args:
             code: 股票代码，如 '000001' 或 '000001.SZ'
-            
+
         Returns:
             Tuple[int, str]: (市场ID, 标准代码)
         """
         # 移除后缀
         if '.' in code:
             code = code.split('.')[0]
-        
+
         # 根据代码前缀判断市场
         if code.startswith(('000', '001', '002', '003', '300')):
-            return TDXParams.MARKET_SZ, code  # 深圳市场
+            return TDXParams.MARKET_SZ, code  # 深圳市场（股票）
+        elif code.startswith('1'):
+            return TDXParams.MARKET_SZ, code  # 深圳市场（基金）
         elif code.startswith(('600', '601', '603', '605', '688')):
-            return TDXParams.MARKET_SH, code  # 上海市场
+            return TDXParams.MARKET_SH, code  # 上海市场（股票）
+        elif code.startswith('5'):
+            return TDXParams.MARKET_SH, code  # 上海市场（基金/ETF）
         else:
             # 默认深圳市场
             return TDXParams.MARKET_SZ, code
@@ -268,27 +272,34 @@ class TdxDataProviderEnhanced(BaseDataProvider):
     
     def _format_quote_data(self, quote: Dict) -> Optional[Dict[str, Any]]:
         """格式化行情数据为统一格式
-        
+
         Args:
             quote: 原始行情数据
-            
+
         Returns:
             Dict: 格式化后的行情数据
         """
         try:
+            # 判断是否为基金（5开头上海基金或1开头深圳基金）
+            code = quote.get('code', '')
+            is_etf = code.startswith('5') or code.startswith('1')
+
+            # 通达信对基金价格做了10倍放大，需要还原
+            price_divisor = 10.0 if is_etf else 1.0
+
             # 计算涨跌额和涨跌幅
-            price = float(quote.get('price', 0))
-            last_close = float(quote.get('last_close', 0))
-            
+            price = float(quote.get('price', 0)) / price_divisor
+            last_close = float(quote.get('last_close', 0)) / price_divisor
+
             if last_close > 0:
                 change = price - last_close
                 change_pct = (change / last_close) * 100
             else:
                 change = 0
                 change_pct = 0
-            
+
             return {
-                'code': quote.get('code', ''),
+                'code': code,
                 'name': quote.get('name', ''),
                 'price': price,
                 'last_close': last_close,
@@ -296,11 +307,11 @@ class TdxDataProviderEnhanced(BaseDataProvider):
                 'change_pct': round(change_pct, 2),
                 'volume': int(quote.get('vol', 0)),
                 'turnover': float(quote.get('amount', 0)),
-                'high': float(quote.get('high', 0)),
-                'low': float(quote.get('low', 0)),
-                'open': float(quote.get('open', 0)),
-                'bid1': float(quote.get('bid1', 0)),
-                'ask1': float(quote.get('ask1', 0)),
+                'high': float(quote.get('high', 0)) / price_divisor,
+                'low': float(quote.get('low', 0)) / price_divisor,
+                'open': float(quote.get('open', 0)) / price_divisor,
+                'bid1': float(quote.get('bid1', 0)) / price_divisor,
+                'ask1': float(quote.get('ask1', 0)) / price_divisor,
                 'bid1_vol': int(quote.get('bid1_vol', 0)),
                 'ask1_vol': int(quote.get('ask1_vol', 0)),
                 'timestamp': int(time.time()),
