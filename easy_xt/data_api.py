@@ -482,7 +482,7 @@ class DataAPI:
         """
         获取五档行情数据（买卖盘口）
 
-        注意：需要先订阅行情才能获取五档数据
+        注意：直接调用 get_full_tick 获取，无需预先订阅
 
         Args:
             codes: 股票代码
@@ -510,60 +510,8 @@ class DataAPI:
         codes = StockCodeUtils.normalize_codes(codes)
 
         try:
-            # 先订阅行情（重要：必须先订阅才能获取五档数据）
-            if isinstance(codes, str):
-                codes_list = [codes]
-            else:
-                codes_list = codes
-
-            # 订阅每只股票的tick行情
-            print("[DEBUG] 开始订阅行情...")
-            for code in codes_list:
-                try:
-                    # subscribe_quote 订阅行情接口
-                    # period: 'tick' 分笔, '1d' 日线等
-                    if hasattr(self.xt, 'subscribe_quote'):
-                        result = self.xt.subscribe_quote(code, period='tick')
-                        print(f"[DEBUG] {code} 订阅结果: {result}")
-                except Exception as e:
-                    # 订阅失败不中断，继续尝试获取数据
-                    print(f"[DEBUG] {code} 订阅异常: {e}")
-
-            # 等待让订阅生效并重试获取数据
-            import time
-            print("[DEBUG] 等待数据推送...")
-            time.sleep(2.0)  # 增加到2秒
-
-            # 获取完整tick数据，带重试机制
-            tick_data = None
-            max_retries = 3
-            for attempt in range(max_retries):
-                tick_data = self.xt.get_full_tick(codes)
-                if tick_data:
-                    # 检查是否有五档数据
-                    has_order_book = False
-                    for code, tick_info in tick_data.items():
-                        if tick_info:
-                            # 根据官方文档，字段名是 askPrice 和 bidPrice
-                            ask_price = tick_info.get('askPrice')
-                            bid_price = tick_info.get('bidPrice')
-                            # 这些字段可能是数组或单个值
-                            # 检查是否有非空值（数组、非None的数字都算有数据）
-                            if ask_price is not None or bid_price is not None:
-                                has_order_book = True
-                                break
-
-                    if has_order_book:
-                        print(f"[DEBUG] 第{attempt + 1}次尝试成功获取到五档数据")
-                        break
-                    else:
-                        print(f"[DEBUG] 第{attempt + 1}次尝试：五档数据为空，等待2秒后重试...")
-                        if attempt < max_retries - 1:
-                            time.sleep(2.0)
-                else:
-                    print(f"[DEBUG] 第{attempt + 1}次尝试：无法获取tick数据")
-                    if attempt < max_retries - 1:
-                        time.sleep(2.0)
+            # 直接获取五档tick数据，无需订阅
+            tick_data = self.xt.get_full_tick(codes)
 
             if not tick_data:
                 raise DataError("无法获取五档行情数据")

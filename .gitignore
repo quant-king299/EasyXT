@@ -358,3 +358,4 @@ easyxt_backtest/README_V3.md
 101因子/101因子分析平台/scripts/test_datasource.py
 101因子/101因子分析平台/scripts/test_datasource.py
 101因子/101因子分析平台/scripts/test_datasource.py
+code_converter/utils/qmt_api_scraper.py
