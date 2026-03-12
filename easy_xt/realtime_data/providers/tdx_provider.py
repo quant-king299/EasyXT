@@ -685,3 +685,195 @@ class TdxDataProvider(BaseDataProvider):
             self.disconnect()
         except Exception:
             pass
+
+    # ==================== Tick 数据支持 ====================
+
+    def get_transaction_data(self, code: str, count: int = 100) -> List[Dict[str, Any]]:
+        """获取实时逐笔成交数据（Tick数据）
+
+        对应 QMT 的 tick 分笔数据
+
+        Args:
+            code: 股票代码
+            count: 获取条数
+
+        Returns:
+            List[Dict]: 逐笔成交数据
+            [
+                {
+                    'code': '000001',
+                    'datetime': '14:30:00',
+                    'price': 10.50,
+                    'volume': 1000,
+                    'direction': 'B',  # B=买盘，S=卖盘，N=未知
+                    'source': 'tdx'
+                },
+                ...
+            ]
+        """
+        try:
+            if not self._ensure_connected():
+                return []
+
+            market, std_code = self._parse_stock_code(code)
+
+            # 判断是否为基金
+            is_etf = std_code.startswith('5') or std_code.startswith('1')
+            price_divisor = 10.0 if is_etf else 1.0
+
+            # 获取逐笔成交数据
+            data = self.api.get_transaction_data(market, std_code, 0, count)
+
+            if not data:
+                return []
+
+            formatted_data = []
+            for item in data:
+                formatted_data.append({
+                    'code': code,
+                    'datetime': item.get('time', ''),  # 格式：HH:MM:SS
+                    'price': float(item.get('price', 0)) / price_divisor,
+                    'volume': int(item.get('volume', 0)),
+                    'direction': item.get('direction', 'N'),  # B/S/N
+                    'source': 'tdx_transaction'
+                })
+
+            return formatted_data
+
+        except Exception as e:
+            self.logger.error(f"获取逐笔成交数据失败: {e}")
+            return []
+
+    def get_history_transaction_data(self, code: str, date: str = None, count: int = 500) -> List[Dict[str, Any]]:
+        """获取历史逐笔成交数据
+
+        对应 QMT 的历史分笔数据
+
+        Args:
+            code: 股票代码
+            date: 日期 (YYYYMMDD)，默认当天
+            count: 获取条数
+
+        Returns:
+            List[Dict]: 历史逐笔成交数据
+        """
+        try:
+            if not self._ensure_connected():
+                return []
+
+            market, std_code = self._parse_stock_code(code)
+
+            # 判断是否为基金
+            is_etf = std_code.startswith('5') or std_code.startswith('1')
+            price_divisor = 10.0 if is_etf else 1.0
+
+            # 如果没有指定日期，使用今天
+            if date is None:
+                from datetime import datetime
+                date = datetime.now().strftime('%Y%m%d')
+
+            # 获取历史逐笔数据
+            data = self.api.get_history_transaction_data(market, std_code, 0, count, date)
+
+            if not data:
+                return []
+
+            formatted_data = []
+            for item in data:
+                formatted_data.append({
+                    'code': code,
+                    'datetime': item.get('time', ''),
+                    'price': float(item.get('price', 0)) / price_divisor,
+                    'volume': int(item.get('volume', 0)),
+                    'direction': item.get('direction', 'N'),
+                    'source': 'tdx_history_transaction'
+                })
+
+            return formatted_data
+
+        except Exception as e:
+            self.logger.error(f"获取历史逐笔数据失败: {e}")
+            return []
+
+    # ==================== 市场信息支持 ====================
+
+    def get_stock_list(self, market: int = None) -> List[str]:
+        """获取股票列表
+
+        Args:
+            market: 市场ID，0=深圳，1=上海，None=全部
+
+        Returns:
+            List[str]: 股票代码列表
+        """
+        try:
+            if not self._ensure_connected():
+                return []
+
+            if market is None:
+                # 获取所有市场的股票
+                sz_stocks = self.api.get_security_list(0, 0)  # 深圳
+                sh_stocks = self.api.get_security_list(1, 0)  # 上海
+                return sz_stocks + sh_stocks if sz_stocks and sh_stocks else []
+            else:
+                # 获取指定市场的股票
+                return self.api.get_security_list(market, 0)
+
+        except Exception as e:
+            self.logger.error(f"获取股票列表失败: {e}")
+            return []
+
+    def get_trading_calendar(self, market: int = 1) -> List[str]:
+        """获取交易日历
+
+        Args:
+            market: 市场ID，0=深圳，1=上海
+
+        Returns:
+            List[str]: 交易日列表 (YYYYMMDD格式)
+        """
+        try:
+            if not self._ensure_connected():
+                return []
+
+            # 获取交易日历（需要使用特定方法）
+            from datetime import datetime, timedelta
+            dates = []
+            start_date = datetime.now() - timedelta(days=365)
+            end_date = datetime.now()
+
+            # 简化实现：返回一些已知交易日
+            # 实际应用中可能需要调用专门的API
+            current = start_date
+            while current <= end_date:
+                # 跳过周末
+                if current.weekday() < 5:  # 0-4是周一到周五
+                    dates.append(current.strftime('%Y%m%d'))
+                current += timedelta(days=1)
+
+            return dates
+
+        except Exception as e:
+            self.logger.error(f"获取交易日历失败: {e}")
+            return []
+
+    # ==================== 批量数据支持 ====================
+
+    def get_batch_realtime_quotes(self, codes: List[str], batch_size: int = 80) -> Dict[str, Dict[str, Any]]:
+        """批量获取实时行情（优化版）
+
+        Args:
+            codes: 股票代码列表
+            batch_size: 每批数量（通达信限制80只）
+
+        Returns:
+            Dict[str, Dict]: {code: quote_data} 字典格式
+        """
+        all_quotes = self.get_realtime_quotes(codes)
+
+        # 转换为字典格式
+        quote_dict = {}
+        for quote in all_quotes:
+            quote_dict[quote['code']] = quote
+
+        return quote_dict
