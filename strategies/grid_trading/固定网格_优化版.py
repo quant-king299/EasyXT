@@ -228,16 +228,29 @@ class 固定网格策略优化版:
                 'filled': False
             })
 
-        # 按价格排序
-        grids.sort(key=lambda x: x['price'])
+        # 按level排序（-grid_count 到 +grid_count）
+        grids.sort(key=lambda x: abs(x['level']))
         self.grid_levels[stock_code] = grids
 
         self.log(f"{stock_code} 网格设置完成 (基准价:{base:.3f}):")
-        for grid in grids[:3]:  # 只显示前3个
-            self.log(f"  {'买入' if grid['type']=='buy' else '卖出':4s} "
-                   f"{grid['quantity']:4d}股 @{grid['price']:7.3f}")
-        if len(grids) > 3:
-            self.log(f"  ... 共{len(grids)}层网格")
+
+        # 显示买入网格（从基准价最近的开始）
+        buy_grids = [g for g in grids if g['type'] == 'buy']
+        if buy_grids:
+            self.log(f"  买入网格 ({len(buy_grids)}层):")
+            for grid in buy_grids[:3]:  # 显示最近的3层
+                self.log(f"    第{abs(grid['level'])}层: {grid['quantity']:4d}股 @{grid['price']:7.3f}")
+            if len(buy_grids) > 3:
+                self.log(f"    ... 省略 {len(buy_grids)-3} 层")
+
+        # 显示卖出网格（从基准价最近的开始）
+        sell_grids = [g for g in grids if g['type'] == 'sell']
+        if sell_grids:
+            self.log(f"  卖出网格 ({len(sell_grids)}层):")
+            for grid in sell_grids[:3]:  # 显示最近的3层
+                self.log(f"    第{grid['level']}层: {grid['quantity']:4d}股 @{grid['price']:7.3f}")
+            if len(sell_grids) > 3:
+                self.log(f"    ... 省略 {len(sell_grids)-3} 层")
 
     def get_current_price(self, stock_code):
         """获取当前价格"""
