@@ -7,7 +7,6 @@
   "last_updated_comment": "最后一次更新配置的日期（YYYY-MM-DD）",
   "config_source": "unified_config.json",
   "config_source_comment": "当前配置来源文件名，用于标识配置加载来源",
-
   "system": {
     "system_comment": "系统级通用设置（配置管理、QMT连接等）",
     "config_manager": {
@@ -30,7 +29,6 @@
       "max_retries_comment": "最大自动重试次数"
     }
   },
-
   "settings": {
     "settings_comment": "运行时的通用设置（账户、风控、监控、日志、交易参数等）",
     "account": {
@@ -97,5 +95,8 @@
       "min_trade_amount": 100,
       "min_trade_amount_comment": "最小交易数量（手/股）"
     }
+  },
+  "logging": {
+    "level": "DEBUG"
   }
 }

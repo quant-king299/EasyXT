@@ -14,7 +14,7 @@ import logging
 import pandas as pd
 import os
 
-from .xueqiu_collector_real import XueqiuCollectorReal
+from xueqiu_collector_real import XueqiuCollectorReal
 import sys
 import os
 
@@ -25,9 +25,18 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from easy_xt import get_advanced_api, get_api
-from .risk_manager import RiskManager
-from .config_manager import ConfigManager
-from strategies.xueqiu_follow.utils.logger import setup_logger
+from risk_manager import RiskManager
+from config_manager import ConfigManager
+import sys
+import os
+
+# 导入logger - 使用绝对路径导入
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+utils_dir = os.path.join(parent_dir, 'utils')
+if utils_dir not in sys.path:
+    sys.path.insert(0, utils_dir)
+from logger import setup_logger
 
 
 class StrategyEngine:
@@ -1620,14 +1629,31 @@ class StrategyEngine:
                 target_positions = self.calculate_target_positions(changes, follow_ratio, account_value)
                 
                 # 合并到总目标仓位
+                portfolio_name = portfolio.get('name', portfolio_code)
                 for symbol, position in target_positions.items():
+                    # 添加组合信息到position中
+                    position_with_portfolio = position.copy()
+                    position_with_portfolio['portfolio_code'] = portfolio_code
+                    position_with_portfolio['portfolio_name'] = portfolio_name
+
                     if symbol in all_target_positions:
-                        # 如果已存在，累加目标价值
+                        # 如果已存在，累加目标价值和权重，并记录多个组合
                         all_target_positions[symbol]['target_value'] += position['target_value']
                         all_target_positions[symbol]['weight'] += position['weight']
                         all_target_positions[symbol]['reason'] += f"; {position['reason']}"
+
+                        # 记录多个组合来源
+                        if 'portfolio_code' not in all_target_positions[symbol]:
+                            all_target_positions[symbol]['portfolio_code'] = portfolio_code
+                            all_target_positions[symbol]['portfolio_name'] = portfolio_name
+                        else:
+                            # 如果股票来自多个组合，合并显示
+                            existing_codes = all_target_positions[symbol].get('portfolio_code', '')
+                            existing_names = all_target_positions[symbol].get('portfolio_name', '')
+                            all_target_positions[symbol]['portfolio_code'] = f"{existing_codes}, {portfolio_code}"
+                            all_target_positions[symbol]['portfolio_name'] = f"{existing_names}, {portfolio_name}"
                     else:
-                        all_target_positions[symbol] = position.copy()
+                        all_target_positions[symbol] = position_with_portfolio
             
             if not all_target_positions:
                 self.logger.warning("没有计算出目标仓位，跳过初始同步")
@@ -1978,6 +2004,8 @@ class StrategyEngine:
             for symbol, pos in target_positions.items():
                 rows.append({
                     '股票代码': self._normalize_symbol(symbol),
+                    '组合代码': pos.get('portfolio_code', ''),
+                    '组合名称': pos.get('portfolio_name', ''),
                     '操作': '买入' if pos.get('action') == 'buy' else ('卖出' if pos.get('action') == 'sell' else (pos.get('action') or '')),
                     '目标价值': float(pos.get('target_value', 0) or 0),
                     '目标权重(%)': float(pos.get('weight', 0) or 0) * 100,
@@ -1985,6 +2013,9 @@ class StrategyEngine:
                     '导出时间': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
                 })
             df = pd.DataFrame(rows)
+            # 调整列顺序，将组合信息放在前面
+            columns_order = ['股票代码', '组合代码', '组合名称', '操作', '目标价值', '目标权重(%)', '理由', '导出时间']
+            df = df[columns_order]
             export_dir = Path(__file__).parent.parent.parent / "reports"
             export_dir.mkdir(parents=True, exist_ok=True)
             filepath = export_dir / "target_positions.xlsx"

@@ -400,3 +400,4 @@ easy_xt/intelligent_query.py
 strategies/ai_strategy_helper.py
 
 demo_ai_integration.py
+core/PATH_MANAGER_GUIDE.md

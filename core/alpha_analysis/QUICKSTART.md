@@ -56,7 +56,7 @@ python example_usage.py
 
 ```python
 import pandas as pd
-from easy_xt.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer, LayeredBacktester
+from core.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer, LayeredBacktester
 
 # 准备你的数据
 price_data = pd.read_csv('your_price_data.csv', index_col=0, parse_dates=True)
@@ -162,7 +162,7 @@ backtester.save_report('my_factor_backtest_report.csv')
 ### 场景1：评估单个因子
 
 ```python
-from easy_xt.alpha_analysis import ICIRAnalyzer, LayeredBacktester
+from core.alpha_analysis import ICIRAnalyzer, LayeredBacktester
 
 # 1. IC/IR分析（评估预测能力）
 ic_analyzer = ICIRAnalyzer(price_data, factor_data)
@@ -179,7 +179,7 @@ backtester.print_report()
 ### 场景2：从多个因子中筛选最优因子
 
 ```python
-from easy_xt.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer
+from core.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer
 
 # 1. 对每个因子进行IC/IR分析
 results = {}

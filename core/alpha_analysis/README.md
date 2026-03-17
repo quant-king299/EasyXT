@@ -49,7 +49,7 @@ pip install pandas numpy scipy
 
 ```python
 import pandas as pd
-from easy_xt.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer, LayeredBacktester
+from core.alpha_analysis import ICIRAnalyzer, FactorCorrelationAnalyzer, LayeredBacktester
 
 # 准备数据
 price_data = pd.DataFrame(...)  # 价格数据: index=日期, columns=股票代码

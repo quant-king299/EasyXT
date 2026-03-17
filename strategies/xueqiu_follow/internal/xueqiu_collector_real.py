@@ -26,10 +26,14 @@ current_package = os.path.dirname(os.path.dirname(__file__))
 if current_package not in sys.path:
     sys.path.insert(0, current_package)
 
-# 直接导入logger函数
-# 使用包级相对导入（utils 与 core 同级）
+# 添加utils目录到路径
+utils_dir = os.path.join(current_package, 'utils')
+if utils_dir not in sys.path:
+    sys.path.insert(0, utils_dir)
+
+# 直接导入logger函数（使用绝对导入）
 try:
-    from ..utils.logger import setup_logger
+    from logger import setup_logger
 except ImportError:
     import logging
     def setup_logger(name):
@@ -42,7 +46,7 @@ except ImportError:
             logger.setLevel(logging.INFO)
         return logger
 
-# from ..utils.rate_limiter import RateLimiter  # 暂时注释掉，使用简单的延迟
+# from rate_limiter import RateLimiter  # 暂时注释掉，使用简单的延迟
 
 
 class XueqiuCollectorReal:
@@ -120,7 +124,7 @@ class XueqiuCollectorReal:
         """从配置文件加载cookie"""
         try:
             # 使用配置管理器获取cookie配置
-            from .config_manager import ConfigManager
+            from config_manager import ConfigManager
             config_manager = ConfigManager()
             
             # 优先从xueqiu_settings中获取cookie
@@ -1088,7 +1092,7 @@ class XueqiuCollectorReal:
             export_enabled = False
             export_dir_name = "reports"
             try:
-                from .config_manager import ConfigManager
+                from config_manager import ConfigManager
                 cm = ConfigManager()
                 export_enabled = (
                     cm.get_setting('settings.export_holdings') or

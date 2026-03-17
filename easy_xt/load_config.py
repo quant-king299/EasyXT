@@ -11,19 +11,28 @@ from pathlib import Path
 def load_unified_config() -> Optional[Dict[str, Any]]:
     """
     加载统一配置文件
-    
+
     Returns:
         Optional[Dict[str, Any]]: 配置字典，如果加载失败则返回None
     """
-    # 定义可能的配置文件路径
-    possible_paths = [
-        # 项目根目录下的config目录
-        Path(__file__).parent.parent / "config" / "unified_config.json",
-        # 当前工作目录下的config目录
-        Path.cwd() / "config" / "unified_config.json",
-        # 策略目录下的config目录
-        Path(__file__).parent.parent / "strategies" / "xueqiu_follow" / "config" / "unified_config.json"
-    ]
+    # 定义可能的配置文件路径（不依赖应用层）
+    possible_paths = []
+
+    # 1. 优先使用环境变量指定的配置路径
+    env_config_path = os.getenv('EASYXT_CONFIG_PATH')
+    if env_config_path:
+        possible_paths.append(Path(env_config_path))
+
+    # 2. 项目根目录下的config目录
+    possible_paths.append(Path(__file__).parent.parent / "config" / "unified_config.json")
+
+    # 3. 当前工作目录下的config目录
+    possible_paths.append(Path.cwd() / "config" / "unified_config.json")
+
+    # 4. 用户主目录下的 .easyxt 配置
+    home_config = Path.home() / ".easyxt" / "config.json"
+    if home_config.exists():
+        possible_paths.append(home_config)
     
     # 尝试加载配置文件
     for config_path in possible_paths:
@@ -36,7 +45,7 @@ def load_unified_config() -> Optional[Dict[str, Any]]:
             except Exception as e:
                 print(f"[WARNING] Config file loading failed {config_path}: {e}")
 
-    print("[ERROR] Unified config file not found")
+    print("[INFO] No unified config file found, using defaults")
     return None
 
 def update_config_with_unified_settings(config_instance) -> bool:

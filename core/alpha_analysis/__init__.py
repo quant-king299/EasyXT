@@ -7,8 +7,12 @@ from .ic_ir_analysis import ICIRAnalyzer
 from .factor_correlation import FactorCorrelationAnalyzer
 from .layered_backtest import LayeredBacktester
 
+# 向后兼容的别名
+ICAnalyzer = ICIRAnalyzer
+
 __all__ = [
     'ICIRAnalyzer',
+    'ICAnalyzer',  # 向后兼容别名
     'FactorCorrelationAnalyzer',
     'LayeredBacktester'
 ]

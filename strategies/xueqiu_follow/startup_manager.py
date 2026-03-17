@@ -16,13 +16,20 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional
 
 # 添加项目路径
-sys.path.append(os.path.dirname(__file__))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, current_dir)
 
-from core.config_manager import ConfigManager
-from core.risk_manager import RiskManager
-from core.xueqiu_collector import XueqiuCollector
-from core.strategy_engine import StrategyEngine
-from core.trade_executor import TradeExecutor
+# 添加internal目录到路径
+internal_dir = os.path.join(current_dir, 'internal')
+if internal_dir not in sys.path:
+    sys.path.insert(0, internal_dir)
+
+# 使用绝对导入
+from internal.config_manager import ConfigManager
+from internal.risk_manager import RiskManager
+from internal.xueqiu_collector import XueqiuCollector
+from internal.strategy_engine import StrategyEngine
+from internal.trade_executor import TradeExecutor
 
 
 class StartupManager:

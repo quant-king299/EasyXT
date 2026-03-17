@@ -14,20 +14,25 @@ from urllib.parse import urlencode
 import logging
 
 try:
-    from strategies.xueqiu_follow.utils.logger import setup_logger
+    from utils.logger import setup_logger
 except ImportError:
-    # 如果相对导入失败，使用绝对导入
+    # 如果导入失败，尝试添加utils目录到路径
     import sys
     import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
-    from ..utils.logger import setup_logger
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(current_dir)
+    utils_dir = os.path.join(parent_dir, 'utils')
+    if utils_dir not in sys.path:
+        sys.path.insert(0, utils_dir)
+    from utils.logger import setup_logger
+
 try:
-    from ..utils.crypto_utils import generate_signature
+    from utils.crypto_utils import generate_signature
 except ImportError:
-    # 如果相对导入失败，使用绝对导入或跳过
+    # 如果导入失败，提供mock函数
     def generate_signature(*args, **kwargs):
         return "mock_signature"
-from ..utils.rate_limiter import RateLimiter
+from utils.rate_limiter import RateLimiter
 
 
 class XueqiuCollector:

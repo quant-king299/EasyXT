@@ -43,7 +43,7 @@ def print_banner():
     print("=" * 80)
     print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     try:
-        from core.config_manager import ConfigManager as _Cfg
+        from .internal.config_manager import ConfigManager as _Cfg
         _cfg = _Cfg()
         portfolios = _cfg.get_portfolios()
         enabled_names = [str(p.get('name') or p.get('code')) for p in portfolios if p.get('enabled', False)]

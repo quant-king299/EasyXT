@@ -16,23 +16,31 @@ import time
 from datetime import datetime
 from typing import Dict, Any, Optional
 
-# 添加项目根目录到 Python 路径
+# Windows控制台UTF-8编码修复
+if sys.platform == 'win32':
+    import codecs
+    sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+    sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
+# ========================================
+# 路径设置（修复：先添加路径，再导入path_manager）
+# ========================================
+
+# 添加项目根目录到 Python 路径（临时，用于导入path_manager）
 project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
 
 # 添加当前目录到 Python 路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
-# 添加 easy_xt 相关路径
-easy_xt_path = os.path.join(project_root, 'easy_xt')
-easyxt_main_path = os.path.join(project_root, 'EasyXT-main', 'easy_xt')
-xtquant_path = os.path.join(project_root, 'xtquant')
+# 现在可以导入统一路径管理器了
+from core.path_manager import init_paths, get_project_root
 
-for p in (easy_xt_path, easyxt_main_path, xtquant_path):
-    if os.path.isdir(p) and p not in sys.path:
-        sys.path.insert(0, p)
+# 初始化项目路径（幂等性，会自动添加所有需要的路径）
+init_paths()
 
 # 导入依赖检查
 def check_dependencies():
@@ -88,25 +96,28 @@ try:
     xueqiu_follow_path = os.path.join(project_root, 'strategies', 'xueqiu_follow')
     if xueqiu_follow_path not in sys.path:
         sys.path.insert(0, xueqiu_follow_path)
-    
-    # 添加utils目录到路径
+
+    # 添加utils目录到路径（工具函数） - 必须在internal之前添加
     utils_path = os.path.join(xueqiu_follow_path, 'utils')
     if utils_path not in sys.path:
         sys.path.insert(0, utils_path)
-    
-    # 添加core目录到路径
-    core_path = os.path.join(xueqiu_follow_path, 'core')
-    if core_path not in sys.path:
-        sys.path.insert(0, core_path)
-    
-    from core.config_manager import ConfigManager
-    from core.xueqiu_collector_real import XueqiuCollectorReal
-    from core.trade_executor import TradeExecutor
-    from core.risk_manager import RiskManager
-    from core.strategy_engine import StrategyEngine
-    print("✅ 模块导入成功")
+
+    # 添加internal目录到路径（策略内部模块）
+    internal_path = os.path.join(xueqiu_follow_path, 'internal')
+    if internal_path not in sys.path:
+        sys.path.insert(0, internal_path)
+
+    # 使用绝对导入（utils和internal目录已在sys.path中）
+    from internal.config_manager import ConfigManager
+    from internal.xueqiu_collector_real import XueqiuCollectorReal
+    from internal.trade_executor import TradeExecutor
+    from internal.risk_manager import RiskManager
+    from internal.strategy_engine import StrategyEngine
+    print("[OK] Module import successful")
 except ImportError as e:
-    print(f"❌ 模块导入失败: {e}")
+    print(f"[ERROR] Module import failed: {e}")
+    import traceback
+    traceback.print_exc()
     sys.exit(1)
 
 def print_banner():
@@ -116,7 +127,7 @@ def print_banner():
     print("=" * 70)
     print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     try:
-        from core.config_manager import ConfigManager as _Cfg
+        from internal.config_manager import ConfigManager as _Cfg
         _cfg = _Cfg()
         portfolios = _cfg.get_portfolios()
         enabled_names = [str(p.get('name') or p.get('code')) for p in portfolios if p.get('enabled', False)]
@@ -125,7 +136,7 @@ def print_banner():
         combo_str = '未配置'
     print(f"📊 跟单组合: {combo_str}")
     try:
-        from core.config_manager import ConfigManager as _Cfg2
+        from internal.config_manager import ConfigManager as _Cfg2
         _cfg2 = _Cfg2()
         account_id = _cfg2.get_setting('settings.account.account_id')
         account_str = str(account_id) if account_id else '未配置'

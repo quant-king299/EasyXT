@@ -22,8 +22,17 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 from easy_xt import get_advanced_api
-from .risk_manager import RiskManager
-from strategies.xueqiu_follow.utils.logger import setup_logger
+from risk_manager import RiskManager
+import sys
+import os
+
+# 导入logger - 使用绝对路径导入
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+utils_dir = os.path.join(parent_dir, 'utils')
+if utils_dir not in sys.path:
+    sys.path.insert(0, utils_dir)
+from logger import setup_logger
 
 
 class OrderStatus(Enum):

@@ -113,7 +113,7 @@ class EasyFactorAnalyzer:
         """
         # 导入IC分析模块
         try:
-            from easy_xt.alpha_analysis.ic_ir_analysis import ICAnalyzer
+            from core.alpha_analysis import ICAnalyzer
             analyzer = ICAnalyzer()
             return analyzer.calculate_ic(factor_data, price_data, periods)
         except ImportError:
@@ -168,7 +168,7 @@ class EasyFactorAnalyzer:
             回测结果
         """
         try:
-            from easy_xt.alpha_analysis.layered_backtest import LayeredBacktester
+            from core.alpha_analysis.layered_backtest import LayeredBacktester
             backtester = LayeredBacktester(price_data, factor_data)
             backtester.calculate_layer_returns(n_layers=n_layers, periods=periods)
             backtester.calculate_long_short_returns(n_layers=n_layers, periods=periods)
