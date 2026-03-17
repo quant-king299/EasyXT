@@ -42,6 +42,24 @@ except ImportError:
     # QMT不可用是正常的，继续尝试其他数据源
     pass
 
+# 尝试导入 xqshare（远程xtquant代理）- 仅当配置了环境变量时
+XQSHARE_AVAILABLE = False
+xqshare_client = None
+if os.environ.get('XQSHARE_REMOTE_HOST'):
+    try:
+        from xqshare.client import connect as xqshare_connect
+        # 尝试连接
+        xqshare_client = xqshare_connect()
+        if xqshare_client.is_connected():
+            XQSHARE_AVAILABLE = True
+            print("[OK] xqshare (远程xtquant) 连接成功")
+        else:
+            print("[INFO] xqshare 连接失败")
+    except ImportError:
+        print("[INFO] xqshare 未安装")
+    except Exception as e:
+        print(f"[INFO] xqshare 不可用: {e}")
+
 # 尝试导入多数据源
 TDX_AVAILABLE = False
 try:
@@ -167,7 +185,7 @@ class DataAPI:
         """连接数据服务 - 自动选择最佳数据源"""
         print("\n[Connecting to data source...]")
 
-        # 优先级1: 尝试连接 QMT
+        # 优先级1: 尝试连接 QMT (本地)
         if xt_available:
             print("  Trying QMT (xtquant)...")
             if self._connect_qmt():
@@ -176,7 +194,16 @@ class DataAPI:
                 return True
             print("  [WARN] QMT connection failed")
 
-        # 优先级2: 降级到 TDX
+        # 优先级2: 降级到 xqshare (远程)
+        if XQSHARE_AVAILABLE:
+            print("  Trying xqshare (远程xtquant)...")
+            if self._connect_xqshare():
+                self._active_source = 'xqshare'
+                print("[OK] Using xqshare (远程xtquant) as data source")
+                return True
+            print("  [WARN] xqshare connection failed")
+
+        # 优先级3: 降级到 TDX
         if TDX_AVAILABLE:
             print("  Trying TDX (通达信)...")
             if self._connect_tdx():
@@ -185,7 +212,7 @@ class DataAPI:
                 return True
             print("  [WARN] TDX connection failed")
 
-        # 优先级3: 降级到 Eastmoney
+        # 优先级4: 降级到 Eastmoney
         if EASTMONEY_AVAILABLE:
             print("  Trying Eastmoney (东方财富)...")
             if self._connect_eastmoney():
@@ -213,6 +240,20 @@ class DataAPI:
             print(f"  [INFO] QMT connection failed: {e}")
             return False
 
+    def _connect_xqshare(self) -> bool:
+        """连接xqshare数据源（远程xtquant代理）"""
+        global xqshare_client
+        if not xqshare_client:
+            return False
+        try:
+            if xqshare_client.is_connected():
+                self.xt = xqshare_client.xtdata
+                self._connected = True
+                return True
+        except Exception as e:
+            print(f"  [INFO] xqshare connection failed: {e}")
+        return False
+
     def _connect_tdx(self) -> bool:
         """连接TDX数据源"""
         try:
@@ -235,26 +276,6 @@ class DataAPI:
             if connected:
                 self._connected = True  # ✓ 设置连接状态
             return connected
-        except Exception as e:
-            print(f"  [INFO] Eastmoney connection failed: {e}")
-            return False
-
-    def _connect_tdx(self) -> bool:
-        """连接TDX数据源"""
-        try:
-            if self._tdx_provider is None:
-                self._tdx_provider = TdxDataProvider()
-            return self._tdx_provider.connect()
-        except Exception as e:
-            print(f"  [INFO] TDX connection failed: {e}")
-            return False
-
-    def _connect_eastmoney(self) -> bool:
-        """连接东方财富数据源"""
-        try:
-            if self._eastmoney_provider is None:
-                self._eastmoney_provider = EastmoneyDataProvider()
-            return self._eastmoney_provider.connect()
         except Exception as e:
             print(f"  [INFO] Eastmoney connection failed: {e}")
             return False
@@ -298,7 +319,7 @@ class DataAPI:
             raise ValueError(f"不支持的数据周期 '{period}'。支持的周期: {supported_list}")
 
         # 根据当前使用的数据源调用相应方法
-        if self._active_source == 'qmt':
+        if self._active_source in ('qmt', 'xqshare'):
             return self._get_price_qmt(codes, start, end, period, count, fields, adjust)
         elif self._active_source == 'tdx':
             return self._get_price_tdx(codes, start, end, period, count, fields, adjust)

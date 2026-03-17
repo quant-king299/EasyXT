@@ -26,31 +26,59 @@ _xt_type = None
 _xt_const = None
 _xtdata = None
 
+# xqshare远程客户端
+_xqshare_client = None
+
 def _ensure_xt_trader():
     """确保xtquant已导入，延迟加载"""
-    global _xt_trader_available, _xt_trader, _xt_type, _xt_const, _xtdata
+    global _xt_trader_available, _xt_trader, _xt_type, _xt_const, _xtdata, _xqshare_client
+    global xt_type, xt_const  # 兼容旧代码
 
     if _xt_trader_available:
         return True
 
+    # 优先尝试本地xtquant
     try:
         import xtquant.xttrader as xt_trader
-        import xtquant.xttype as xt_type
-        import xtquant.xtconstant as xt_const
+        import xtquant.xttype as xt_type_mod
+        import xtquant.xtconstant as xt_const_mod
         from xtquant import xtdata
 
         _xt_trader = xt_trader
-        _xt_type = xt_type
-        _xt_const = xt_const
+        _xt_type = xt_type_mod
+        _xt_const = xt_const_mod
         _xtdata = xtdata
+        xt_type = xt_type_mod  # 兼容旧代码
+        xt_const = xt_const_mod  # 兼容旧代码
         _xt_trader_available = True
         print("[OK] xtquant.xttrader 导入成功")
         return True
-    except ImportError as e:
-        print(f"[INFO] xtquant.xttrader 未安装或不可用")
-        print(f"[INFO] 如需交易功能，请安装QMT客户端")
-        print(f"[INFO] 数据功能可正常使用，不受影响")
-        return False
+    except ImportError:
+        pass
+
+    # 降级到xqshare（仅当配置了环境变量）
+    if os.environ.get('XQSHARE_REMOTE_HOST'):
+        try:
+            from xqshare.client import connect as xqshare_connect
+            client = xqshare_connect()
+            if client and client.is_connected():
+                # 直接更新全局变量
+                _xt_type = client.xttype
+                _xt_const = client.xtconstant
+                _xtdata = client.xtdata
+                xt_type = client.xttype  # 兼容旧代码
+                xt_const = client.xtconstant  # 兼容旧代码
+                # trader通过create_trader获取，存储client供后续使用
+                _xqshare_client = client
+                _xt_trader_available = True
+                print("[OK] 使用 xqshare 作为交易后端")
+                return True
+        except Exception as e:
+            print(f"[INFO] xqshare 不可用: {e}")
+
+    print("[INFO] xtquant.xttrader 未安装或不可用")
+    print("[INFO] 如需交易功能，请安装QMT客户端或配置xqshare")
+    return False
 
 # 旧代码保持兼容（已弃用）
 try:
@@ -63,13 +91,9 @@ try:
     _xt_type = xt_type
     _xt_const = xt_const
     _xtdata = xtdata
-    xt_trader = xt_trader
-    xt_type = xt_type
-    xt_const = xt_const
 except ImportError:
     xt_trader = None
-    xt_type = None
-    xt_const = None
+    # xt_type 和 xt_const 保持 None，后续由 _ensure_xt_trader() 填充
 
 from .utils import StockCodeUtils, ErrorHandler
 from .config import config
@@ -134,53 +158,54 @@ else:
 
 class TradeAPI:
     """交易API封装类"""
-    
+
     def __init__(self):
         self.trader = None
         self.callback = None
         self.accounts = {}
         self._session_id = config.get('trade.session_id', 'default')
-        
+
     def connect(self, userdata_path: str, session_id: str = None) -> bool:
         """
         连接交易服务
-        
+
         Args:
             userdata_path: 迅投客户端userdata路径
             session_id: 会话ID
-            
+
         Returns:
             bool: 是否连接成功
         """
-        if not xt_trader:
-            ErrorHandler.log_error("xtquant交易模块未正确导入")
+        if not _ensure_xt_trader():
+            ErrorHandler.log_error("交易模块不可用")
             return False
-            
+
         try:
             if session_id:
                 self._session_id = session_id
-                
-            # 处理路径编码问题
-            try:
-                # 确保路径是字符串格式，处理中文路径
-                if isinstance(userdata_path, bytes):
-                    userdata_path = userdata_path.decode('utf-8')
-                
-                # 规范化路径
-                userdata_path = os.path.normpath(userdata_path)
-                
-                # 检查路径是否存在
-                if not os.path.exists(userdata_path):
-                    ErrorHandler.log_error(f"userdata路径不存在: {userdata_path}")
+
+            # 处理路径编码问题（xqshare模式下跳过）
+            if _xqshare_client is None:
+                try:
+                    # 确保路径是字符串格式，处理中文路径
+                    if isinstance(userdata_path, bytes):
+                        userdata_path = userdata_path.decode('utf-8')
+
+                    # 规范化路径
+                    userdata_path = os.path.normpath(userdata_path)
+
+                    # 检查路径是否存在
+                    if not os.path.exists(userdata_path):
+                        ErrorHandler.log_error(f"userdata路径不存在: {userdata_path}")
+                        return False
+
+                except Exception as path_error:
+                    ErrorHandler.log_error(f"路径处理失败: {str(path_error)}")
                     return False
-                    
-            except Exception as path_error:
-                ErrorHandler.log_error(f"路径处理失败: {str(path_error)}")
-                return False
-                
+
             # 创建回调对象
             self.callback = SimpleCallback()
-            
+
             # 创建交易对象 - 修复session_id类型问题
             try:
                 # 根据错误信息，XtQuantAsyncClient需要的第三个参数是int类型
@@ -190,21 +215,29 @@ class TradeAPI:
                     session_int = int(time.time() * 1000) % 1000000
                 except:
                     session_int = 123456  # 默认session ID
-                
+
                 print(f"🔧 使用session_id: {session_int}")
-                
-                # 创建交易对象，使用数字类型的session_id
-                self.trader = xt_trader.XtQuantTrader(userdata_path, session_int)
-                # 注册回调
-                self.trader.register_callback(self.callback)
+
+                # 创建交易对象
+                if _xt_trader:
+                    # 本地xtquant
+                    self.trader = _xt_trader.XtQuantTrader(userdata_path, session_int)
+                    # 注册回调
+                    self.trader.register_callback(self.callback)
+                elif _xqshare_client:
+                    # xqshare远程 - 不注册回调
+                    self.trader = _xqshare_client.create_trader(userdata_path, session_int)
+                else:
+                    ErrorHandler.log_error("无法创建交易对象")
+                    return False
             except Exception as create_error:
                 ErrorHandler.log_error(f"创建交易对象失败: {str(create_error)}")
                 return False
-            
+
             # 启动交易
             print("🚀 启动交易服务...")
             self.trader.start()
-            
+
             # 连接
             print("🔗 连接交易服务...")
             result = self.trader.connect()
