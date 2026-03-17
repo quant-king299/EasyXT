@@ -66,21 +66,16 @@ class StockCodeUtils:
         Returns:
             List[str]: 标准化后的股票代码列表
         """
-        print(f"[DEBUG] normalize_codes 输入: type={type(codes)}, value={codes}")
-
         # 处理字符串输入
         if isinstance(codes, str):
             # 如果是逗号分隔的字符串，先拆分成列表
             codes = [c.strip() for c in codes.split(',') if c.strip()]
-            print(f"[DEBUG] normalize_codes 字符串拆分后: {codes}")
         elif not isinstance(codes, list):
             # 其他类型（如None）转成列表
             codes = [codes] if codes is not None else []
-            print(f"[DEBUG] normalize_codes 非字符串非列表转列表: {codes}")
 
         # 标准化每个代码
         result = [StockCodeUtils.normalize_code(code) for code in codes if code]
-        print(f"[DEBUG] normalize_codes 输出: {result}")
         return result
     
     @staticmethod

@@ -23,10 +23,15 @@ def _get_advanced_api():
     from .advanced_trade_api import AdvancedTradeAPI
     return AdvancedTradeAPI()
 
+def _get_ai_assistant():
+    from .ai_assistant import EasyXTAI
+    return EasyXTAI()
+
 # 创建全局实例
 api = None
 extended_api = None
 advanced_api = None
+ai_assistant = None
 
 def get_api():
     """获取全局API实例"""
@@ -49,6 +54,13 @@ def get_advanced_api():
         advanced_api = _get_advanced_api()
     return advanced_api
 
+def get_ai_assistant(token=None):
+    """获取AI助手实例"""
+    global ai_assistant
+    if ai_assistant is None:
+        ai_assistant = _get_ai_assistant()
+    return ai_assistant
+
 # 为了向后兼容，在模块级别提供类的导入
 def __getattr__(name):
     if name == 'EasyXT':
@@ -66,12 +78,17 @@ def __getattr__(name):
     elif name == 'TradeAPI':
         from .trade_api import TradeAPI
         return TradeAPI
+    elif name == 'EasyXTAI':
+        from .ai_assistant import EasyXTAI
+        return EasyXTAI
     elif name == 'api':
         return get_api()
     elif name == 'extended_api':
         return get_extended_api()
     elif name == 'advanced_api':
         return get_advanced_api()
+    elif name == 'ai_assistant':
+        return get_ai_assistant()
     raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
 # 导出主要接口
@@ -79,12 +96,15 @@ __all__ = [
     'EasyXT',
     'ExtendedAPI',
     'AdvancedTradeAPI',
-    'DataAPI', 
+    'DataAPI',
     'TradeAPI',
+    'EasyXTAI',
     'get_api',
     'get_extended_api',
     'get_advanced_api',
+    'get_ai_assistant',
     'api',
     'extended_api',
-    'advanced_api'
+    'advanced_api',
+    'ai_assistant'
 ]

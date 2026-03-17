@@ -359,3 +359,44 @@ easyxt_backtest/README_V3.md
 101因子/101因子分析平台/scripts/test_datasource.py
 101因子/101因子分析平台/scripts/test_datasource.py
 code_converter/utils/qmt_api_scraper.py
+
+# ==================== AI助手实验性功能（本地开发，不提交） ====================
+# AI助手核心代码
+easy_xt/ai_assistant.py
+start_ai_assistant.py
+test_ai_query.py
+get_maotai_daily.py
+
+# AI助手相关文档
+docs/NLP_CLARIFICATION.md
+docs/TUSHARE_SKILLS_EXPLAINED.md
+docs/FUTURE_PLAN_AI_Assistant.md
+
+# AI助手测试和图表生成脚本
+test_tushare_skills.py
+generate_charts.py
+generate_api_coverage_chart.py
+
+# AI助手生成的内容（公众号推文等）
+公众号推文_*.md
+公众号发布指南.md
+更新说明_*.md
+交付清单.md
+🎉项目完成总结.md
+
+# AI助手生成的图表
+tushare_skills_charts/
+
+# AI助手生成的数据文件
+maotai_daily_*.csv
+*.csv
+
+# AI助手临时文件
+一键复制推文.py
+
+# AI助手模块和脚本
+easy_xt/cli/
+easy_xt/intelligent_query.py
+strategies/ai_strategy_helper.py
+
+demo_ai_integration.py
