@@ -90,7 +90,7 @@ if choice == "1":
     print("   - 日线数据（2023-01-01至今）")
 
     # 导入下载脚本
-    from tools.download_market_cap_fast import download_market_cap
+    from tools.download_market_cap_fast import main as download_market_cap
     from tools.correct_data_download_usage import main as download_daily
 
     print()
