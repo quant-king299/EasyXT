@@ -1,5 +1,74 @@
 # 网格交易策略对比与使用指南
 
+## 🔧 路径配置说明（重要）
+
+**本模块已迁移到统一路径管理系统**，从 2026-03-18 开始，所有网格策略文件使用 `core.path_manager` 统一配置路径。
+
+### ✅ 新旧对比
+
+**旧方案**（已弃用）：
+```python
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+```
+
+**新方案**（当前使用）：
+```python
+import sys
+import os
+# 先添加项目根目录（用于导入 path_manager）
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 使用统一路径管理器
+from core.path_manager import init_paths
+init_paths()
+```
+
+### ✅ 优势
+
+- ✅ **自动检测项目根目录**：无需手动计算向上层数
+- ✅ **统一管理**：所有路径配置集中在一处
+- ✅ **幂等性**：多次调用不会重复添加路径
+- ✅ **扩展性强**：可以获取各种路径（config、logs、reports等）
+
+### ✅ 已迁移文件
+
+以下文件已使用新的路径配置系统：
+- ✅ run_atr_grid.py
+- ✅ ATR动态网格策略.py
+- ✅ run_adaptive_grid.py
+- ✅ 自适应网格策略.py
+- ✅ run_fixed_grid.py
+- ✅ 固定网格_优化版.py
+- ✅ 固定网格.py
+
+### 📝 开发建议
+
+**对于新开发的策略**：
+```python
+# 在文件开头添加以下代码
+import sys
+import os
+
+# 添加项目根目录
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 使用统一路径管理器
+from core.path_manager import init_paths
+init_paths()
+
+# 现在可以导入其他模块
+import easy_xt
+from strategies.base.strategy_template import BaseStrategy
+```
+
+---
+
 ## 📁 文件清单
 
 ```

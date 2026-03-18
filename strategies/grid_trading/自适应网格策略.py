@@ -24,8 +24,19 @@ import numpy as np
 from datetime import datetime, time
 from pathlib import Path
 
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+# ========================================
+# 路径配置：使用统一路径管理器
+# ========================================
+# 先添加项目根目录到 Python 路径（用于导入 core.path_manager）
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 使用统一路径管理器初始化所有路径
+from core.path_manager import init_paths
+init_paths()
+
+# 现在可以导入项目中的其他模块了
 from strategies.base.strategy_template import BaseStrategy
 import easy_xt
 

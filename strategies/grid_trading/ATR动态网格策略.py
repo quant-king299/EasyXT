@@ -6,9 +6,25 @@ ATR动态网格策略
 
 import json
 import time
+from sys import path
 from datetime import datetime
 from pathlib import Path
 from collections import deque
+
+# ========================================
+# 路径配置：使用统一路径管理器
+# ========================================
+import os
+# 先添加项目根目录到 Python 路径（用于导入 core.path_manager）
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in path:
+    path.insert(0, project_root)
+
+# 使用统一路径管理器初始化所有路径
+from core.path_manager import init_paths
+init_paths()
+
+# 现在可以导入项目中的其他模块了
 import easy_xt
 
 
@@ -428,6 +444,10 @@ class ATR动态网格策略:
         state_file = self.log_file.replace('.json', '_state.json')
 
         try:
+            # 确保目录存在
+            state_path = Path(state_file)
+            state_path.parent.mkdir(parents=True, exist_ok=True)
+
             state = {
                 '基准价格': self.base_prices,
                 '最后更新': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -470,19 +490,31 @@ class ATR动态网格策略:
         # 遍历股票池
         for stock_code in self.stock_pool:
             try:
-                # 获取行情
-                tick_data = self.api.data.get_current_price(stock_code)
-                if not tick_data or not tick_data.get('当前价格'):
+                # 获取行情（返回DataFrame）
+                price_df = self.api.data.get_current_price([stock_code])
+
+                # 检查数据有效性
+                if price_df is None or price_df.empty:
                     print(f"  {stock_code}: ⚠ 无法获取行情数据")
                     continue
 
-                current_price = tick_data['当前价格']
-                high_price = tick_data.get('最高价', current_price)
-                low_price = tick_data.get('最低价', current_price)
+                # 从DataFrame中提取数据（使用英文列名）
+                stock_data = price_df[price_df['code'] == stock_code]
+                if stock_data.empty:
+                    print(f"  {stock_code}: ⚠ 未找到该股票数据")
+                    continue
 
-                # 更新价格历史
-                tick_data['最高价'] = max(current_price, high_price)
-                tick_data['最低价'] = min(current_price, low_price)
+                current_price = stock_data.iloc[0]['price']
+                high_price = stock_data.iloc[0].get('high', current_price)
+                low_price = stock_data.iloc[0].get('low', current_price)
+
+                # 更新价格历史（构造包含中文字段的字典）
+                tick_data = {
+                    '当前价格': current_price,
+                    '最高价': max(current_price, high_price),
+                    '最低价': min(current_price, low_price),
+                    '收盘价': current_price
+                }
                 self.update_price_history(stock_code, tick_data)
 
                 # 计算ATR

@@ -8,6 +8,21 @@ import json
 import time
 from pathlib import Path
 from datetime import datetime
+
+# ========================================
+# 路径配置：使用统一路径管理器
+# ========================================
+import os
+# 先添加项目根目录到 Python 路径（用于导入 core.path_manager）
+project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# 使用统一路径管理器初始化所有路径
+from core.path_manager import init_paths
+init_paths()
+
+# 现在可以导入项目中的其他模块了
 import easy_xt
 from ATR动态网格策略 import ATR动态网格策略
 
@@ -97,18 +112,25 @@ def check_market_status(api, stock_pool):
         # 获取股票行情
         for stock_code in stock_pool:
             try:
-                tick_data = api.data.get_current_price(stock_code)
-                if tick_data:
-                    price = tick_data.get('当前价格', 0)
-                    high = tick_data.get('最高价', price)
-                    low = tick_data.get('最低价', price)
-                    volume = tick_data.get('成交量', 0)
+                # 获取行情（返回DataFrame）
+                price_df = api.data.get_current_price([stock_code])
 
-                    print(f"\n{stock_code}:")
-                    print(f"   当前价: {price:.3f}")
-                    print(f"   最高价: {high:.3f}")
-                    print(f"   最低价: {low:.3f}")
-                    print(f"   成交量: {volume}")
+                if price_df is not None and not price_df.empty:
+                    # 从DataFrame中提取数据
+                    stock_data = price_df[price_df['code'] == stock_code]
+                    if not stock_data.empty:
+                        price = stock_data.iloc[0]['price']
+                        high = stock_data.iloc[0].get('high', price)
+                        low = stock_data.iloc[0].get('low', price)
+                        volume = stock_data.iloc[0].get('volume', 0)
+
+                        print(f"\n{stock_code}:")
+                        print(f"   当前价: {price:.3f}")
+                        print(f"   最高价: {high:.3f}")
+                        print(f"   最低价: {low:.3f}")
+                        print(f"   成交量: {volume}")
+                    else:
+                        print(f"\n{stock_code}: ⚠ 未找到该股票数据")
                 else:
                     print(f"\n{stock_code}: ⚠ 无法获取行情数据")
             except Exception as e:
