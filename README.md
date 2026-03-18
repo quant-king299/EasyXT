@@ -23,6 +23,7 @@
 - 📈 **技术指标**: 内置常用技术指标计算
 - 🚀 **策略开发**: 提供完整的量化策略开发框架
 - 📚 **学习实例**: 丰富的教学案例，从入门到高级
+- 🌍 **跨平台支持**: 支持Windows、macOS、Linux（通过xqshare远程客户端）
 
 ### 模块概览
 
@@ -63,6 +64,90 @@
 - DuckDB数据库找不到？数据下载失败？
 - 安装报错？运行失败？性能问题？
 - 这里收集了最常见的问题和解决方案！
+
+---
+
+## 🌍 跨平台支持
+
+EasyXT 现已支持 **Windows、macOS、Linux** 三大平台！
+
+### 平台支持矩阵
+
+| 平台 | 本地 QMT | 远程 xqshare | 推荐场景 |
+|------|----------|--------------|----------|
+| **Windows** | ✅ 原生支持 | ✅ 可选 | 专业交易用户 |
+| **macOS** | ❌ 不可用 | ✅ 完美支持 | Mac 用户 |
+| **Linux** | ❌ 不可用 | ✅ 完美支持 | 服务器部署 |
+
+### Mac/Linux 用户快速开始
+
+通过 **xqshare 远程客户端**，EasyXT 可以在 macOS 和 Linux 上完美运行！
+
+#### 1️⃣ 安装 xqshare
+
+```bash
+pip install xqshare
+```
+
+#### 2️⃣ 配置环境变量
+
+```bash
+# 设置远程服务器地址
+export XQSHARE_REMOTE_HOST="your-server-ip"
+export XQSHARE_REMOTE_PORT="18812"
+
+# 或者使用 .env 文件
+echo "XQSHARE_REMOTE_HOST=your-server-ip" >> .env
+echo "XQSHARE_REMOTE_PORT=18812" >> .env
+```
+
+#### 3️⃣ 正常使用 EasyXT
+
+```python
+from easy_xt import get_api
+
+# 获取 API（自动检测并使用 xqshare）
+api = get_api()
+
+# 数据获取和交易完全相同
+data = api.data.get_price(['000001.SZ'])
+```
+
+### 数据源自动降级
+
+EasyXT 会自动选择最佳数据源：
+
+```
+QMT (本地)
+    ↓ 失败
+xqshare (远程)  ← Mac/Linux 用户自动使用
+    ↓ 失败
+TDX (通达信)
+    ↓ 失败
+Eastmoney (东方财富)
+```
+
+### 常见问题
+
+**Q: xqshare 是什么？**
+
+A: xqshare 是一个远程客户端代理，让你在没有 Windows QMT 环境的情况下，通过远程服务器使用 QMT 的数据接口。
+
+**Q: 需要自己搭建 xqshare 服务器吗？**
+
+A: 不需要。xqshare 支持连接到已有的远程服务器。你也可以自己搭建服务器（需要 Windows + QMT 环境）。
+
+**Q: 交易功能支持吗？**
+
+A: 是的！通过 xqshare，Mac/Linux 用户也可以进行完整的股票交易操作。
+
+**Q: 性能如何？**
+
+A: xqshare 通过网络连接到远程服务器，性能取决于网络延迟。对于大多数量化策略，延迟是可以接受的。
+
+### 感谢贡献者
+
+特别感谢 **[@jasonhu](https://github.com/jasonhu)** 为项目贡献了 xqshare 跨平台支持功能！
 
 ---
 
@@ -740,9 +825,19 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 🙏 致谢
 
+### 核心依赖
+
 - [迅投QMT](https://www.gtja.com/) - 提供量化交易平台
 - [qstock](https://github.com/tkfy920/qstock) - 股票数据获取
 - [akshare](https://github.com/akfamily/akshare) - 金融数据接口
+
+### 贡献者
+
+特别感谢以下贡献者为项目做出的贡献：
+
+- **[@jasonhu](https://github.com/jasonhu)** - 添加 xqshare 跨平台支持，使 EasyXT 可以在 macOS 和 Linux 上运行（[PR #19](https://github.com/quant-king299/EasyXT/pull/19)）
+
+> 💬 **欢迎贡献！** 如果你也想为项目做出贡献，欢迎提交 Issue 或 Pull Request。查看[贡献指南](#-贡献指南)了解更多详情。
 
 ---
 
