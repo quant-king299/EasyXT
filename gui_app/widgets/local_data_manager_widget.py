@@ -2772,6 +2772,9 @@ class DataViewerDialog(QDialog):
     def load_data(self):
         """加载数据"""
         try:
+            # 显示加载状态
+            self.stats_label.setText(f"⏳ 正在加载 {self.stock_code} 的数据...")
+
             # 使用只读模式连接，避免配置冲突
             import duckdb
 
@@ -2795,27 +2798,32 @@ class DataViewerDialog(QDialog):
                 "qfq": "front",
                 "hfq": "back"
             }
-            duckdb_adjust = adjust_map.get(self.adjust, "none")
+            adjust_type = adjust_map.get(self.adjust, "none")
 
-            # 加载数据（直接查询DuckDB）
-            query = f"""
-                SELECT
-                    date,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    amount
-                FROM stock_daily
-                WHERE stock_code = '{self.stock_code}'
-                  AND period = '1d'
-                  AND adjust_type = '{duckdb_adjust}'
-                ORDER BY date
-            """
-
-            df = con.execute(query).df()
             con.close()
+
+            # 更新状态：开始查询
+            self.stats_label.setText(f"📡 正在查询 {self.stock_code} ({adjust_type})...")
+
+            # 使用统一数据接口查询（支持QMT API复权方案）
+            from data_manager.unified_data_interface import UnifiedDataManager
+
+            manager = UnifiedDataManager()
+
+            # 获取数据范围（最近1年）
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
+
+            # 查询数据（会经过AdjustmentCache处理复权）
+            # 注意：这里会显示详细的日志输出
+            df = manager.get_stock_data(
+                stock_code=self.stock_code,
+                start_date=start_date,
+                end_date=end_date,
+                period='1d',
+                adjust=adjust_type,
+                auto_save=False
+            )
 
             if df.empty:
                 self.stats_label.setText(f"❌ 未找到 {self.stock_code} 的数据")
@@ -2883,11 +2891,8 @@ class DataViewerDialog(QDialog):
     def export_csv(self):
         """导出为CSV"""
         try:
-            # 使用只读模式连接
-            import duckdb
-
-            # DuckDB数据库路径
-            db_path = Path('D:/StockData/stock_data.ddb')
+            # 使用统一数据接口查询（支持QMT API复权方案）
+            from data_manager.unified_data_interface import UnifiedDataManager
 
             # 映射复权类型
             adjust_map = {
@@ -2895,33 +2900,30 @@ class DataViewerDialog(QDialog):
                 "qfq": "front",
                 "hfq": "back"
             }
-            duckdb_adjust = adjust_map.get(self.adjust, "none")
+            adjust_type = adjust_map.get(self.adjust, "none")
 
-            # 创建只读连接并加载数据
-            con = duckdb.connect(str(db_path), read_only=True)
-            query = f"""
-                SELECT
-                    date,
-                    open,
-                    high,
-                    low,
-                    close,
-                    volume,
-                    amount
-                FROM stock_daily
-                WHERE stock_code = '{self.stock_code}'
-                  AND period = '1d'
-                  AND adjust_type = '{duckdb_adjust}'
-                ORDER BY date
-            """
-            df = con.execute(query).df()
-            con.close()
+            manager = UnifiedDataManager()
+
+            # 获取数据范围（最近1年）
+            from datetime import datetime
+            end_date = datetime.now().strftime('%Y-%m-%d')
+            start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
+
+            # 查询数据（会经过AdjustmentCache处理复权）
+            df = manager.get_stock_data(
+                stock_code=self.stock_code,
+                start_date=start_date,
+                end_date=end_date,
+                period='1d',
+                adjust=adjust_type,
+                auto_save=False
+            )
 
             # 设置日期为索引
             df.set_index('date', inplace=True)
 
             # 选择保存路径
-            default_name = f"{self.stock_code}_{self.adjust}_duckdb_data.csv"
+            default_name = f"{self.stock_code}_{self.adjust}_data.csv"
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
                 "导出CSV",
