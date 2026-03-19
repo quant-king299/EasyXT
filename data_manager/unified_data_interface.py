@@ -242,26 +242,38 @@ class UnifiedDataInterface:
         # 确保表存在（修复首次使用问题）
         self._ensure_tables_exist()
 
-        # Step 1: 尝试从DuckDB读取（使用五维复权管理器）
+        # Step 1: 尝试从DuckDB读取（使用QMT API复权方案）
         data = None
-        if self.duckdb_available and self.con and hasattr(self, 'adjustment_manager'):
-            print(f"  [INFO] Using FiveFoldAdjustmentManager to query data")
+        if self.duckdb_available and self.con:
+            print(f"  [INFO] 使用QMT API复权方案查询数据")
 
             try:
-                # 使用 FiveFoldAdjustmentManager 获取数据
-                data = self.adjustment_manager.get_data_with_adjustment(
-                    stock_code=stock_code,
-                    start_date=start_date,
-                    end_date=end_date,
-                    adjust_type=adjust
-                )
+                # 导入复权缓存模块
+                from data_manager.adjustment_cache import AdjustmentCache
 
-                if data is not None and not data.empty:
-                    print(f"  [OK] 从DuckDB获取成功 {len(data)} 条记录")
+                if not hasattr(self, 'adjustment_cache'):
+                    self.adjustment_cache = AdjustmentCache(self.db_path)
+
+                # 使用缓存管理器获取数据
+                if period == '1d':
+                    data = self.adjustment_cache.get_adjusted_data(
+                        stock_code=stock_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        adjust_type=adjust,
+                        con=self.con
+                    )
+
+                    if data is not None and not data.empty:
+                        print(f"  [OK] 从DuckDB获取成功 {len(data)} 条记录")
+                    else:
+                        data = None
                 else:
-                    data = None
+                    # 分钟线数据不需要复权，直接查询
+                    data = self._read_from_duckdb(stock_code, start_date, end_date, period, 'none')
+
             except Exception as e:
-                print(f"  [WARN] FiveFoldAdjustmentManager查询失败: {e}")
+                print(f"  [WARN] 复权缓存查询失败: {e}")
                 print(f"  [INFO] 降级到原有的_read_from_duckdb方法")
                 # 降级到原有的 _read_from_duckdb 方法
                 data = self._read_from_duckdb(stock_code, start_date, end_date, period, adjust)
@@ -690,56 +702,8 @@ class UnifiedDataInterface:
                 if 'updated_at' not in df_to_save.columns:
                     df_to_save['updated_at'] = current_time
 
-                # 添加所有复权列（使用五维复权管理器计算真实复权价格）
-                if len(df_to_save) > 0 and 'close' in df_to_save.columns:
-                    print("    [INFO] Calculating five-fold adjustment data...")
-
-                    # 获取分红数据（用于计算真实复权价格）
-                    dividends = self._get_dividends_from_qmt(stock_code, df_to_save['date'].min(), df_to_save['date'].max())
-
-                    # 调用五维复权管理器计算真实复权数据
-                    try:
-                        adjusted_data = self.adjustment_manager.calculate_adjustment(
-                            df_to_save,
-                            dividends=dividends
-                        )
-
-                        # 保存各种复权类型的数据到 df_to_save
-                        for adj_type, df_adj in adjusted_data.items():
-                            if adj_type == 'none':
-                                continue
-
-                            # 映射列名
-                            col_mapping = {
-                                'front': ('open_front', 'high_front', 'low_front', 'close_front'),
-                                'back': ('open_back', 'high_back', 'low_back', 'close_back'),
-                                'geometric_front': ('open_geometric_front', 'high_geometric_front',
-                                                   'low_geometric_front', 'close_geometric_front'),
-                                'geometric_back': ('open_geometric_back', 'high_geometric_back',
-                                                   'low_geometric_back', 'close_geometric_back'),
-                            }
-
-                            target_cols = col_mapping.get(adj_type, [])
-                            for i, price_col in enumerate(['open', 'high', 'low', 'close']):
-                                if price_col in df_adj.columns and i < len(target_cols):
-                                    df_to_save[target_cols[i]] = df_adj[price_col]
-
-                        print("    [OK] Five-fold adjustment calculated")
-                    except Exception as e:
-                        print(f"    [WARN] Five-fold adjustment calculation failed: {e}")
-                        print("    [WARN] Front adjustment columns will be copies of original prices")
-
-                        # 降级处理：复制原始价格到所有复权列
-                        # 注意：即使列已存在，也要覆盖以确保有值
-                        price_cols = ['open', 'high', 'low', 'close']
-                        adjustment_types = ['_front', '_back', '_geometric_front', '_geometric_back']
-
-                        for price_col in price_cols:
-                            if price_col in df_to_save.columns:
-                                for adj_type in adjustment_types:
-                                    adj_col = price_col + adj_type
-                                    # 总是复制原始价格到复权列（无论列是否已存在）
-                                    df_to_save[adj_col] = df_to_save[price_col]
+                # 优化：只保存原始数据，不再预计算复权列
+                # 复权功能由AdjustmentCache调用QMT API实现
 
             # 获取表的列顺序
             table_columns = self.con.execute(f"DESCRIBE {table_name}").fetchdf()['column_name'].tolist()

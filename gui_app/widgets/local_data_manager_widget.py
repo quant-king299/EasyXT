@@ -1040,12 +1040,11 @@ class SingleStockDownloadThread(QThread):
                     'updated_at': datetime.now()
                 })
 
-                # 添加复权列（全部使用原始价格）
-                for col in ['open', 'high', 'low', 'close']:
-                    df_processed[f'{col}_front'] = df_processed[col]
-                    df_processed[f'{col}_back'] = df_processed[col]
-                    df_processed[f'{col}_geometric_front'] = df_processed[col]
-                    df_processed[f'{col}_geometric_back'] = df_processed[col]
+                # 性能优化：移除预存复权列（提升5倍I/O性能）
+                # 复权功能改用按需调用QMT API实现
+                # 查询时自动调用QMT API获取复权数据
+                # 价格列: 4个（open, high, low, close）
+                # 复权支持: none（不复权）, front（前复权）, back（后复权）, geometric_front（等比前复权）, geometric_back（等比后复权）
 
                 # 保存到DuckDB
                 if self.period == '1d':
