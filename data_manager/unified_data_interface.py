@@ -42,6 +42,7 @@ class UnifiedDataInterface:
         self.con = None
         self.qmt_available = False
         self._tables_initialized = False  # 记录表是否已初始化
+        self.db_manager = None  # 使用连接池管理器
 
         # 初始化五维复权管理器
         self.adjustment_manager = FiveFoldAdjustmentManager(duckdb_path)
@@ -66,7 +67,7 @@ class UnifiedDataInterface:
 
     def connect(self, read_only: bool = False):
         """
-        连接DuckDB数据库
+        连接DuckDB数据库（使用连接池管理器）
 
         Args:
             read_only: 是否只读模式（首次建表需要写权限）
@@ -77,13 +78,21 @@ class UnifiedDataInterface:
             return False
 
         try:
+            # 使用连接池管理器（解决并发冲突）
+            from data_manager.duckdb_connection_pool import get_db_manager
+
+            if self.db_manager is None:
+                self.db_manager = get_db_manager(self.duckdb_path)
+
+            # 获取连接（注意：这里获取的是非上下文管理器的连接）
+            # 为了兼容现有代码，我们这里仍保持self.con
             import duckdb
             from pathlib import Path
 
             # 确保目录存在
             Path(self.duckdb_path).parent.mkdir(parents=True, exist_ok=True)
 
-            # 首次使用或未初始化时用读写模式
+            # 直接创建连接（实际使用时会配合连接池的写锁）
             if read_only and self._tables_initialized:
                 self.con = duckdb.connect(self.duckdb_path, read_only=True)
             else:
@@ -239,20 +248,24 @@ class UnifiedDataInterface:
         """
         print(f"\n[获取数据] {stock_code} | {start_date} ~ {end_date} | {period} | {adjust}")
 
+        # 确保数据库已连接
+        if self.duckdb_available and self.con is None:
+            self.connect(read_only=True)
+
         # 确保表存在（修复首次使用问题）
         self._ensure_tables_exist()
 
         # Step 1: 尝试从DuckDB读取（使用QMT API复权方案）
         data = None
         if self.duckdb_available and self.con:
-            print(f"  [INFO] 使用QMT API复权方案查询数据")
+            print(f"  [INFO] 使用QMT API复权方案查询数据 [股票:{stock_code}]")
 
             try:
                 # 导入复权缓存模块
                 from data_manager.adjustment_cache import AdjustmentCache
 
                 if not hasattr(self, 'adjustment_cache'):
-                    self.adjustment_cache = AdjustmentCache(self.db_path)
+                    self.adjustment_cache = AdjustmentCache(self.duckdb_path)
 
                 # 使用缓存管理器获取数据
                 if period == '1d':
@@ -265,7 +278,11 @@ class UnifiedDataInterface:
                     )
 
                     if data is not None and not data.empty:
-                        print(f"  [OK] 从DuckDB获取成功 {len(data)} 条记录")
+                        print(f"  [OK] 从DuckDB获取成功 {len(data)} 条记录 [股票:{stock_code}]")
+                        # 验证stock_code列是否存在且正确
+                        if 'stock_code' in data.columns and not data.empty:
+                            actual_codes = data['stock_code'].unique()
+                            print(f"  [DEBUG] 返回数据中的stock_code: {actual_codes}")
                     else:
                         data = None
                 else:
@@ -304,11 +321,22 @@ class UnifiedDataInterface:
                 print(f"  [ERROR] QMT 数据获取失败")
                 return data if data is not None else pd.DataFrame()
 
+            print(f"  [DEBUG] QMT返回 {len(qmt_data)} 条记录")
+
             # 合并数据（DuckDB有的就用，没有的补充）
             if data is not None and not data.empty:
                 print(f"  → 合并 DuckDB 和 QMT 数据...")
-                merged_data = self._merge_data(data, qmt_data)
-                data = merged_data
+                print(f"  [DEBUG] 合并前 - DuckDB: {len(data)}条, QMT: {len(qmt_data)}条")
+                try:
+                    merged_data = self._merge_data(data, qmt_data)
+                    print(f"  [DEBUG] 合并后: {len(merged_data)}条")
+                    data = merged_data
+                except Exception as e:
+                    print(f"  [ERROR] 合并失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+                    # 降级：只使用QMT数据
+                    data = qmt_data
             else:
                 data = qmt_data
 
@@ -406,6 +434,7 @@ class UnifiedDataInterface:
                 # 转换datetime列
                 df['datetime'] = pd.to_datetime(df['datetime'])
                 df.set_index('datetime', inplace=True)
+                df.index.name = 'datetime'  # 明确命名索引
 
                 # 删除全为NaN的列（某些复权类型可能不存在）
                 df = df.dropna(axis=1, how='all')
@@ -427,6 +456,8 @@ class UnifiedDataInterface:
         try:
             from xtquant import xtdata
 
+            print(f"    [DEBUG] _read_from_qmt: 开始获取 {stock_code} 数据...")
+
             # 转换日期格式
             start_str = start_date.replace('-', '')
             end_str = end_date.replace('-', '')
@@ -434,6 +465,7 @@ class UnifiedDataInterface:
             # QMT的period参数：1d, 1m, 5m, tick 直接使用
             qmt_period = period
 
+            print(f"    [DEBUG] 调用 download_history_data: {stock_code}, {qmt_period}, {start_str} ~ {end_str}")
             # 下载历史数据
             xtdata.download_history_data(
                 stock_code=stock_code,
@@ -441,8 +473,10 @@ class UnifiedDataInterface:
                 start_time=start_str,
                 end_time=end_str
             )
+            print(f"    [DEBUG] download_history_data 完成")
 
             # 获取数据
+            print(f"    [DEBUG] 调用 get_market_data...")
             data = xtdata.get_market_data(
                 stock_list=[stock_code],
                 period=qmt_period,
@@ -452,16 +486,25 @@ class UnifiedDataInterface:
             )
 
             if not data or 'time' not in data:
+                print(f"    [WARN] QMT返回数据为空或缺少time列")
                 return None
+
+            print(f"    [DEBUG] get_market_data 完成，数据keys: {list(data.keys())}")
 
             # 转换为DataFrame
             time_df = data['time']
             timestamps = time_df.columns.tolist()
 
+            print(f"    [DEBUG] 开始解析 {len(timestamps)} 条时间戳...")
+
             records = []
             for idx, ts in enumerate(timestamps):
                 try:
-                    dt = pd.to_datetime(ts)
+                    # 修复时区问题：明确处理时间戳转换
+                    if isinstance(ts, (int, float)) and ts > 1e10:  # 毫秒时间戳
+                        dt = pd.to_datetime(ts, unit='ms', utc=True).tz_convert('Asia/Shanghai')
+                    else:
+                        dt = pd.to_datetime(ts)
                     records.append({
                         'datetime': dt,
                         'code': stock_code,
@@ -472,23 +515,36 @@ class UnifiedDataInterface:
                         'volume': float(data['volume'].iloc[0, idx]),
                         'amount': float(data['amount'].iloc[0, idx])
                     })
-                except:
+                except Exception as e:
+                    print(f"    [WARN] 解析第{idx}条记录失败: {e}")
                     continue
 
             if not records:
+                print(f"    [WARN] 没有成功解析任何记录")
                 return None
+
+            print(f"    [DEBUG] 成功解析 {len(records)} 条记录")
 
             df = pd.DataFrame(records)
             df.set_index('datetime', inplace=True)
+            df.index.name = 'datetime'  # 明确命名索引
             df.sort_index(inplace=True)
+
+            # 输出日期范围
+            if not df.empty:
+                print(f"    [DEBUG] QMT数据日期范围: {df.index.min()} ~ {df.index.max()}")
 
             # 删除重复索引
             df = df[~df.index.duplicated(keep='first')]
+
+            print(f"    [OK] _read_from_qmt 完成，返回 {len(df)} 条记录")
 
             return df
 
         except Exception as e:
             print(f"  [ERROR] QMT 数据获取失败: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def _get_dividends_from_qmt(
@@ -605,22 +661,73 @@ class UnifiedDataInterface:
         qmt_data: pd.DataFrame
     ) -> pd.DataFrame:
         """合并DuckDB和QMT数据"""
+        print(f"    [DEBUG] _merge_data: 开始合并...")
+
+        # 确保索引类型一致（统一转换为datetime索引）
+        def ensure_datetime_index(df, name=""):
+            """确保DataFrame有datetime类型的日期索引"""
+            if df.empty:
+                print(f"      [DEBUG] {name} 为空，跳过")
+                return df
+
+            # 检查是否有datetime/date列
+            if 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'])
+                df = df.set_index('datetime')
+                df.index.name = 'datetime'  # 明确命名索引
+            elif 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+                df = df.set_index('date')
+                df.index.name = 'date'  # 明确命名索引
+            # 如果已经有索引，确保是datetime类型
+            elif not isinstance(df.index, pd.DatetimeIndex):
+                # 尝试将当前索引转换为datetime
+                try:
+                    df.index = pd.to_datetime(df.index)
+                    df.index.name = 'date'  # 明确命名索引
+                except:
+                    print(f"  [WARN] 无法转换{name}的索引类型: {type(df.index)}")
+            else:
+                # 已经是DatetimeIndex，确保有名字
+                if df.index.name is None:
+                    df.index.name = 'date'
+
+            print(f"      [DEBUG] {name}: {len(df)}条, 索引类型={type(df.index).__name__}, 索引名={df.index.name}")
+            return df
+
+        # 标准化索引
+        print(f"    [DEBUG] 标准化索引...")
+        duckdb_data = ensure_datetime_index(duckdb_data, "DuckDB数据")
+        qmt_data = ensure_datetime_index(qmt_data, "QMT数据")
+
         # 使用QMT数据作为基础
         merged = qmt_data.copy()
+        print(f"    [DEBUG] 复制QMT数据作为基础: {len(merged)}条")
 
         # 找出DuckDB中有但QMT中没有的日期（用DuckDB补充）
         duckdb_dates = set(duckdb_data.index)
         qmt_dates = set(qmt_data.index)
 
+        print(f"    [DEBUG] DuckDB日期数: {len(duckdb_dates)}, QMT日期数: {len(qmt_dates)}")
+
         only_in_duckdb = duckdb_dates - qmt_dates
+        print(f"    [DEBUG] 仅在DuckDB中的日期数: {len(only_in_duckdb)}")
 
         if only_in_duckdb:
-            additional = duckdb_data[list(only_in_duckdb)]
+            # 使用.loc[]选择行
+            print(f"    [DEBUG] 添加 {len(only_in_duckdb)} 条DuckDB独有数据...")
+            additional = duckdb_data.loc[list(only_in_duckdb)]
             merged = pd.concat([merged, additional]).sort_index()
+            print(f"    [DEBUG] 合并后总计: {len(merged)}条")
 
         # 删除重复索引
+        before_dedup = len(merged)
         merged = merged[~merged.index.duplicated(keep='first')]
+        after_dedup = len(merged)
+        if before_dedup != after_dedup:
+            print(f"    [DEBUG] 删除 {before_dedup - after_dedup} 条重复记录")
 
+        print(f"    [OK] _merge_data 完成，返回 {len(merged)} 条记录")
         return merged
 
     def _save_to_duckdb(
@@ -629,102 +736,232 @@ class UnifiedDataInterface:
         stock_code: str,
         period: str
     ):
-        """保存数据到DuckDB - 修复版（确保表存在）"""
+        """保存数据到DuckDB - 使用连接池确保原子性"""
         try:
-            # 确保表存在（修复首次使用问题）
-            self._ensure_tables_exist()
-            # 确定表名
-            table_map = {
-                '1d': 'stock_daily',
-                '1m': 'stock_1m',
-                '5m': 'stock_5m',
-                'tick': 'stock_tick'
-            }
-            table_name = table_map.get(period, 'stock_daily')
+            print(f"    [DEBUG] _save_to_duckdb: 开始保存 {stock_code} 的 {len(data)} 条记录...")
 
-            # 重置索引，把datetime变成列
-            df_to_save = data.reset_index()
-            df_to_save = df_to_save.rename(columns={'index': 'date', 'datetime': 'date'})
+            # 使用连接池的写锁（确保原子性操作）
+            from data_manager.duckdb_connection_pool import get_db_manager
 
-            # 确保有stock_code列
-            if 'stock_code' not in df_to_save.columns:
-                df_to_save['stock_code'] = stock_code
+            if self.db_manager is None:
+                self.db_manager = get_db_manager(self.duckdb_path)
 
-            # 确保有period列
-            if 'period' not in df_to_save.columns:
-                df_to_save['period'] = period
+            # 使用写连接的上下文管理器（自动处理并发冲突）
+            with self.db_manager.get_write_connection() as con:
+                print(f"    [DEBUG] 获取写连接成功")
 
-            # 确保有symbol_type列
-            if 'symbol_type' not in df_to_save.columns:
-                # 判断是股票、指数还是ETF
-                if stock_code.endswith('.SH'):
-                    if stock_code.startswith('5') or stock_code.startswith('51'):
-                        df_to_save['symbol_type'] = 'etf'
-                    elif stock_code.startswith('688'):
-                        df_to_save['symbol_type'] = 'stock'  # 科创板
+                # 确保表存在
+                self._ensure_tables_exist_with_con(con)
+
+                # 确定表名
+                table_map = {
+                    '1d': 'stock_daily',
+                    '1m': 'stock_1m',
+                    '5m': 'stock_5m',
+                    'tick': 'stock_tick'
+                }
+                table_name = table_map.get(period, 'stock_daily')
+
+                # 重置索引，把datetime变成列
+                df_to_save = data.reset_index()
+                df_to_save = df_to_save.rename(columns={'index': 'date', 'datetime': 'date'})
+
+                print(f"    [DEBUG] reset_index后列名: {list(df_to_save.columns)[:5]}...")
+                print(f"    [DEBUG] 保存数据日期范围: {df_to_save['date'].min()} ~ {df_to_save['date'].max()}")
+
+                # 确保有stock_code列
+                if 'stock_code' not in df_to_save.columns:
+                    df_to_save['stock_code'] = stock_code
+
+                # 确保有period列
+                if 'period' not in df_to_save.columns:
+                    df_to_save['period'] = period
+
+                # 确保有symbol_type列
+                if 'symbol_type' not in df_to_save.columns:
+                    # 判断是股票、指数还是ETF
+                    if stock_code.endswith('.SH'):
+                        if stock_code.startswith('5') or stock_code.startswith('51'):
+                            df_to_save['symbol_type'] = 'etf'
+                        elif stock_code.startswith('688'):
+                            df_to_save['symbol_type'] = 'stock'
+                        else:
+                            df_to_save['symbol_type'] = 'stock'
+                    elif stock_code.endswith('.SZ'):
+                        if stock_code.startswith('15') or stock_code.startswith('16'):
+                            df_to_save['symbol_type'] = 'etf'
+                        elif stock_code.startswith('30'):
+                            df_to_save['symbol_type'] = 'stock'
+                        else:
+                            df_to_save['symbol_type'] = 'stock'
                     else:
                         df_to_save['symbol_type'] = 'stock'
-                elif stock_code.endswith('.SZ'):
-                    if stock_code.startswith('15') or stock_code.startswith('16'):
-                        df_to_save['symbol_type'] = 'etf'
-                    elif stock_code.startswith('30'):
-                        df_to_save['symbol_type'] = 'stock'  # 创业板
+
+                # 删除已存在的重复数据
+                date_min = str(df_to_save['date'].min())
+                date_max = str(df_to_save['date'].max())
+
+                print(f"    [DEBUG] 删除范围: {date_min} ~ {date_max}")
+
+                delete_sql = f"""
+                    DELETE FROM {table_name}
+                    WHERE stock_code = '{stock_code}'
+                        AND date >= '{date_min}'
+                        AND date <= '{date_max}'
+                """
+                con.execute(delete_sql)
+                print(f"    [DEBUG] DELETE执行完成")
+
+                # 添加缺失的列
+                if table_name == 'stock_daily':
+                    if 'adjust_type' not in df_to_save.columns:
+                        df_to_save['adjust_type'] = 'none'
+                    if 'factor' not in df_to_save.columns:
+                        df_to_save['factor'] = 1.0
+
+                    import time
+                    current_time = pd.Timestamp.now()
+                    if 'created_at' not in df_to_save.columns:
+                        df_to_save['created_at'] = current_time
+                    if 'updated_at' not in df_to_save.columns:
+                        df_to_save['updated_at'] = current_time
+
+                # 获取表的列顺序
+                table_columns = con.execute(f"DESCRIBE {table_name}").fetchdf()['column_name'].tolist()
+
+                # 按表的列顺序重新排列DataFrame
+                df_ordered = pd.DataFrame()
+                for col in table_columns:
+                    if col in df_to_save.columns:
+                        df_ordered[col] = df_to_save[col]
                     else:
-                        df_to_save['symbol_type'] = 'stock'
+                        df_ordered[col] = None
+
+                print(f"    [DEBUG] 准备插入 {len(df_ordered)} 条记录...")
+
+                # 策略：使用DELETE+INSERT确保数据保存成功
+                try:
+                    # 注册临时表
+                    con.register('df_to_save_temp', df_ordered)
+
+                    # 先删除重复数据
+                    print(f"    [DEBUG] 删除重复数据...")
+                    con.execute(f"""
+                        DELETE FROM {table_name}
+                        WHERE stock_code = '{stock_code}'
+                            AND date >= '{date_min}'
+                            AND date <= '{date_max}'
+                    """)
+
+                    # 插入新数据（明确指定所有列，避免列数不匹配）
+                    print(f"    [DEBUG] 插入新数据...")
+                    con.execute(f"""
+                        INSERT INTO {table_name} (
+                            stock_code, symbol_type, date, period,
+                            open, high, low, close, volume, amount,
+                            adjust_type, factor, created_at, updated_at,
+                            open_front, high_front, low_front, close_front,
+                            open_back, high_back, low_back, close_back,
+                            open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
+                            open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                        )
+                        SELECT
+                            stock_code, symbol_type, CAST(date AS DATE), period,
+                            open, high, low, close, volume, amount,
+                            adjust_type, factor, created_at, updated_at,
+                            open_front, high_front, low_front, close_front,
+                            open_back, high_back, low_back, close_back,
+                            open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
+                            open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                        FROM df_to_save_temp
+                    """)
+
+                    con.unregister('df_to_save_temp')
+                    print(f"    → 已保存 {len(df_ordered)} 条记录到 {table_name}")
+
+                except Exception as insert_err:
+                    print(f"    [ERROR] INSERT失败: {insert_err}")
+
+                    # 降级方案：只插入基础列（不含复权列）
+                    print(f"    [DEBUG] 使用降级方案（只保存基础列）...")
+                    basic_cols = [
+                        'stock_code', 'symbol_type', 'date', 'period',
+                        'open', 'high', 'low', 'close', 'volume', 'amount',
+                        'adjust_type', 'factor', 'created_at', 'updated_at'
+                    ]
+
+                    # 确保这些列都存在
+                    existing_basic_cols = [col for col in basic_cols if col in df_ordered.columns]
+
+                    df_basic = df_ordered[existing_basic_cols]
+                    con.register('df_to_save_temp2', df_basic)
+
+                    # 先删除
+                    con.execute(f"""
+                        DELETE FROM {table_name}
+                        WHERE stock_code = '{stock_code}'
+                            AND date >= '{date_min}'
+                            AND date <= '{date_max}'
+                    """)
+
+                    # 插入基础列
+                    col_list = ', '.join(existing_basic_cols)
+                    con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM df_to_save_temp2")
+
+                    con.unregister('df_to_save_temp2')
+                    print(f"    → 降级方案成功：保存 {len(df_basic)} 条记录（基础列）")
+
+                # 验证保存结果
+                verify_sql = f"""
+                    SELECT COUNT(*) as count, MIN(date) as min_date, MAX(date) as max_date
+                    FROM {table_name}
+                    WHERE stock_code = '{stock_code}'
+                        AND date >= '{date_min}'
+                        AND date <= '{date_max}'
+                """
+                verify_result = con.execute(verify_sql).fetchdf()
+                verify_dict = verify_result.to_dict('records')[0]
+                print(f"    [DEBUG] 验证保存结果（{date_min} ~ {date_max}）: count={verify_dict['count']}, max_date={verify_dict['max_date']}")
+
+                # 检查是否真的保存成功了
+                if verify_dict['count'] == 0:
+                    print(f"    [ERROR] 保存失败！数据未写入数据库")
+                elif verify_dict['count'] != len(df_ordered):
+                    print(f"    [WARN] 部分数据未保存：期望{len(df_ordered)}条，实际{verify_dict['count']}条")
                 else:
-                    df_to_save['symbol_type'] = 'stock'
-
-            # 删除已存在的重复数据
-            date_min = str(df_to_save['date'].min())
-            date_max = str(df_to_save['date'].max())
-
-            delete_sql = f"""
-                DELETE FROM {table_name}
-                WHERE stock_code = '{stock_code}'
-                    AND date >= '{date_min}'
-                    AND date <= '{date_max}'
-            """
-            self.con.execute(delete_sql)
-
-            # 添加缺失的复权列（如果表有这些列）
-            if table_name == 'stock_daily':
-                # 添加 adjust_type 和 factor 列
-                if 'adjust_type' not in df_to_save.columns:
-                    df_to_save['adjust_type'] = 'none'
-                if 'factor' not in df_to_save.columns:
-                    df_to_save['factor'] = 1.0
-
-                # 添加时间戳列
-                import time
-                current_time = pd.Timestamp.now()
-                if 'created_at' not in df_to_save.columns:
-                    df_to_save['created_at'] = current_time
-                if 'updated_at' not in df_to_save.columns:
-                    df_to_save['updated_at'] = current_time
-
-                # 优化：只保存原始数据，不再预计算复权列
-                # 复权功能由AdjustmentCache调用QMT API实现
-
-            # 获取表的列顺序
-            table_columns = self.con.execute(f"DESCRIBE {table_name}").fetchdf()['column_name'].tolist()
-
-            # 按表的列顺序重新排列DataFrame
-            df_ordered = pd.DataFrame()
-            for col in table_columns:
-                if col in df_to_save.columns:
-                    df_ordered[col] = df_to_save[col]
-                else:
-                    df_ordered[col] = None  # 缺失列填充NULL
-
-            # 注册并插入新数据
-            self.con.register('df_to_save_temp', df_ordered)
-            self.con.execute(f"INSERT INTO {table_name} SELECT * FROM df_to_save_temp")
-            self.con.unregister('df_to_save_temp')
-
-            print(f"    → 已保存 {len(df_ordered)} 条记录到 {table_name}")
+                    print(f"    [OK] 数据保存成功！")
 
         except Exception as e:
             print(f"    [ERROR] 保存失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def _ensure_tables_exist_with_con(self, con):
+        """确保所有必需的表都存在（使用指定连接）"""
+        try:
+            # 创建 stock_daily 表
+            con.execute("""
+                CREATE TABLE IF NOT EXISTS stock_daily (
+                    stock_code VARCHAR NOT NULL,
+                    symbol_type VARCHAR NOT NULL,
+                    date DATE NOT NULL,
+                    period VARCHAR NOT NULL,
+                    open DECIMAL(18, 6),
+                    high DECIMAL(18, 6),
+                    low DECIMAL(18, 6),
+                    close DECIMAL(18, 6),
+                    volume BIGINT,
+                    amount DECIMAL(18, 6),
+                    adjust_type VARCHAR DEFAULT 'none',
+                    factor DECIMAL(18, 6) DEFAULT 1.0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, date, period, adjust_type)
+                )
+            """)
+            print("[DEBUG] 表检查完成")
+        except Exception as e:
+            print(f"[WARNING] 创建表失败: {e}")
     def _apply_adjustment(
         self,
         data: pd.DataFrame,

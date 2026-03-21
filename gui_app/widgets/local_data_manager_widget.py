@@ -296,19 +296,21 @@ class DataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def _update_data(self):
-        """更新数据（增量）- 使用DuckDB存储，批量处理避免连接冲突"""
+        """更新缺失数据（智能补全）- 自动检测并补充所有缺失的历史数据"""
         try:
             from data_manager.duckdb_connection_pool import get_db_manager
             from xtquant import xtdata
             import pandas as pd
 
             self.log_signal.emit("✅ 数据管理器初始化成功")
+            self.log_signal.emit("📋 正在检测缺失数据...")
 
             # 获取DuckDB管理器
             manager = get_db_manager(r'D:/StockData/stock_data.ddb')
 
-            # 查找需要更新的股票（落后超过0天，包括今天的数据）
-            # 说明：落后0天表示今天的数据可能还没收盘，落后1天表示昨天数据缺失
+            # 查找需要更新的股票（任何缺失数据的股票）
+            # 策略：自动检测每只股票的最新日期，补充从该日期之后的所有缺失数据
+            # 不管缺失1天还是100天，都会一并补全
             query = """
                 SELECT
                     stock_code,
@@ -353,22 +355,43 @@ class DataDownloadThread(QThread):
                         self.log_signal.emit(f"  📈 进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
 
                     # 获取最新日期和落后天数
-                    stock_data = df_stocks[df_stocks['stock_code'] == stock_code].iloc[0]
+                    matching_stocks = df_stocks[df_stocks['stock_code'] == stock_code]
+                    if matching_stocks.empty:
+                        self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: ⚠️ 跳过 - 未找到股票信息")
+                        skipped_count += 1
+                        continue
+
+                    stock_data = matching_stocks.iloc[0]
                     latest_date = stock_data['latest_date']
                     days_behind = stock_data['days_behind']
 
-                    # 计算需要获取的条数
-                    # 策略：最少30条，落后天数多时适当增加
-                    # 考虑到QMT数据是最近往回数，获取足够的数据确保覆盖缺失
-                    count = int(days_behind) + 30  # 增加30天缓冲
-                    # 最少获取30条，最多获取500条（约2年数据）
-                    count = max(30, min(count, 500))
+                    # 计算获取数据的日期范围
+                    # 从DuckDB最新日期的下一天开始，到今天
+                    from datetime import datetime, timedelta
+                    latest_dt = pd.to_datetime(latest_date)
+                    start_dt = latest_dt + timedelta(days=1)  # 从最新日期的下一天开始
+                    end_dt = datetime.now()  # 到今天
 
-                    # 从QMT获取数据（使用count参数）
+                    # 格式化为QMT需要的格式：YYYYMMDD
+                    start_time = start_dt.strftime('%Y%m%d')
+                    end_time = end_dt.strftime('%Y%m%d')
+
+                    # 从QMT获取数据（使用日期范围参数，获取所有缺失数据）
+                    # 步骤1: 先下载数据到QMT本地
+                    xtdata.download_history_data(
+                        stock_code,
+                        period='1d',
+                        start_time=start_time,
+                        end_time=end_time,
+                        incrementally=True
+                    )
+
+                    # 步骤2: 再从本地读取数据
                     data = xtdata.get_market_data_ex(
                         stock_list=[stock_code],
                         period='1d',
-                        count=count
+                        start_time=start_time,
+                        end_time=end_time
                     )
 
                     if isinstance(data, dict) and stock_code in data:
@@ -405,8 +428,14 @@ class DataDownloadThread(QThread):
 
                             if not df_processed.empty:
                                 update_data.append(df_processed)
+                                # 输出补充的信息
+                                date_range_start = df_processed['date'].min()
+                                date_range_end = df_processed['date'].max()
+                                days_added = len(df_processed)
+                                self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: ✅ 补充 {days_added} 条数据 ({date_range_start} ~ {date_range_end})")
                                 success_count += 1
                             else:
+                                self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: ⚠️ 无新数据（已是最新）")
                                 skipped_count += 1
                         else:
                             skipped_count += 1
@@ -438,8 +467,44 @@ class DataDownloadThread(QThread):
                     # 一次性写入（连接池会自动重试）
                     self.log_signal.emit("💾 正在写入数据库...")
                     with manager.get_write_connection() as con:
+                        # 注册临时表
                         con.register('temp_updates', df_all)
-                        con.execute("INSERT INTO stock_daily SELECT * FROM temp_updates")
+
+                        # 策略：先删除重复数据，再插入新数据
+                        # 修复类型转换问题：明确将temp_updates的date列转换为DATE类型
+                        self.log_signal.emit("  🗑️ 删除重复数据...")
+                        con.execute("""
+                            DELETE FROM stock_daily
+                            WHERE (stock_code, CAST(date AS DATE), period, adjust_type) IN (
+                                SELECT stock_code, CAST(date AS DATE), period, adjust_type
+                                FROM temp_updates
+                            )
+                        """)
+
+                        # 插入新数据（需要明确指定所有列，包括复权列）
+                        self.log_signal.emit("  📝 插入新数据...")
+                        con.execute("""
+                            INSERT INTO stock_daily (
+                                stock_code, symbol_type, date, period,
+                                open, high, low, close, volume, amount,
+                                adjust_type, factor, created_at, updated_at,
+                                open_front, high_front, low_front, close_front,
+                                open_back, high_back, low_back, close_back,
+                                open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
+                                open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                            )
+                            SELECT
+                                stock_code, symbol_type, CAST(date AS DATE), period,
+                                open, high, low, close, volume, amount,
+                                adjust_type, factor, created_at, updated_at,
+                                open_front, high_front, low_front, close_front,
+                                open_back, high_back, low_back, close_back,
+                                open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
+                                open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                            FROM temp_updates
+                        """)
+
+                        # 注销临时表
                         con.unregister('temp_updates')
 
                     self.log_signal.emit(f"✅ 成功保存 {len(df_all)} 条记录到数据库")
@@ -1591,8 +1656,8 @@ class LocalDataManagerWidget(QWidget):
         """)
         btn_layout.addWidget(self.download_bonds_btn)
 
-        self.update_data_btn = QPushButton("🔄 更新最近数据")
-        self.update_data_btn.setToolTip("更新最近1-30天的缺失数据\n用于日常数据维护，保持数据库最新")
+        self.update_data_btn = QPushButton("🔄 更新缺失数据")
+        self.update_data_btn.setToolTip("智能补全所有缺失的历史数据\n自动检测每只股票的最新日期，补充缺失的部分")
         self.update_data_btn.clicked.connect(self.update_data)
         self.update_data_btn.setStyleSheet("""
             QPushButton {
@@ -2777,6 +2842,11 @@ class DataViewerDialog(QDialog):
 
             # 使用只读模式连接，避免配置冲突
             import duckdb
+            import io
+            from contextlib import redirect_stdout
+
+            # 捕获print输出
+            log_buffer = io.StringIO()
 
             # DuckDB数据库路径
             db_path = Path('D:/StockData/stock_data.ddb')
@@ -2806,24 +2876,36 @@ class DataViewerDialog(QDialog):
             self.stats_label.setText(f"📡 正在查询 {self.stock_code} ({adjust_type})...")
 
             # 使用统一数据接口查询（支持QMT API复权方案）
-            from data_manager.unified_data_interface import UnifiedDataManager
+            # 重定向print输出到log_buffer
+            with redirect_stdout(log_buffer):
+                from data_manager.unified_data_interface import UnifiedDataManager
 
-            manager = UnifiedDataManager()
+                manager = UnifiedDataManager()
 
-            # 获取数据范围（最近1年）
-            end_date = datetime.now().strftime('%Y-%m-%d')
-            start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
+                # 获取数据范围（最近1年）
+                end_date = datetime.now().strftime('%Y-%m-%d')
+                start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
 
-            # 查询数据（会经过AdjustmentCache处理复权）
-            # 注意：这里会显示详细的日志输出
-            df = manager.get_stock_data(
-                stock_code=self.stock_code,
-                start_date=start_date,
-                end_date=end_date,
-                period='1d',
-                adjust=adjust_type,
-                auto_save=False
-            )
+                # 查询数据（会经过AdjustmentCache处理复权）
+                df = manager.get_stock_data(
+                    stock_code=self.stock_code,
+                    start_date=start_date,
+                    end_date=end_date,
+                    period='1d',
+                    adjust=adjust_type,
+                    auto_save=False
+                )
+
+            # 获取日志输出
+            log_output = log_buffer.getvalue()
+
+            # 如果有日志输出，显示在状态栏
+            if log_output.strip():
+                # 提取关键信息
+                lines = log_output.strip().split('\n')
+                for line in lines:
+                    if '[INFO]' in line or '[OK]' in line or '[WARN]' in line:
+                        print(f"📋 {line}")  # 同时输出到控制台
 
             if df.empty:
                 self.stats_label.setText(f"❌ 未找到 {self.stock_code} 的数据")

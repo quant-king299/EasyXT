@@ -51,49 +51,37 @@ class DataLoadThread(QThread):
 
     def run(self):
         try:
-            if DB_MANAGER_AVAILABLE:
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+            # 使用统一数据接口（支持QMT API复权方案）
+            from data_manager.unified_data_interface import UnifiedDataInterface
 
-                # 根据复权类型选择列
-                if self.adjust_type == 'none':
-                    price_cols = ['open', 'high', 'low', 'close']
-                elif self.adjust_type == 'front':
-                    price_cols = ['open_front', 'high_front', 'low_front', 'close_front']
-                elif self.adjust_type == 'back':
-                    price_cols = ['open_back', 'high_back', 'low_back', 'close_back']
-                else:
-                    price_cols = ['open', 'high', 'low', 'close']
+            manager = UnifiedDataInterface()
 
-                query = f"""
-                    SELECT
-                        date,
-                        {price_cols[0]} as open,
-                        {price_cols[1]} as high,
-                        {price_cols[2]} as low,
-                        {price_cols[3]} as close,
-                        volume,
-                        amount
-                    FROM stock_daily
-                    WHERE stock_code = '{self.stock_code}'
-                      AND date >= '{self.start_date}'
-                      AND date <= '{self.end_date}'
-                    ORDER BY date
-                """
-
-                df = manager.execute_read_query(query)
-            else:
-                import duckdb
-                con = duckdb.connect(r'D:/StockData/stock_data.ddb', read_only=True)
-                df = con.execute(query).df()
-                con.close()
+            # 查询数据（会经过AdjustmentCache处理复权）
+            # 注意：这里会输出详细的日志到终端
+            # auto_save=True: QMT获取的缺失数据会自动保存到DuckDB
+            df = manager.get_stock_data(
+                stock_code=self.stock_code,
+                start_date=self.start_date,
+                end_date=self.end_date,
+                period='1d',
+                adjust=self.adjust_type,
+                auto_save=True
+            )
 
             if not df.empty:
-                df = df.set_index('date')
+                # 检查并设置索引
+                if 'date' in df.columns:
+                    df = df.set_index('date')
+                elif 'datetime' in df.columns:
+                    df = df.set_index('datetime')
+                # 如果没有日期列，保持原样
 
             self.data_ready.emit(df, self.stock_code)
 
         except Exception as e:
-            self.error_occurred.emit(str(e))
+            import traceback
+            error_detail = traceback.format_exc()
+            self.error_occurred.emit(f"{str(e)}\n\n{error_detail}")
 
 
 class AdvancedDataViewerWidget(QWidget):
@@ -568,27 +556,70 @@ class AdvancedDataViewerWidget(QWidget):
         self.load_btn.setText("📥 加载数据")
 
         if not df.empty:
-            # 计算涨跌幅
+            # 计算涨跌幅（date此时是索引）
             df_pct = df.copy()
             df_pct['pct_change'] = df_pct['close'].pct_change() * 100
+
+            # 重置索引，确保date是列而不是索引
+            df_pct = df_pct.reset_index()
+
+            # 如果索引没有名字，手动命名为'date'
+            if 'index' in df_pct.columns:
+                df_pct = df_pct.rename(columns={'index': 'date'})
+
+            # 倒序排列：最新的数据在上面
+            df_pct = df_pct.iloc[::-1].reset_index(drop=True)
 
             # 填充数据表格
             self.data_table.setRowCount(len(df_pct))
 
-            for row_idx, (date, row_data) in enumerate(df_pct.iterrows()):
+            # 刷新股票列表（显示最新的日期范围）
+            # 获取当前选中的筛选类型
+            if self.filter_all_btn.isChecked():
+                filter_type = 'all'
+            elif self.filter_stock_btn.isChecked():
+                filter_type = 'stock'
+            elif self.filter_bond_btn.isChecked():
+                filter_type = 'bond'
+            else:
+                filter_type = 'all'
+
+            # 重新加载股票列表
+            self.load_stock_list(filter_type, '')
+
+            # 使用 iloc 直接访问，避免 iterrows 的潜在问题
+            for row_idx in range(len(df_pct)):
                 # 日期
-                date_item = QTableWidgetItem(str(date)[:10])
+                date = df_pct.iloc[row_idx]['date']
+
+                # 日期格式化
+                if isinstance(date, pd.Timestamp):
+                    date_str = date.strftime('%Y-%m-%d')
+                elif isinstance(date, pd.datetime64):
+                    date_str = pd.Timestamp(date).strftime('%Y-%m-%d')
+                elif hasattr(date, 'strftime'):
+                    date_str = date.strftime('%Y-%m-%d')
+                else:
+                    # 如果是字符串，直接使用
+                    date_str = str(date)
+                    # 如果是整数时间戳，转换
+                    if date_str.isdigit() and len(date_str) > 10:
+                        from datetime import datetime as dt
+                        date_ts = int(date_str) / 1000  # 毫秒转秒
+                        date_str = dt.fromtimestamp(date_ts).strftime('%Y-%m-%d')
+
+                date_item = QTableWidgetItem(date_str)
                 self.data_table.setItem(row_idx, 0, date_item)
 
                 # OHLC
                 for col_idx, col_name in enumerate(['open', 'high', 'low', 'close'], 1):
-                    value = row_data[col_name]
+                    value = df_pct.iloc[row_idx][col_name]
                     item = QTableWidgetItem(f"{value:.2f}")
 
                     # 涨跌颜色（红涨绿跌）
                     if col_name == 'close':
-                        if row_idx > 0:
-                            prev_close = df_pct.iloc[row_idx - 1]['close']
+                        if row_idx < len(df_pct) - 1:
+                            prev_close = df_pct.iloc[row_idx + 1]['close']
                             if value > prev_close:
                                 item.setForeground(QColor("#f44336"))  # 红涨
                             elif value < prev_close:
@@ -597,7 +628,7 @@ class AdvancedDataViewerWidget(QWidget):
                     self.data_table.setItem(row_idx, col_idx, item)
 
                 # 涨跌幅
-                pct_change = row_data['pct_change']
+                pct_change = df_pct.iloc[row_idx]['pct_change']
                 if pd.notna(pct_change):
                     pct_item = QTableWidgetItem(f"{pct_change:+.2f}%")
                     if pct_change > 0:
@@ -609,11 +640,11 @@ class AdvancedDataViewerWidget(QWidget):
                     self.data_table.setItem(row_idx, 5, QTableWidgetItem("-"))
 
                 # 成交量
-                volume_item = QTableWidgetItem(f"{int(row_data['volume']):,}")
+                volume_item = QTableWidgetItem(f"{int(df_pct.iloc[row_idx]['volume']):,}")
                 self.data_table.setItem(row_idx, 6, volume_item)
 
                 # 成交额
-                amount = row_data.get('amount', 0)
+                amount = df_pct.iloc[row_idx].get('amount', 0)
                 if pd.notna(amount) and amount > 0:
                     amount_item = QTableWidgetItem(f"{amount:,.0f}")
                 else:
