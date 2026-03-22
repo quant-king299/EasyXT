@@ -51,15 +51,28 @@ python -c "from easy_xt import get_api; print('✅ easy_xt 安装成功！')"
 
 ### 2️⃣ 安装 easyxt_backtest（可选，用于回测）
 
+**方法1：添加到 PYTHONPATH（推荐）**
+
 ```bash
-pip install -e easyxt_backtest
+# Windows PowerShell
+$env:PYTHONPATH += ";C:\Users\Administrator\EasyXT"
+
+# 或者永久添加（需要重启终端）
+[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "C:\Users\Administrator\EasyXT", "User")
 ```
 
-**注意**：不使用 `./` 前缀，直接使用目录名
+**方法2：在代码中添加路径**
+
+```python
+import sys
+sys.path.insert(0, 'C:/Users/Administrator/EasyXT')
+
+from easyxt_backtest import BacktestEngine
+```
 
 **验证安装**：
 ```bash
-python -c "from easyxt_backtest import BacktestEngine; print('✅ easyxt_backtest 安装成功！')"
+python -c "import sys; sys.path.insert(0, 'C:/Users/Administrator/EasyXT'); from easyxt_backtest import BacktestEngine; print('✅ easyxt_backtest 可用！')"
 ```
 
 ---

@@ -241,7 +241,12 @@ data = api.get_price(
 
 **安装**：
 ```bash
-pip install -e ./easyxt_backtest
+# 方法1：添加到 PYTHONPATH（推荐）
+# Windows PowerShell:
+$env:PYTHONPATH += ";C:\path\to\EasyXT"
+
+# 或永久添加：
+[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "C:\path\to\EasyXT", "User")
 ```
 
 **使用示例**：
@@ -525,8 +530,9 @@ python -c "from easy_xt import get_api; print('✓ 安装成功')"
 #### 3️⃣ 按需安装扩展模块
 
 ```bash
-# 如果需要回测功能
-pip install -e ./easyxt_backtest
+# 如果需要回测功能，将项目路径添加到 PYTHONPATH
+# PowerShell:
+$env:PYTHONPATH += ";C:\path\to\EasyXT"
 
 # 如果需要因子平台
 cd 101因子/101因子分析平台

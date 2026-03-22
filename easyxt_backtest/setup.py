@@ -18,7 +18,8 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/quant-king299/EasyXT",
-    packages=["easyxt_backtest", "easyxt_backtest.api", "easyxt_backtest.core", "easyxt_backtest.strategies", "easyxt_backtest.examples", "easyxt_backtest.tests"],
+    packages=["easyxt_backtest"],
+    package_dir={'easyxt_backtest': '.'},
     classifiers=[
         "Programming Language :: Python :: 3",
         "License :: OSI Approved :: MIT License",
