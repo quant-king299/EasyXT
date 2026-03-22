@@ -36,7 +36,7 @@ if %ERRORLEVEL% EQU 0 (
 echo.
 
 echo [3/3] 验证安装...
-python -c "import sys; sys.path.insert(0, r'%PROJECT_DIR%'); from easyxt_backtest import BacktestEngine; print('      easyxt_backtest: 可用 ✓')"
+python -c "import sys; sys.path.insert(0, r'%PROJECT_DIR%'); from easyxt_backtest import BacktestEngine; print('easyxt_backtest: OK')"
 if %ERRORLEVEL% EQU 0 (
     echo.
 ) else (
