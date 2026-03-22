@@ -317,6 +317,7 @@ class DataDownloadThread(QThread):
                     MAX(date) as latest_date,
                     DATEDIFF('day', MAX(date), CURRENT_DATE) as days_behind
                 FROM stock_daily
+                WHERE stock_code IS NOT NULL  -- 过滤掉NULL记录
                 GROUP BY stock_code
                 HAVING DATEDIFF('day', MAX(date), CURRENT_DATE) > 0
                 ORDER BY days_behind DESC
@@ -398,10 +399,12 @@ class DataDownloadThread(QThread):
                         df = data[stock_code]
                         if not df.empty:
                             # 转换数据格式
+                            # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
+                            time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
                             df_processed = pd.DataFrame({
                                 'stock_code': stock_code,
                                 'symbol_type': 'stock',
-                                'date': pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y-%m-%d'),
+                                'date': time_series.dt.strftime('%Y-%m-%d'),
                                 'period': '1d',
                                 'open': df['open'],
                                 'high': df['high'],
@@ -689,10 +692,12 @@ class DataDownloadThread(QThread):
                         df = data[stock_code]
                         if not df.empty:
                             # 转换数据格式
+                            # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
+                            time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
                             df_processed = pd.DataFrame({
                                 'stock_code': stock_code,
                                 'symbol_type': 'stock',
-                                'date': pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y-%m-%d'),
+                                'date': time_series.dt.strftime('%Y-%m-%d'),
                                 'period': '1d',
                                 'open': df['open'],
                                 'high': df['high'],
@@ -995,7 +1000,8 @@ class SingleStockDownloadThread(QThread):
 
             # 根据日期范围过滤数据
             self.log_signal.emit("🔍 正在过滤日期范围...")
-            df['datetime'] = pd.to_datetime(df['time'], unit='ms')
+            # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
+            df['datetime'] = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
 
             if self.period == '1d':
                 # 日线：只保留日期范围内的数据
@@ -1020,7 +1026,8 @@ class SingleStockDownloadThread(QThread):
             # 转换为标准格式
             if self.period == 'tick':
                 # tick数据处理（字段结构不同）
-                time_series = pd.to_datetime(df['time'], unit='ms')
+                # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
+                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
 
                 df_processed = pd.DataFrame({
                     'stock_code': self.stock_code,
@@ -1080,9 +1087,10 @@ class SingleStockDownloadThread(QThread):
 
             if 'time' in df.columns:
                 # QMT返回的数据格式
+                # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
                 # 日线：使用DATE类型（字符串YYYY-MM-DD）
                 # 分钟线：使用TIMESTAMP类型（直接保存datetime对象）
-                time_series = pd.to_datetime(df['time'], unit='ms')
+                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
                 if self.period == '1d':
                     date_series = time_series.dt.strftime('%Y-%m-%d')
                 else:
@@ -2886,14 +2894,15 @@ class DataViewerDialog(QDialog):
                 end_date = datetime.now().strftime('%Y-%m-%d')
                 start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
 
-                # 查询数据（会经过AdjustmentCache处理复权）
+                # 查询数据（只显示本地已有数据）
                 df = manager.get_stock_data(
                     stock_code=self.stock_code,
                     start_date=start_date,
                     end_date=end_date,
                     period='1d',
                     adjust=adjust_type,
-                    auto_save=False
+                    auto_save=False,
+                    local_only=True  # 只显示本地数据
                 )
 
             # 获取日志输出
@@ -2991,14 +3000,15 @@ class DataViewerDialog(QDialog):
             end_date = datetime.now().strftime('%Y-%m-%d')
             start_date = (datetime.now() - pd.Timedelta(days=365)).strftime('%Y-%m-%d')
 
-            # 查询数据（会经过AdjustmentCache处理复权）
+            # 查询数据（只导出本地已有数据）
             df = manager.get_stock_data(
                 stock_code=self.stock_code,
                 start_date=start_date,
                 end_date=end_date,
                 period='1d',
                 adjust=adjust_type,
-                auto_save=False
+                auto_save=False,
+                local_only=True  # 只导出本地数据
             )
 
             # 设置日期为索引

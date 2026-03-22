@@ -222,7 +222,8 @@ class UnifiedDataInterface:
         end_date: str,
         period: str = '1d',
         adjust: str = 'none',
-        auto_save: bool = True
+        auto_save: bool = True,
+        local_only: bool = False
     ) -> pd.DataFrame:
         """
         获取股票数据（统一入口）
@@ -231,8 +232,8 @@ class UnifiedDataInterface:
 
         数据获取策略：
         1. 优先从DuckDB读取（包含五维复权，速度快）
-        2. 如DuckDB无数据或数据不全，使用QMT在线获取
-        3. 获取后自动保存到DuckDB
+        2. 如DuckDB无数据或数据不全，使用QMT在线获取（当local_only=False时）
+        3. 获取后自动保存到DuckDB（当auto_save=True时）
 
         Args:
             stock_code: 股票代码（如 '511380.SH'）
@@ -242,6 +243,7 @@ class UnifiedDataInterface:
             adjust: 复权类型（'none'=不复权, 'front'=前复权, 'back'=后复权,
                                  'geometric_front'=等比前复权, 'geometric_back'=等比后复权）
             auto_save: 是否自动保存到DuckDB
+            local_only: 是否只从本地DuckDB读取（不触发在线获取）
 
         Returns:
             DataFrame: 包含 OHLCV 数据
@@ -308,8 +310,13 @@ class UnifiedDataInterface:
                 print(f"  → DuckDB 数据不完整（缺失 {missing_days} 个交易日），需要补充")
                 need_download = True
 
-        # Step 3: 如需下载，使用QMT获取
+        # Step 3: 如需下载，使用QMT获取（仅在local_only=False时）
         if need_download:
+            # 如果设置为只读取本地数据，则不进行在线获取
+            if local_only:
+                print(f"  [INFO] local_only=True，跳过在线获取，仅返回本地已有数据")
+                return data if data is not None else pd.DataFrame()
+
             if not self.qmt_available:
                 print(f"  [ERROR] QMT 不可用，无法获取在线数据")
                 return data if data is not None else pd.DataFrame()
@@ -769,9 +776,14 @@ class UnifiedDataInterface:
                 print(f"    [DEBUG] reset_index后列名: {list(df_to_save.columns)[:5]}...")
                 print(f"    [DEBUG] 保存数据日期范围: {df_to_save['date'].min()} ~ {df_to_save['date'].max()}")
 
-                # 确保有stock_code列
+                # 确保有stock_code列（并且验证不为None）
                 if 'stock_code' not in df_to_save.columns:
                     df_to_save['stock_code'] = stock_code
+                else:
+                    # 如果已存在stock_code列，检查是否有None值，如果有则替换
+                    if df_to_save['stock_code'].isna().any() or (df_to_save['stock_code'] == 'None').any():
+                        print(f"    [WARN] 发现stock_code列包含None值，将替换为: {stock_code}")
+                        df_to_save['stock_code'] = stock_code
 
                 # 确保有period列
                 if 'period' not in df_to_save.columns:
@@ -796,6 +808,14 @@ class UnifiedDataInterface:
                             df_to_save['symbol_type'] = 'stock'
                     else:
                         df_to_save['symbol_type'] = 'stock'
+
+                # 过滤掉stock_code为None的行（额外保护）
+                before_filter = len(df_to_save)
+                df_to_save = df_to_save[df_to_save['stock_code'].notna()]
+                df_to_save = df_to_save[df_to_save['stock_code'] != 'None']
+                after_filter = len(df_to_save)
+                if before_filter != after_filter:
+                    print(f"    [WARN] 过滤掉 {before_filter - after_filter} 条stock_code为None的记录")
 
                 # 删除已存在的重复数据
                 date_min = str(df_to_save['date'].min())

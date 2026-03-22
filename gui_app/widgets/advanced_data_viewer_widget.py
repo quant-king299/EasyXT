@@ -56,16 +56,16 @@ class DataLoadThread(QThread):
 
             manager = UnifiedDataInterface()
 
-            # 查询数据（会经过AdjustmentCache处理复权）
-            # 注意：这里会输出详细的日志到终端
-            # auto_save=True: QMT获取的缺失数据会自动保存到DuckDB
+            # 查询数据（只从DuckDB读取，不触发在线获取）
+            # local_only=True: 仅显示本地已有数据，避免误解
             df = manager.get_stock_data(
                 stock_code=self.stock_code,
                 start_date=self.start_date,
                 end_date=self.end_date,
                 period='1d',
                 adjust=self.adjust_type,
-                auto_save=True
+                auto_save=False,
+                local_only=True  # 只显示本地数据，不在线获取
             )
 
             if not df.empty:
@@ -393,8 +393,8 @@ class AdvancedDataViewerWidget(QWidget):
             if DB_MANAGER_AVAILABLE:
                 manager = get_db_manager(r'D:/StockData/stock_data.ddb')
 
-                # 如果有搜索文本，显示所有匹配结果；否则限制显示数量
-                limit_clause = "" if search_text else "LIMIT 5000"
+                # 显示所有匹配结果（去掉限制，确保显示所有股票）
+                limit_clause = ""
 
                 query = f"""
                     SELECT
