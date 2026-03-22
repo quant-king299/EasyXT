@@ -21,10 +21,20 @@ if not exist "%PROJECT_DIR%\easyxt_backtest" (
 echo      找到 easyxt_backtest
 echo.
 
-echo [2/3] 配置 PYTHONPATH...
-echo 正在添加到用户环境变量...
+echo [2/3] 安装依赖包...
+echo 正在安装 backtrader...
+pip install backtrader >nul 2>&1
+if %ERRORLEVEL% EQU 0 (
+    echo      backtrader 安装成功
+) else (
+    echo      backtrader 安装失败
+    pause
+    exit /b 1
+)
+echo.
 
-REM 设置用户级 PYTHONPATH
+echo [3/4] 配置 PYTHONPATH...
+echo 正在添加到用户环境变量...
 setx PYTHONPATH "%PROJECT_DIR%"
 if %ERRORLEVEL% EQU 0 (
     echo      成功！
@@ -35,7 +45,9 @@ if %ERRORLEVEL% EQU 0 (
 )
 echo.
 
-echo [3/3] 验证安装...
+echo [4/4] 验证安装...
+
+echo [4/4] 验证安装...
 python -c "import sys; sys.path.insert(0, r'%PROJECT_DIR%'); from easyxt_backtest import BacktestEngine; print('easyxt_backtest: OK')"
 if %ERRORLEVEL% EQU 0 (
     echo.
