@@ -52,8 +52,10 @@ python -c "from easy_xt import get_api; print('✅ easy_xt 安装成功！')"
 ### 2️⃣ 安装 easyxt_backtest（可选，用于回测）
 
 ```bash
-pip install -e ./easyxt_backtest
+pip install -e easyxt_backtest
 ```
+
+**注意**：不使用 `./` 前缀，直接使用目录名
 
 **验证安装**：
 ```bash
