@@ -438,6 +438,8 @@ gui_app/main_window.py
 
 ## ⚙️ 安装指南
 
+> 📖 **详细安装文档**: 查看 [INSTALL.md](INSTALL.md) 获取完整的安装指南、故障排查和常见问题解答
+
 ### 环境要求
 
 - Python 3.9+
