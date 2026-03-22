@@ -356,13 +356,12 @@ class ATR动态网格策略:
                     return False
 
                 # 执行买入
-                order_id = self.api.trade.order_stock(
+                order_id = self.api.trade.buy(
                     account_id=self.account_id,
-                    stock_code=stock_code,
-                    order_type=0,  # 0=买入
-                    order_volume=self.position_size,
-                    price_type=self.price_mode,  # 使用指定价格模式
-                    price=price
+                    code=stock_code,
+                    volume=self.position_size,
+                    price=price,
+                    price_type='limit' if price > 0 else 'market'
                 )
 
                 if order_id:
@@ -381,13 +380,12 @@ class ATR动态网格策略:
                     return False
 
                 # 执行卖出
-                order_id = self.api.trade.order_stock(
+                order_id = self.api.trade.sell(
                     account_id=self.account_id,
-                    stock_code=stock_code,
-                    order_type=1,  # 1=卖出
-                    order_volume=min(position, self.position_size),
-                    price_type=self.price_mode,
-                    price=price
+                    code=stock_code,
+                    volume=min(position, self.position_size),
+                    price=price,
+                    price_type='limit' if price > 0 else 'market'
                 )
 
                 if order_id:
