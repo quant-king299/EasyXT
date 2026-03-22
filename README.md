@@ -527,12 +527,15 @@ pip install -e ./easy_xt
 python -c "from easy_xt import get_api; print('✓ 安装成功')"
 ```
 
-#### 3️⃣ 按需安装扩展模块
+#### 3️⃣ 按需使用扩展模块
 
 ```bash
 # 如果需要回测功能，将项目路径添加到 PYTHONPATH
 # PowerShell:
-$env:PYTHONPATH += ";C:\path\to\EasyXT"
+$env:PYTHONPATH += ";C:\Users\Administrator\EasyXT"
+
+# 或永久添加：
+[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "C:\Users\Administrator\EasyXT", "User")
 
 # 如果需要因子平台
 cd 101因子/101因子分析平台
@@ -637,7 +640,7 @@ A: 本项目支持多种数据源，可按需选择：
 - [ ] 已下载并解压特殊版本的 `xtquant`
 - [ ] 验证 `from xtquant import datacenter` 不报错
 - [ ] 已安装 `easy_xt` 核心库（`pip install -e ./easy_xt`）
-- [ ] 如需回测，已安装 `easyxt_backtest`（`pip install -e ./easyxt_backtest`）
+- [ ] 如需回测，已设置 PYTHONPATH 指向项目目录
 - [ ] 如需Tushare数据，已配置 Token
 - [ ] QMT客户端已安装并登录
 - [ ] Python 版本 ≥ 3.9
