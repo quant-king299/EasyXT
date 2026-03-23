@@ -1,0 +1,155 @@
+# ============================================================
+# 多因子策略配置示例
+# ============================================================
+# 策略说明：
+#   综合使用市值、ROE、动量三个因子进行选股
+#   市值因子负相关(小市值)、ROE因子正相关、动量因子正相关
+#   从沪深300中选择综合得分最高的15只股票
+#   每季度调仓
+# ============================================================
+
+# 策略基本信息
+strategy:
+  name: "多因子优选策略"
+  version: "1.0.0"
+  author: "Your Name"
+  description: "基于市值、ROE、动量的多因子选股策略"
+
+# 回测参数配置
+backtest:
+  start_date: "20200101"
+  end_date: "20231231"
+  initial_cash: 1000000        # 初始资金100万
+  commission: 0.001            # 佣金0.1%
+  slippage: 0.001              # 滑点0.1%
+
+# 股票池配置
+universe:
+  type: "index"                # 使用沪深300作为股票池
+  index_code: "000300.SH"
+
+# ============================================================
+# 排除条件配置
+# ============================================================
+exclude_filters:
+  # 1. 排除ST和退市股票
+  - name: "ST和退市过滤"
+    type: "stock_status"
+    condition: "not_in"
+    values: ["ST", "*ST", "S*ST", "退市"]
+
+  # 2. 市场过滤 (只选择深交所和上交所)
+  - name: "市场选择"
+    type: "market"
+    condition: "in"
+    values: ["深交所", "上交所"]
+
+  # 3. 行业排除 (排除金融行业)
+  - name: "行业排除"
+    type: "industry"
+    condition: "not_in"
+    values: ["银行", "非银金融"]
+
+  # 4. 市值过滤 (50亿 - 500亿)
+  - name: "市值范围"
+    type: "fundamental"
+    field: "market_cap"
+    condition: "between"
+    min_value: 5000000000      # 50亿
+    max_value: 50000000000     # 500亿
+
+  # 5. PE过滤 (排除亏损和过高PE股票)
+  - name: "PE过滤"
+    type: "fundamental"
+    field: "pe_ratio"
+    condition: "between"
+    min_value: 5               # PE > 5
+    max_value: 50              # PE < 50
+
+  # 6. ROE过滤 (只选择ROE > 5%的股票)
+  - name: "ROE过滤"
+    type: "fundamental"
+    field: "roe"               # ROE净资产收益率
+    condition: "greater_than"
+    min_value: 0.05            # ROE > 5%
+
+# ============================================================
+# 打分因子配置
+# ============================================================
+scoring_factors:
+  # 因子1: 市值因子 (负相关 - 偏好小市值)
+  - name: "市值因子"
+    factor_type: "fundamental"
+    field: "market_cap"
+    direction: -1              # -1表示负相关(市值越小得分越高)
+    weight: 0.5                # 权重50%
+    normalize: true            # 标准化
+    neutralize:                # 中性化配置
+      enabled: true
+      by: ["industry"]         # 按行业中性化(消除行业偏差)
+
+  # 因子2: ROE因子 (正相关 - 偏好高ROE)
+  - name: "ROE因子"
+    factor_type: "fundamental"
+    field: "roe"
+    direction: 1               # 1表示正相关(ROE越高得分越高)
+    weight: 0.3                # 权重30%
+    normalize: true
+    neutralize:
+      enabled: true
+      by: ["industry"]         # 按行业中性化
+
+  # 因子3: 动量因子 (正相关 - 偏好上涨趋势)
+  - name: "动量因子"
+    factor_type: "technical"
+    field: "momentum_20"       # 20日动量
+    direction: 1               # 1表示正相关(动量越强得分越高)
+    weight: 0.2                # 权重20%
+    params:
+      period: 20               # 动量计算周期
+    normalize: true
+    neutralize:
+      enabled: false           # 技术因子不中性化
+
+# 注意: 因子权重之和必须等于1.0 (0.5 + 0.3 + 0.2 = 1.0)
+
+# ============================================================
+# 组合构建配置
+# ============================================================
+portfolio:
+  # 选股方式
+  select_method: "top_n"       # 选择综合得分最高的N只股票
+  top_n: 15                    # 选择15只股票
+
+  # 权重分配方式
+  weight_method: "equal"       # 等权重配置
+  # 其他可选方式:
+  # - equal_risk: 等风险权重
+  # - market_cap: 按市值加权
+  # - factor_score: 按因子得分加权
+
+  # 风险控制
+  risk_control:
+    max_position_count: 20     # 最大持仓数
+    max_single_weight: 0.15    # 单只股票最大权重15%
+    min_single_weight: 0.03    # 单只股票最小权重3%
+    industry_max_weight: 0.4   # 单行业最大权重40%
+    max_turnover: 0.5          # 最大换手率50%
+
+# ============================================================
+# 调仓配置
+# ============================================================
+rebalance:
+  frequency: "quarterly"       # 每季度调仓
+  rebalance_day: 1            # 每季度第1个交易日
+  trade_time: "close"         # 使用收盘价交易
+
+  # 交易执行
+  execution:
+    type: "close"
+    max_trade_ratio: 0.3      # 单日最大交易比例30%
+
+# 实盘交易配置 (可选)
+# live_trading:
+#   enabled: true
+#   account_id: "your_account"

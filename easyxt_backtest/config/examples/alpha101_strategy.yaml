@@ -1,0 +1,126 @@
+# ============================================================
+# Alpha101因子策略配置示例
+# ============================================================
+# 策略说明：
+#   使用Alpha101因子库中的因子进行选股
+#   展示如何使用技术因子
+#   从中证1000中选择综合得分最高的20只股票
+# ============================================================
+
+# 策略基本信息
+strategy:
+  name: "Alpha101多因子策略"
+  version: "1.0.0"
+  author: "Your Name"
+  description: "使用Alpha101因子的多因子选股策略"
+
+# 回测参数配置
+backtest:
+  start_date: "20200101"
+  end_date: "20231231"
+  initial_cash: 1000000
+  commission: 0.001
+  slippage: 0.001
+
+# 股票池配置
+universe:
+  type: "index"                # 中证1000指数
+  index_code: "000852.SH"
+
+# 排除条件配置
+exclude_filters:
+  # 基本过滤
+  - name: "ST和退市过滤"
+    type: "stock_status"
+    condition: "not_in"
+    values: ["ST", "*ST", "S*ST", "退市"]
+
+  # 流动性过滤
+  - name: "成交额过滤"
+    type: "fundamental"
+    field: "turnover"          # 成交额
+    condition: "greater_than"
+    min_value: 10000000        # 日成交额 > 1000万
+
+# ============================================================
+# 打分因子配置
+# ============================================================
+scoring_factors:
+  # 因子1: Alpha001因子
+  # 公式: (close-open)/((high-low)+1e-12)
+  # 逻辑: 相对于全天波动，收盘价相对开盘价的位置
+  - name: "Alpha001"
+    factor_type: "alpha101"     # 使用Alpha101因子库
+    field: "alpha001"
+    direction: 1               # 正相关
+    weight: 0.4                # 权重40%
+    normalize: true
+    neutralize:
+      enabled: true
+      by: ["industry", "market_cap"]  # 行业和市值中性化
+
+  # 因子2: Alpha006因子
+  # 逻辑: 基于成交量和价格变化的关系
+  - name: "Alpha006"
+    factor_type: "alpha101"
+    field: "alpha006"
+    direction: 1
+    weight: 0.3                # 权重30%
+    normalize: true
+    neutralize:
+      enabled: true
+      by: ["industry"]
+
+  # 因子3: Alpha014因子
+  # 逻辑: 基于价格动量
+  - name: "Alpha014"
+    factor_type: "alpha101"
+    field: "alpha014"
+    direction: 1
+    weight: 0.3                # 权重30%
+    normalize: true
+    neutralize:
+      enabled: true
+      by: ["industry"]
+
+# 组合构建配置
+portfolio:
+  select_method: "top_n"
+  top_n: 20                    # 选择20只股票
+  weight_method: "equal"
+
+  risk_control:
+    max_position_count: 30
+    max_single_weight: 0.1
+    min_single_weight: 0.02
+
+# 调仓配置
+rebalance:
+  frequency: "monthly"         # 每月调仓
+  rebalance_day: 1
+  trade_time: "close"
+
+  execution:
+    type: "close"
+    max_trade_ratio: 0.25
+
+# ============================================================
+# 说明: Alpha101因子库
+# ============================================================
+# Alpha101是WorldQuant发布的101个Alpha因子，涵盖了多种技术信号。
+#
+# 常用因子包括:
+# - alpha001: (close-open)/((high-low)+1e-12)
+# - alpha002: (-1 * correlation(rank(delta(log(volume), 2)), rank(((close - open) / open)), 6)
+# - alpha003: (-1 * correlation(rank(open), rank(volume), 10))
+# - alpha006: -1 * correlation(open, volume, 10)
+# - alpha012: sign(delta(volume, 1)) * (-1 * delta(close, 1))
+# - alpha014: (-1 * rank(delta(returns, 3))) * correlation(open, volume, 10)
+# ... 共101个因子
+#
+# 注意事项:
+# 1. Alpha101因子适合用于股票选股，特别是中短期交易
+# 2. 建议对因子进行中性化处理，消除行业和市值偏差
+# 3. 可以结合基本面因子一起使用
+# 4. 需要高质量的价格和成交量数据
+# ============================================================
