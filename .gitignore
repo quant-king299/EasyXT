@@ -401,3 +401,7 @@ strategies/ai_strategy_helper.py
 
 demo_ai_integration.py
 core/PATH_MANAGER_GUIDE.md
+docs/101因子平台架构设计-YAML配置版.md
+docs/101因子集成方案.md
+docs/101因子平台实施进度.md
+docs/测试报告-端到端测试.md
