@@ -88,7 +88,7 @@
       "trading_comment": "交易参数设置",
       "trade_mode": "paper_trading",
       "trade_mode_comment": "交易模式（paper_trading为仿真；real为实盘）",
-      "auto_confirm": false,
+      "auto_confirm": true,
       "auto_confirm_comment": "自动确认下单与执行（谨慎开启）",
       "price_tolerance": 0.02,
       "price_tolerance_comment": "价格容忍度（用于偏差判断）",
