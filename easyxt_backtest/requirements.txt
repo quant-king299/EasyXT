@@ -1,0 +1,24 @@
+# EasyXT Backtest - Core Dependencies
+
+# Data processing
+pandas>=1.3.0
+numpy>=1.21.0
+
+# Backtesting
+backtrader>=1.9.78
+
+# Configuration
+PyYAML>=6.0
+
+# Visualization
+matplotlib>=3.5.0
+
+# Utilities
+requests>=2.25.0
+
+# Database (optional, for data management)
+duckdb>=0.8.0
+
+# Web app (optional, for 101因子平台)
+streamlit>=1.28.0
+plotly>=5.18.0

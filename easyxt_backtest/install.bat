@@ -27,14 +27,20 @@ echo      Found easyxt_backtest module
 echo.
 
 echo [2/4] Install dependencies...
-echo Installing backtrader...
-pip install backtrader >nul 2>&1
+echo Installing required packages...
+echo   - pandas, numpy, matplotlib
+echo   - backtrader, PyYAML, requests
+pip install pandas numpy matplotlib backtrader PyYAML requests >nul 2>&1
 if %ERRORLEVEL% EQU 0 (
-    echo      backtrader installed successfully
+    echo      All packages installed successfully
 ) else (
-    echo      backtrader installation failed
-    pause
-    exit /b 1
+    echo      Some packages installation failed
+    echo      Trying again with output visible...
+    pip install pandas numpy matplotlib backtrader PyYAML requests
+    if %ERRORLEVEL% NEQ 0 (
+        pause
+        exit /b 1
+    )
 )
 echo.
 
