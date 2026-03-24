@@ -31,7 +31,7 @@ git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
 
 # 2. 安装 easy_xt（核心库）
-pip install -e easy_xt
+pip install -e ./easy_xt
 
 # 3. 安装回测框架（自动配置）
 cd easyxt_backtest
@@ -528,7 +528,7 @@ git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
 
 # 2. 安装核心库
-pip install -e easy_xt
+pip install -e ./easy_xt
 
 # 3. 安装回测框架
 cd easyxt_backtest
