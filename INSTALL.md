@@ -129,24 +129,33 @@ python -c "from easy_xt import get_api; print('easy_xt OK')"
 - 支持技术指标、选股、网格等多种策略
 - **可选的**，如果你只做数据查询不需要回测
 
-**重要说明**：
-- ⚠️ **不支持** `pip install -e ./easyxt_backtest`
-- ✅ **使用** 自动安装脚本（一键配置）
-
-#### 方式A：自动安装（推荐）
+#### 方式A：使用 pip 安装（推荐，最简单）
 
 ```powershell
-# 进入目录
-cd easyxt_backtest
+# 安装 easyxt_backtest
+pip install -e ./easyxt_backtest
+```
 
-# 运行自动安装脚本
+**优点**：
+- ✅ IDE 会正确识别所有类和函数（不再有"未定义"错误）
+- ✅ 标准的 Python 包管理方式
+- ✅ 自动安装所有依赖
+
+**验证安装**：
+```powershell
+python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK')"
+```
+
+#### 方式B：自动安装脚本（可选）
+
+如果你想使用自动安装脚本（会配置 PYTHONPATH）：
+
+```powershell
+cd easyxt_backtest
 install.bat
 ```
 
-**脚本会自动**：
-1. ✅ 安装依赖包（backtrader、pandas、numpy、matplotlib、requests）
-2. ✅ 配置 PYTHONPATH 环境变量
-3. ✅ 验证安装成功
+**注意**：如果已经用 pip 安装，就不需要运行 install.bat 了。
 
 **输出示例**：
 ```
@@ -163,26 +172,16 @@ install.bat
      easyxt_backtest: OK
 ```
 
-#### 方式B：手动设置 PYTHONPATH
+---
 
-如果你不想使用自动脚本，可以手动配置：
+### 第四步：重启终端（如果需要）
 
-```powershell
-# 临时添加（当前窗口有效）
-$env:PYTHONPATH = "D:\EasyXT"
-
-# 永久添加（推荐，所有新窗口都有效）
-[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "D:\EasyXT", "User")
-
-# 安装依赖
-pip install backtrader pandas numpy matplotlib requests
-
-# 验证
-python -c "from easyxt_backtest import BacktestEngine; print('OK')"
-```
-
-**重要提示**：
-- ⚠️ 路径中不要有 `./`，使用绝对路径
+**注意**：
+- 使用 `pip install -e` 安装后，**不需要**重启终端
+- 如果之前使用过 install.bat 设置了 PYTHONPATH，建议先清理：
+  ```powershell
+  [System.Environment]::SetEnvironmentVariable("PYTHONPATH", "", "User")
+  ```
 - ⚠️ 配置 PYTHONPATH 后**必须重启终端**才能生效
 - ⚠️ 如果使用虚拟环境，需要在虚拟环境中设置
 
@@ -486,11 +485,12 @@ pip uninstall easy-xt -y
 ### 卸载 easyxt_backtest
 
 ```powershell
-# 方法1：删除 PYTHONPATH（推荐）
-[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "", "User")
+pip uninstall easyxt-backtest -y
+```
 
-# 方法2：修改 PYTHONPATH（保留其他路径）
-$env:PYTHONPATH = "D:\Other\Project"  # 修改为其他路径
+**注意**：如果之前使用过 install.bat，可以清理 PYTHONPATH：
+```powershell
+[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "", "User")
 ```
 
 ### 卸载虚拟环境
@@ -509,12 +509,13 @@ rmdir venv
 
 | 方式 | easy_xt | easyxt_backtest |
 |------|---------|-----------------|
-| **安装方式** | `pip install -e` | `install.bat` 脚本 |
-| **是否设置 PYTHONPATH** | 否 | 是 |
-| **pip list 可见** | 是 | 否 |
-| **重启终端** | 不需要 | **需要** |
+| **安装方式** | `pip install -e ./easy_xt` | `pip install -e ./easyxt_backtest` |
+| **是否设置 PYTHONPATH** | 否 | **否** |
+| **pip list 可见** | 是 | 是 |
+| **重启终端** | 不需要 | 不需要 |
 | **更新代码** | `git pull` | `git pull` |
-| **卸载方式** | `pip uninstall` | 删除环境变量 |
+| **卸载方式** | `pip uninstall easy-xt` | `pip uninstall easyxt-backtest` |
+| **IDE 识别** | ✅ 完美 | ✅ 完美 |
 
 ---
 
@@ -531,10 +532,10 @@ cd EasyXT
 pip install -e ./easy_xt
 
 # 3. 安装回测框架
-cd easyxt_backtest
-install.bat
+pip install -e ./easyxt_backtest
 
-# 4. 重启 PowerShell（重要！）
+# 4. 验证安装
+python -c "from easyxt_backtest import BacktestEngine; print('安装成功！')"
 ```
 
 ### 开发者
@@ -544,9 +545,9 @@ install.bat
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 
-# 2. 安装依赖
+# 2. 安装所有依赖
 pip install -e ./easy_xt
-pip install backtrader pandas numpy matplotlib
+pip install -e ./easyxt_backtest
 
 # 3. 配置开发环境
 code .
