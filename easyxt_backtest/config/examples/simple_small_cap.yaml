@@ -18,8 +18,8 @@ strategy:
 # 回测参数配置
 # ============================================================
 backtest:
-  start_date: "20200101"       # 回测开始日期 (YYYYMMDD)
-  end_date: "20231231"         # 回测结束日期 (YYYYMMDD)
+  start_date: "20240102"       # 回测开始日期 (YYYYMMDD) - 数据从2024-01-02开始
+  end_date: "20241231"         # 回测结束日期 (YYYYMMDD)
   initial_cash: 1000000        # 初始资金 (100万)
   commission: 0.001            # 佣金率 (0.1%)
   slippage: 0.001              # 滑点 (0.1%)
@@ -50,13 +50,14 @@ exclude_filters:
     condition: "not_in"
     values: ["退市"]
 
-  # 过滤器3: 市值范围过滤 (10亿 - 100亿)
+  # 过滤器3: 市值范围过滤 (10亿 - 50亿)
+  # 注意: circ_mv字段单位是万元，所以这里使用万元单位
   - name: "市值范围"
     type: "fundamental"        # 类型: fundamental(基本面)
     field: "market_cap"        # 字段: market_cap(市值)
     condition: "between"       # 条件: between(在范围内)
-    min_value: 1000000000      # 最小值: 10亿
-    max_value: 100000000000    # 最大值: 100亿
+    min_value: 100000          # 最小值: 10亿万元 = 10亿元
+    max_value: 500000          # 最大值: 50亿万元 = 50亿元
 
   # 过滤器4: PE过滤 (可选)
   # - name: "PE过滤"

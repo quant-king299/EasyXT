@@ -1,0 +1,27 @@
+作者微信: www_ptqmt_com
+欢迎关注微信公众号: 王者quant
+
+============================================================
+初始化简单小市值策略实盘策略...
+============================================================
+
+[1/4] 初始化数据管理器...
+[OK] 连接到DuckDB: D:/StockData/stock_data.ddb
+[OK] DuckDB连接成功
+  [OK] 数据管理器初始化成功
+
+[2/4] 初始化easy_xt交易...
+[OK] QMT (xtquant.xtdata) imported successfully
+[OK] TDX (通达信) provider available
+[OK] Eastmoney (东方财富) provider available
+[WARNING] Config file loading failed C:\Users\Administrator\Desktop\miniqmt扩展\config\unified_config.json: Expecting ',' delimiter: line 91 column 28 (char 3074)
+[INFO] No unified config file found, using defaults
+[WARNING] Config file loading failed C:\Users\Administrator\Desktop\miniqmt扩展\config\unified_config.json: Expecting ',' delimiter: line 91 column 28 (char 3074)
+[INFO] No unified config file found, using defaults
+  [INFO] 账户ID: 39020958
+  [INFO] QMT路径: D:\国金QMT交易端模拟\userdata_mini
+  [INFO] Session ID: mini_qmt
+交易服务初始化失败
+  [WARN] 交易服务初始化失败（QMT可能未启动）
+  [TIPS] 请确保QMT交易端已启动并登录
+

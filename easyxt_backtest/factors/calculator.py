@@ -120,11 +120,13 @@ class FactorCalculator:
         elif factor_type == 'technical':
             return TechnicalFactor(config, self.data_manager)
         elif factor_type == 'alpha101':
-            # TODO: 实现Alpha101因子
-            raise NotImplementedError("Alpha101因子尚未实现")
+            # 导入并使用Alpha101因子
+            from .alpha101 import Alpha101Factor
+            return Alpha101Factor(config, self.data_manager)
         elif factor_type == 'alpha191':
-            # TODO: 实现Alpha191因子
-            raise NotImplementedError("Alpha191因子尚未实现")
+            # 导入并使用Alpha191因子
+            from .alpha191 import Alpha191Factor
+            return Alpha191Factor(config, self.data_manager)
         elif factor_type == 'custom':
             # TODO: 支持自定义因子
             raise NotImplementedError("自定义因子尚未实现")

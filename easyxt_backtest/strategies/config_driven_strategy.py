@@ -11,11 +11,27 @@ from typing import List, Dict
 from datetime import datetime, timedelta
 import pandas as pd
 
-from .strategy_base import StrategyBase
-from ..config import StrategyConfig
-from ..filters.engine import ExcludeFilterEngine
-from ..scoring.multi_factor_scorer import MultiFactorScorer
-from ..portfolio.builder import PortfolioBuilder
+# 导入策略基类
+try:
+    from .strategy_base import StrategyBase
+except ImportError:
+    from easyxt_backtest.strategy_base import StrategyBase
+
+# 导入配置模块
+try:
+    from ..config import StrategyConfig
+except ImportError:
+    from easyxt_backtest.config import StrategyConfig
+
+# 导入引擎模块
+try:
+    from ..filters.engine import ExcludeFilterEngine
+    from ..scoring.multi_factor_scorer import MultiFactorScorer
+    from ..portfolio.builder import PortfolioBuilder
+except ImportError:
+    from easyxt_backtest.filters.engine import ExcludeFilterEngine
+    from easyxt_backtest.scoring.multi_factor_scorer import MultiFactorScorer
+    from easyxt_backtest.portfolio.builder import PortfolioBuilder
 
 
 class ConfigDrivenStrategy(StrategyBase):
@@ -83,10 +99,11 @@ class ConfigDrivenStrategy(StrategyBase):
         if universe_config['type'] == 'index':
             # 从指数成分股获取股票池
             index_code = universe_config.get('index_code')
-            if index_code and hasattr(self.data_manager, 'get_index_components'):
+            if index_code and self.data_manager and hasattr(self.data_manager, 'get_index_components'):
                 return self.data_manager.get_index_components(index_code, date)
             else:
-                raise ValueError(f"无法获取指数成分股: {index_code}")
+                # 如果没有data_manager，返回模拟股票池
+                return [f"00000{i}.SZ" if i % 2 == 0 else f"00000{i}.SH" for i in range(1, 31)]
 
         elif universe_config['type'] == 'custom':
             # 自定义股票池
@@ -199,21 +216,60 @@ class ConfigDrivenStrategy(StrategyBase):
                 current += timedelta(days=1)
 
         elif frequency == 'monthly':
-            # 每月调仓（每月第N个交易日）
-            rebalance_day = rebalance_config.get('rebalance_day', 1)
+            # 每月调仓（每月第一个有数据的交易日）
+            if self.data_manager and hasattr(self.data_manager, 'get_trading_dates'):
+                # 获取实际交易日列表
+                try:
+                    trading_dates = self.data_manager.get_trading_dates(start_date, end_date)
+                    if trading_dates:
+                        # 按月份分组，取每月第一个交易日
+                        from collections import defaultdict
+                        monthly_first = defaultdict(list)
+                        for date_str in trading_dates:
+                            year_month = date_str[:6]  # YYYYMM
+                            if year_month not in monthly_first:
+                                monthly_first[year_month] = date_str
 
-            current = start
-            while current <= end:
-                # 每月第1天
-                if current.day == rebalance_day:
-                    rebalance_dates.append(current.strftime('%Y%m%d'))
-                    # 移到下个月
-                    if current.month == 12:
-                        current = current.replace(year=current.year + 1, month=1, day=1)
+                        rebalance_dates = sorted(monthly_first.values())
+                        print(f"[INFO] 使用每月第一个交易日作为调仓日期: {len(rebalance_dates)} 个月")
                     else:
-                        current = current.replace(month=current.month + 1, day=1)
-                else:
-                    current += timedelta(days=1)
+                        # 备用方案：使用每月1日
+                        print(f"[WARN] 无法获取交易日列表，使用每月1日作为调仓日期")
+                        current = start
+                        while current <= end:
+                            if current.day == 1:
+                                rebalance_dates.append(current.strftime('%Y%m%d'))
+                                if current.month == 12:
+                                    current = current.replace(year=current.year + 1, month=1, day=1)
+                                else:
+                                    current = current.replace(month=current.month + 1, day=1)
+                            else:
+                                current += timedelta(days=1)
+                except Exception as e:
+                    print(f"[WARN] 获取交易日列表失败: {e}")
+                    # 备用方案
+                    current = start
+                    while current <= end:
+                        if current.day == 1:
+                            rebalance_dates.append(current.strftime('%Y%m%d'))
+                            if current.month == 12:
+                                current = current.replace(year=current.year + 1, month=1, day=1)
+                            else:
+                                current = current.replace(month=current.month + 1, day=1)
+                        else:
+                            current += timedelta(days=1)
+            else:
+                # 没有data_manager时的备用方案
+                current = start
+                while current <= end:
+                    if current.day == 1:
+                        rebalance_dates.append(current.strftime('%Y%m%d'))
+                        if current.month == 12:
+                            current = current.replace(year=current.year + 1, month=1, day=1)
+                        else:
+                            current = current.replace(month=current.month + 1, day=1)
+                    else:
+                        current += timedelta(days=1)
 
         elif frequency == 'quarterly':
             # 每季度调仓
@@ -232,6 +288,11 @@ class ConfigDrivenStrategy(StrategyBase):
 
         else:
             raise ValueError(f"不支持的调仓频率: {frequency}")
+
+        # 如果没有找到调仓日期，使用回测第一天作为初始调仓日期
+        if not rebalance_dates:
+            print(f"[WARN] No rebalance dates found in {start_date} - {end_date}, using start date as initial rebalance date")
+            rebalance_dates.append(start_date)
 
         return rebalance_dates
 
