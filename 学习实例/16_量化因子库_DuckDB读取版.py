@@ -25,6 +25,9 @@ easy_xt_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'eas
 if easy_xt_dir not in sys.path:
     sys.path.insert(0, easy_xt_dir)
 
+# 导入DuckDBDataReader
+from easy_xt.data_api import DuckDBDataReader
+
 # ============================================================
 # 配置
 # ============================================================
@@ -49,112 +52,6 @@ STOCK_LIST = [
 # 分析参数
 START_DATE = '2024-01-01'
 END_DATE = None  # None表示到今天
-
-# ============================================================
-# DuckDB数据读取器
-# ============================================================
-
-class DuckDBDataReader:
-    """DuckDB数据读取器"""
-
-    def __init__(self, duckdb_path):
-        self.duckdb_path = duckdb_path
-        self.conn = None
-        self._connect()
-
-    def _log(self, msg):
-        print(f"[数据读取器] {msg}")
-
-    def _connect(self):
-        """连接DuckDB"""
-        try:
-            import duckdb
-            self.conn = duckdb.connect(self.duckdb_path)
-            self._log(f"成功连接数据库: {self.duckdb_path}")
-        except ImportError:
-            self._log("错误：duckdb未安装，请运行: pip install duckdb")
-        except Exception as e:
-            self._log(f"连接失败: {e}")
-
-    def get_stock_list(self, limit=None):
-        """获取数据库中的股票列表"""
-        if self.conn is None:
-            return []
-
-        try:
-            sql = "SELECT DISTINCT stock_code FROM stock_daily ORDER BY stock_code"
-            if limit:
-                sql += f" LIMIT {limit}"
-
-            df = self.conn.execute(sql).fetchdf()
-            return df['stock_code'].tolist()
-
-        except Exception as e:
-            self._log(f"获取股票列表失败: {e}")
-            return []
-
-    def get_market_data(self, stock_list, start_date, end_date=None):
-        """读取市场数据"""
-        if self.conn is None:
-            return pd.DataFrame()
-
-        try:
-            # 构建SQL查询
-            stocks_str = "', '".join(stock_list)
-            sql = f"""
-                SELECT * FROM stock_daily
-                WHERE stock_code IN ('{stocks_str}')
-                  AND date >= '{start_date}'
-            """
-
-            if end_date:
-                sql += f" AND date <= '{end_date}'"
-
-            sql += " ORDER BY stock_code, date"
-
-            # 执行查询
-            df = self.conn.execute(sql).fetchdf()
-
-            if not df.empty:
-                self._log(f"读取到 {len(df)} 条数据，{df['stock_code'].nunique()} 只股票")
-
-            return df
-
-        except Exception as e:
-            self._log(f"查询失败: {e}")
-            import traceback
-            self._log(traceback.format_exc()[:500])
-            return pd.DataFrame()
-
-    def get_stock_info(self, stock_code):
-        """获取单个股票的信息"""
-        if self.conn is None:
-            return None
-
-        try:
-            sql = f"""
-                SELECT
-                    stock_code,
-                    MIN(date) as first_date,
-                    MAX(date) as last_date,
-                    COUNT(*) as data_count
-                FROM stock_daily
-                WHERE stock_code = '{stock_code}'
-                GROUP BY stock_code
-            """
-
-            result = self.conn.execute(sql).fetchdf()
-            return result.iloc[0] if not result.empty else None
-
-        except Exception as e:
-            self._log(f"查询股票信息失败: {e}")
-            return None
-
-    def close(self):
-        """关闭连接"""
-        if self.conn:
-            self.conn.close()
-
 
 # ============================================================
 # 因子计算器

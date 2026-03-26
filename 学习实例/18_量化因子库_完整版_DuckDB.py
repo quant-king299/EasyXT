@@ -37,6 +37,9 @@ easy_xt_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'eas
 if easy_xt_dir not in sys.path:
     sys.path.insert(0, easy_xt_dir)
 
+# 导入DuckDBDataReader
+from easy_xt.data_api import DuckDBDataReader
+
 # ============================================================
 # 配置
 # ============================================================
@@ -50,59 +53,6 @@ STOCK_LIST = [
 ]
 
 START_DATE = '2024-01-01'
-
-# ============================================================
-# DuckDB数据读取器
-# ============================================================
-
-class DuckDBDataReader:
-    """DuckDB数据读取器"""
-
-    def __init__(self, duckdb_path):
-        self.duckdb_path = duckdb_path
-        self.conn = None
-        self._connect()
-
-    def _log(self, msg):
-        print(f"[数据] {msg}")
-
-    def _connect(self):
-        try:
-            import duckdb
-            self.conn = duckdb.connect(self.duckdb_path)
-            self._log(f"成功连接数据库")
-        except Exception as e:
-            self._log(f"连接失败: {e}")
-
-    def get_market_data(self, stock_list, start_date, end_date=None):
-        """读取市场数据"""
-        if self.conn is None:
-            return pd.DataFrame()
-
-        try:
-            stocks_str = "', '".join(stock_list)
-            sql = f"""
-                SELECT * FROM stock_daily
-                WHERE stock_code IN ('{stocks_str}')
-                  AND date >= '{start_date}'
-            """
-
-            if end_date:
-                sql += f" AND date <= '{end_date}'"
-
-            sql += " ORDER BY stock_code, date"
-
-            df = self.conn.execute(sql).fetchdf()
-            return df
-
-        except Exception as e:
-            self._log(f"查询失败: {e}")
-            return pd.DataFrame()
-
-    def close(self):
-        if self.conn:
-            self.conn.close()
-
 
 # ============================================================
 # 完整因子计算器（50+类因子）
