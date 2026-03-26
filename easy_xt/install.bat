@@ -19,6 +19,9 @@ if errorlevel 1 (
 
 echo.
 echo [2/3] 正在安装 easy-xt...
+REM 切换到项目根目录（easy_xt的父目录）
+cd /d "%~dp0.."
+echo 当前工作目录: %CD%
 pip install -e .
 if errorlevel 1 (
     echo.
@@ -26,9 +29,12 @@ if errorlevel 1 (
     echo easy-xt 安装失败！
     echo ======================================================================
     echo.
+    cd /d "%~dp0"
     pause
     exit /b 1
 )
+REM 切换回批处理文件所在目录
+cd /d "%~dp0"
 
 echo.
 echo [3/3] 验证安装...
