@@ -499,6 +499,100 @@ ImportError: cannot import name 'datacenter' from 'xtquant'
    python -c "from xtquant import datacenter; print('✓ xtquant OK')"
    ```
 
+#### 🔧 使用一键检查工具（推荐）
+
+项目提供了专门的 **xtquant 安装检查工具**，可以自动诊断 xtquant 安装问题：
+
+**工具位置**：`easy_xt/check_xtquant.py`
+
+**使用方法**：
+```bash
+# 方法1：进入 easy_xt 目录运行
+cd easy_xt
+python check_xtquant.py
+
+# 方法2：从项目根目录运行
+python easy_xt/check_xtquant.py
+```
+
+**检查内容**：
+- ✓ xtquant 模块是否可以导入
+- ✓ xtquant.datacenter 是否可以导入（关键组件）
+- ✓ xtquant.xtdata 是否可以导入
+
+**结果解读**：
+
+**✅ 检查通过**：
+```
+✓ xtquant 模块可以导入
+✓ xtquant.datacenter 可以导入（关键组件）
+✓ xtquant.xtdata 可以导入
+======================================================================
+✓ 所有检查通过！xtquant 安装正确
+======================================================================
+```
+说明：xtquant 安装正确，可以继续使用。
+
+**❌ 检查失败**：
+```
+✓ xtquant 模块可以导入
+✗ 无法导入 xtquant.datacenter（文件不完整或版本不匹配）
+  错误信息: cannot import name 'datacenter' from 'xtquant'
+
+这是最常见的错误！通常是因为：
+  - GitHub 上的 xtquant 文件不完整（大文件被截断）
+  - 使用了 pip 安装的官方版本（不兼容）
+```
+说明：xtquant 安装不完整，需要按照工具提供的指引重新安装。
+
+**常见问题诊断**：
+
+**问题1：datacenter 文件存在但仍报错**
+
+如果确认 `datacenter.cp*-win_amd64.pyd` 文件存在（例如在 `D:/Programs/Python/xtquant/`），但仍报错 `cannot import name 'datacenter'`，说明 **xtquant 文件夹不在 Python 的搜索路径中**。
+
+**解决方案（任选其一）**：
+
+1. **移动到 site-packages 目录**（最简单）：
+   ```bash
+   # 找到 Python 的 site-packages 目录
+   python -c "import site; print(site.getsitepackages()[0])"
+
+   # 将 xtquant 文件夹复制到上面显示的目录
+   # 例如：C:/Python39/Lib/site-packages/
+   ```
+
+2. **设置 PYTHONPATH 环境变量**：
+   ```bash
+   # 临时设置（当前终端会话有效）
+   set PYTHONPATH=D:/Programs/Python;%PYTHONPATH%
+
+   # 永久设置（Windows 系统环境变量）
+   # 右键"此电脑" → 属性 → 高级系统设置 → 环境变量
+   # 在"系统变量"中新建 PYTHONPATH，值为 D:/Programs/Python
+   ```
+
+3. **移动到项目目录**：
+   ```bash
+   # 将 xtquant 文件夹复制到项目根目录
+   # 这样项目启动时会自动将项目目录加入 Python 搜索路径
+   ```
+
+**问题2：多个 xtquant 版本冲突**
+
+如果安装了多个版本的 xtquant（例如通过 pip 安装的官方版本和项目提供的特殊版本），Python 可能导入了错误的版本。
+
+**解决方案**：
+```bash
+# 查看 xtquant 的实际位置
+python -c "import xtquant; print(xtquant.__file__)"
+
+# 卸载 pip 安装的官方版本
+pip uninstall xtquant
+
+# 确保只保留项目提供的特殊版本
+```
+
 ❌ **不要使用 `pip install xtquant` 安装官方版本！**
 
 ---
