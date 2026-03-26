@@ -565,7 +565,18 @@ class DataAPI:
                     break
             
             if all_empty:
-                raise DataError(f"无法获取股票 {codes} 的数据。可能的原因：\n1. 需要先在迅投客户端中下载历史数据\n2. 股票代码错误\n3. 网络连接问题\n4. 迅投服务未正常运行\n\n建议：请在迅投客户端中手动下载相关股票的历史数据后重试")
+                raise DataError(
+                    f"无法获取股票 {codes} 的数据。\n\n"
+                    f"🔧 快速解决方案（推荐）：\n"
+                    f"1️⃣ 使用项目提供的一键下载工具：\n"
+                    f"   cd tools\n"
+                    f"   python download_all_stocks.py\n\n"
+                    f"2️⃣ 或安装pytdx自动使用通达信数据：\n"
+                    f"   pip install pytdx\n\n"
+                    f"3️⃣ 或在QMT客户端手动下载数据\n"
+                    f"   （终端 → 品种管理 → 下载历史数据）\n\n"
+                    f"详细说明：docs/assets/TROUBLESHOOTING.md 第3节"
+                )
             
             # 处理返回数据
             if period == 'tick':
@@ -626,7 +637,18 @@ class DataAPI:
                         break
                 
                 if not has_data:
-                    raise DataError(f"无法获取股票 {codes} 的数据。可能的原因：\n1. 需要先在迅投客户端中下载历史数据\n2. 股票代码错误\n3. 网络连接问题\n4. 迅投服务未正常运行\n\n建议：请在迅投客户端中手动下载相关股票的历史数据后重试")
+                    raise DataError(
+                        f"无法获取股票 {codes} 的数据。\n\n"
+                        f"🔧 快速解决方案（推荐）：\n"
+                        f"1️⃣ 使用项目提供的一键下载工具：\n"
+                        f"   cd tools\n"
+                        f"   python download_all_stocks.py\n\n"
+                        f"2️⃣ 或安装pytdx自动使用通达信数据：\n"
+                        f"   pip install pytdx\n\n"
+                        f"3️⃣ 或在QMT客户端手动下载数据\n"
+                        f"   （终端 → 品种管理 → 下载历史数据）\n\n"
+                        f"详细说明：docs/assets/TROUBLESHOOTING.md 第3节"
+                    )
                 
                 # 重构数据格式 - 适配get_market_data_ex新格式
                 result_list = []
