@@ -30,13 +30,23 @@
 git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
 
-# 2. 安装 easy_xt（核心库）
+# 2. 选择安装方式
+
+# 方式1：仅安装核心库（命令行使用）
 pip install -e ./easy_xt
 
-# 3. 安装回测框架（自动配置）
+# 方式2：完整安装（包含GUI、回测等所有功能）⭐ 推荐
+pip install -e .
+
+# 3. 安装回测框架（如果使用了方式2可跳过）
 cd easyxt_backtest
 install.bat
 ```
+
+**💡 说明**：
+- **方式1**：只安装核心数据API，适合命令行使用，不包含GUI界面
+- **方式2**：完整安装，包含GUI界面、回测框架等所有功能
+- 如果需要使用GUI界面（run_gui.py），请使用**方式2**
 
 ### 验证安装
 
@@ -201,6 +211,40 @@ install.bat
 ---
 
 ## ❓ 常见错误与解决方案
+
+### 错误 0：`ModuleNotFoundError: No module named 'PyQt5'` ⭐ 常见
+
+**错误信息**：
+```
+ModuleNotFoundError: No module named 'PyQt5'
+```
+
+**原因**：使用了核心库安装方式（`pip install -e ./easy_xt`），未安装 GUI 依赖
+
+**解决方案**：
+
+**方案1：重新安装完整依赖**（推荐）
+```powershell
+# 从项目根目录安装（包含 GUI、回测等所有依赖）
+pip install -e .
+```
+
+**方案2：单独安装 PyQt5**
+```powershell
+pip install PyQt5
+```
+
+**验证安装**：
+```powershell
+python -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 OK')"
+```
+
+**说明**：
+- ✅ `pip install -e ./easy_xt` - 只安装核心库，适合命令行使用
+- ✅ `pip install -e .` - 完整安装，包含 GUI 界面、回测框架等
+- 如果需要使用 `run_gui.py`，必须使用**完整安装**
+
+---
 
 ### 错误 1：`ValueError: No file/folder found for module easy_xt`
 
