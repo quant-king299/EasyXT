@@ -1,15 +1,19 @@
-# 🔧 疑难问题解答（FAQ）
+# 疑难问题解答（FAQ）
 
 > 遇到问题？先看这里！本文档收集了用户最常遇到的问题和解决方案。
 
 ---
 
-## 📋 目录
+## 目录
 
 - [数据相关](#数据相关)
-  - [DuckDB数据库找不到](#1-duckdb数据库找不到)
-  - [数据下载失败](#2-数据下载失败)
-  - [Tushare配置问题](#3-tushare配置问题)
+  - [DuckDB是什么？我需要它吗？如何启用？](#1-duckdb是什么我需要它吗如何启用)
+  - [DuckDB数据库下载完整步骤](#2-duckdb数据库下载完整步骤)
+  - [下载了DuckDB数据但回测/代码里还是报错](#3-下载了duckdb数据但回测代码里还是报错)
+  - [DuckDB数据库文件找不到](#4-duckdb数据库文件找不到)
+  - [数据下载失败](#5-数据下载失败)
+  - [Tushare配置问题](#6-tushare配置问题)
+  - [QMT历史数据补充](#7-qmt历史数据补充)
 - [安装相关](#安装相关)
 - [运行相关](#运行相关)
 - [性能相关](#性能相关)
@@ -18,77 +22,280 @@
 
 ## 数据相关
 
-### 1. DuckDB数据库找不到
+### 1. DuckDB是什么？我需要它吗？如何启用？
 
-#### 🚨 错误信息
+#### DuckDB是什么？
+
+DuckDB 是一个**嵌入式数据库**，类似于 SQLite，但专为分析查询（OLAP）优化。在本项目中，它用来把股票行情数据保存到本地文件（`stock_data.ddb`），回测时直接从本地文件读取，**速度比每次从网络获取快 10-30 倍**。
+
+#### 我需要它吗？
+
+| 你的情况 | 是否需要 | 说明 |
+|---------|---------|------|
+| 只做实盘交易，不回测 | 不需要 | QMT 实时数据足够 |
+| 偶尔跑几次回测 | 可选 | 不装也能跑，只是慢一些 |
+| 频繁回测、调参、因子分析 | **强烈推荐** | 速度提升 10-30 倍 |
+| 使用小市值策略 | **需要** | 策略依赖市值数据表 |
+
+#### DuckDB怎么启用？需要什么条件？
+
+只需要满足以下任意一种条件即可：
+
+- **方式A**：有 Tushare Token（推荐，免费注册）— 不需要 QMT
+- **方式B**：有 QMT/miniQMT 环境 — 不需要 Tushare Token
+- **方式C**：两者都有 — 最灵活
+
+无论哪种方式，都需要先安装 DuckDB：
+```bash
+pip install duckdb
+```
+
+#### 启用流程一览
+
+```
+安装 duckdb（pip install duckdb）
+    |
+    v
+选择下载方式
+    |
+    +---> 方式A：GUI 下载（推荐新手）
+    |     python run_gui.py → "Tushare下载" 标签页
+    |     只需 Tushare Token，不需要 QMT
+    |
+    +---> 方式B：命令行下载
+    |     python tools/setup_duckdb.py
+    |     需要 Tushare Token（市值数据）+ QMT（日线数据）
+    |
+    +---> 方式C：使用 QMT 本地数据
+          python run_gui.py → "数据管理" 标签页
+          需要 QMT/miniQMT 已启动
+```
+
+数据下载完成后，回测时会**自动检测并使用 DuckDB**，无需额外配置。
+
+---
+
+### 2. DuckDB数据库下载完整步骤
+
+以下是从零开始的详细操作步骤，以最常用的 **GUI 方式**为例。
+
+#### Step 1：注册 Tushare 并获取 Token
+
+1. 访问 https://tushare.pro ，点击右上角「注册」
+2. 用手机号注册（免费，注册即送积分）
+3. 登录后，进入「用户中心」→「接口Token」
+4. 复制一长串 Token（类似 `1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab`）
+
+#### Step 2：配置 Token
+
+在项目根目录创建 `.env` 文件（如果还没有的话）：
+
+```bash
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Windows CMD
+copy .env.example .env
+
+# 或者手动创建
+```
+
+编辑 `.env` 文件，填入 Token：
+
+```env
+TUSHARE_TOKEN=你的Token粘贴在这里
+```
+
+验证配置：
+```bash
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('Token OK:', os.getenv('TUSHARE_TOKEN')[:10]+'...') if os.getenv('TUSHARE_TOKEN') else print('Token 未配置')"
+```
+
+#### Step 3：启动 GUI 并下载数据
+
+```bash
+python run_gui.py
+```
+
+在 GUI 中：
+1. 切换到 **"Tushare下载"** 标签页
+2. 在 Token 输入框中粘贴你的 Token（如果 `.env` 已配置会自动填入）
+3. 点击 **"测试连接"** ，看到"连接成功"说明 Token 没问题
+4. 在 **"快速下载"** 子标签页中：
+   - 勾选 **"日线行情"**（回测必需的数据）
+   - 勾选 **"市值数据"**（小市值策略必需）
+   - 股票数量设为 **100**（新手先下 100 只试试）
+   - 数据年份设为 **1 年**（新手先下 1 年试试）
+5. 点击 **"开始批量下载"**
+6. 等待下载完成（100 只股票 1 年数据大约 5-15 分钟）
+
+#### Step 4：验证下载是否成功
+
+```python
+import duckdb
+
+con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+
+# 查看有哪些表
+tables = con.execute("SHOW TABLES").fetchall()
+print("表列表:", [t[0] for t in tables])
+
+# 查看日线数据概况
+try:
+    result = con.execute("""
+        SELECT
+            COUNT(DISTINCT stock_code) as stocks,
+            MIN(date) as from_date,
+            MAX(date) as to_date,
+            COUNT(*) as records
+        FROM stock_daily
+    """).fetchone()
+    print(f"日线数据: {result[0]} 只股票, {result[1]} ~ {result[2]}, 共 {result[3]:,} 条")
+except:
+    print("日线数据表为空")
+
+# 查看市值数据概况
+try:
+    result = con.execute("""
+        SELECT
+            COUNT(DISTINCT date) as days,
+            MIN(date) as from_date,
+            MAX(date) as to_date
+        FROM stock_market_cap
+    """).fetchone()
+    print(f"市值数据: {result[0]} 个交易日, {result[1]} ~ {result[2]}")
+except:
+    print("市值数据表为空")
+
+con.close()
+```
+
+#### Step 5：开始使用
+
+下载成功后，**无需任何额外配置**，回测和数据查询会自动使用 DuckDB：
+
+```python
+from easyxt_backtest import DataManager, BacktestEngine
+
+# 自动检测 DuckDB 路径
+dm = DataManager()
+engine = BacktestEngine(initial_cash=1000000, data_manager=dm)
+
+# 开始回测
+result = engine.run_backtest(strategy, '2024-01-01', '2024-12-31')
+result.print_summary()
+```
+
+#### 常见的新手问题
+
+**Q: 下载报错"积分不足"怎么办？**
+A: Tushare 采用积分制。日线行情 `daily` 接口消耗较少积分，注册送的积分通常够下载几百只股票。如果不够，可以先减少下载数量（比如 50 只），或者到 Tushare 论坛做任务获取积分。
+
+**Q: 没有D盘怎么办？数据会存在哪里？**
+A: 系统会自动检测 D 盘、C 盘、E 盘。如果都不存在，会自动创建 `D:/StockData/` 目录。你也可以通过环境变量自定义路径：
+```bash
+setx DUCKDB_PATH "C:/MyData/stock_data.ddb"
+```
+
+**Q: 数据下载到一半中断了怎么办？**
+A: 直接重新下载。系统会自动跳过已有的数据，只下载缺失的部分。
+
+**Q: 我没有 QMT，能只用 Tushare 下载吗？**
+A: **完全可以！** GUI 的"Tushare下载"标签页只依赖 Tushare，不需要 QMT。这是新手最推荐的方式。
+
+---
+
+### 3. 下载了DuckDB数据但回测/代码里还是报错
+
+#### 症状
+
+DuckDB 文件已经存在（`D:/StockData/stock_data.ddb`），但运行回测时代码找不到数据。
+
+#### 可能原因和解决方案
+
+**原因1：表名不匹配**
+
+旧版本教程可能引用了 `stock_data` 表，但实际表名是 `stock_daily`。
+
+```python
+# 检查实际的表名
+import duckdb
+con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+tables = con.execute("SHOW TABLES").fetchall()
+print([t[0] for t in tables])
+con.close()
+```
+
+**原因2：回测日期范围没有重叠**
+
+如果你下载的是 2024 年的数据，但回测设置的是 2022 年，就会报"数据为空"。
+
+```python
+# 检查数据库中的实际日期范围
+import duckdb
+con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+result = con.execute("SELECT MIN(date), MAX(date) FROM stock_daily").fetchone()
+print(f"数据范围: {result[0]} ~ {result[1]}")
+con.close()
+
+# 回测日期应在此范围内
+```
+
+**原因3：DataManager 没有指向正确的路径**
+
+如果数据库不在默认路径，需要手动指定：
+
+```python
+from easyxt_backtest import DataManager
+
+# 自动检测（检查 D盘、C盘、E盘）
+dm = DataManager()
+
+# 手动指定
+dm = DataManager(duckdb_path='你的实际路径/stock_data.ddb')
+```
+
+**原因4：数据库文件损坏**
+
+如果数据库文件损坏，删除后重新下载：
+
+```bash
+# 备份旧文件
+ren "D:\StockData\stock_data.ddb" "stock_data.ddb.bak"
+
+# 重新下载
+python run_gui.py
+# → "Tushare下载" → 重新下载
+```
+
+---
+
+### 4. DuckDB数据库文件找不到
+
+#### 错误信息
 ```
 IO Error: Cannot open file "D:\StockData\stock_data.ddb": 系统找不到指定的路径。
 ```
 
-#### 🔍 问题原因
-- 项目代码中硬编码了DuckDB数据库路径：`D:/StockData/stock_data.ddb`
-- 从GitHub下载项目后，本地没有这个数据库文件
-- 需要先下载股票数据才能使用回测、因子分析等功能
+#### 问题原因
+- 你还没有下载过数据（第一次使用项目）
+- 数据库文件存放在其他盘符（C盘、E盘）
 
-#### ✅ 解决方案
+#### 解决方案
 
-**方案一：使用GUI下载数据（推荐，最简单）**
+**最推荐：用 GUI 下载一次数据**
 
-1. 启动GUI应用：
-   ```bash
-   python run_gui.py
-   ```
+按照上方 [第2节](#2-duckdb数据库下载完整步骤) 的步骤操作。
 
-2. 配置Tushare Token：
-   - 访问 https://tushare.pro 注册并获取Token
-   - 在项目根目录创建 `.env` 文件：
-     ```env
-     TUSHARE_TOKEN=你的Token
-     ```
+**或者：手动创建目录后使用 QMT 数据**
 
-3. 在GUI中下载数据：
-   - 切换到 **"📥 Tushare下载"** 标签页
-   - 输入Tushare Token
-   - 点击 **"🔗 测试连接"** 验证Token
-   - 配置下载参数（建议：100只股票，30天）
-   - 点击 **"🚀 开始下载市值数据"**
-   - 等待下载完成
-
-**方案二：使用命令行下载数据**
-
-```bash
-cd "101因子\101因子分析平台\scripts"
-python init_data.py
-```
-
-选择模式：
-1. 快速测试模式（10只股票，2年数据）
-2. 标准模式（100只股票，5年数据）
-3. 完整模式（全市场股票，10年数据）
-
-**方案三：手动创建数据库目录**
-
-如果只是目录不存在：
-```bash
-# Windows PowerShell
-New-Item -ItemType Directory -Path "D:\StockData" -Force
-
-# Windows CMD
-mkdir D:\StockData
-
-# Linux/Mac
-mkdir -p ~/StockData
-```
-
-#### 📝 详细指南
-
-查看完整的DuckDB初始化指南：[DuckDB数据库使用指南](docs/assets/DUCKDB_GUIDE.md)
+如果你有 QMT，不需要 DuckDB 也能跑回测（只是速度慢一些）。系统会自动降级到 QMT 数据源。
 
 ---
 
-### 2. 数据下载失败
+### 5. 数据下载失败
 
-#### 🚨 常见错误
+#### 常见错误
 
 **错误1：Tushare连接失败**
 ```
@@ -105,7 +312,7 @@ API Error: 积分不足
 TimeoutError: Request timeout
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
 **检查Token是否有效：**
 1. 登录 Tushare Pro
@@ -118,16 +325,9 @@ TimeoutError: Request timeout
 3. 高级功能需要更多积分（可能需要充值）
 
 **优化下载策略：**
-```bash
-# 1. 减少下载数量
-# GUI中：股票数量改为 10-50 只
-
-# 2. 减少时间范围
-# GUI中：时间范围改为 7-14 天
-
-# 3. 分批下载
-# 多次运行，每次下载不同时间段的数据
-```
+- 减少下载数量（GUI中：股票数量改为 10-50 只）
+- 减少时间范围（GUI中：数据年份改为 1 年）
+- 分批下载（多次运行，每次下载不同的股票）
 
 **使用其他数据源：**
 项目支持多种数据源，会自动降级：
@@ -135,294 +335,19 @@ TimeoutError: Request timeout
 DuckDB > QMT > Tushare > akshare > qstock
 ```
 
-如果你有QMT终端，可以直接使用QMT本地数据，无需下载。
+如果你有QMT终端，可以直接使用QMT本地数据，无需下载到DuckDB。
 
 ---
 
-### 3. QMT历史数据补充（重要）⭐
+### 6. Tushare配置问题
 
-#### 🚨 问题描述
-
-**错误信息**：
-```
-ERROR: 无法获取股票 ['000001.SZ'] 的数据。可能的原因：
-1. 需要先在迅投客户端中下载历史数据
-2. 股票代码错误
-3. 网络连接问题
-4. 迅投服务未正常运行
-```
-
-**现象**：
-- QMT客户端能连接成功
-- `download_history_data2()` 下载命令执行完成
-- 但 `get_market_data_ex()` 获取数据时返回空
-- 提示需要先在迅投客户端中下载历史数据
-
-#### 🔍 问题原因
-
-**QMT工作机制**：
-```
-1. 代码调用 download_history_data2()
-   ↓
-2. QMT从服务器下载数据到本地数据库
-   ↓
-3. 代码调用 get_market_data_ex()
-   ↓
-4. QMT从本地数据库读取数据
-   ↓
-5. 如果本地数据库为空 → 返回空 → 报错！❌
-```
-
-**根本原因**：
-- QMT客户端刚安装，本地数据库为空
-- 或者只连接了QMT但没有下载过历史数据
-- 需要先在QMT中补充历史数据才能使用
-
-#### ✅ 解决方案
-
-**⭐ 方案一：使用项目提供的一键下载工具（强烈推荐）**
-
-项目提供了完整的A股数据下载工具，可以一键下载深圳和上海两个交易所的全部A股日线数据。
-
-**工具位置**：`tools/` 目录
-
-```
-miniqmt扩展/
-├── tools/
-│   ├── download_sz_stocks.py      # 下载深圳股票日线数据
-│   ├── download_sh_stocks.py      # 下载上海股票日线数据
-│   ├── download_all_stocks.py     # 下载全部A股日线数据
-│   └── download_all_stock_data.bat # Windows一键批处理脚本
-```
-
-**使用方法**：
-
-**方法1：一键下载全部A股（Windows推荐）**
-```bash
-# 直接双击运行
-tools\download_all_stock_data.bat
-
-# 或在命令行运行
-cd tools
-download_all_stock_data.bat
-```
-
-**方法2：使用Python脚本**
-```bash
-# 下载全部A股（推荐）
-cd tools
-python download_all_stocks.py
-
-# 或分别下载
-python download_sz_stocks.py  # 下载深圳股票
-python download_sh_stocks.py  # 下载上海股票
-```
-
-**方法3：在代码中调用**
-```python
-from easy_xt.data_api import DataAPI
-
-api = DataAPI()
-api.connect()
-
-# 批量下载历史数据
-results = api.download_history_data_batch(
-    stock_list=['000001.SZ', '600000.SH'],  # 股票列表
-    period='1d',                             # 日线
-    start_time='20200101',                    # 开始时间
-    end_time='20241231'                       # 结束时间
-)
-
-# 查看下载结果
-for stock, success in results.items():
-    if success:
-        print(f"✓ {stock} 下载成功")
-    else:
-        print(f"✗ {stock} 下载失败")
-```
-
-**下载说明**：
-- ⚡ **快速模式**：下载最近1年数据，约10-30分钟
-- 📊 **完整模式**：下载全部历史数据，约1-3小时
-- 🔄 **后台运行**：可以最小化QMT客户端，后台继续下载
-- 💾 **数据存储**：下载的数据保存在QMT本地数据库中
-
----
-
-**方案二：在QMT客户端手动下载**
-
-如果只想下载少量股票数据：
-
-1. **打开QMT客户端**
-
-2. **找到数据下载入口**（不同版本位置可能不同）：
-   ```
-   方式1：终端 → 品种管理 → 下载历史数据
-   方式2：数据管理 → 历史数据下载
-   方式3：右键点击股票 → 下载数据
-   ```
-
-3. **添加测试股票**：
-   ```
-   股票代码：000001.SZ（平安银行）
-   或：600000.SH（浦发银行）
-   或：000002.SZ（万科A）
-   ```
-
-4. **选择时间范围**：
-   ```
-   建议：最近1年或更多
-   开始日期：20230101
-   结束日期：当前日期
-   ```
-
-5. **等待下载完成**
-   - QMT会显示下载进度
-   - 下载完成后即可使用
-
----
-
-**方案三：安装pytdx，自动降级到TDX（推荐，一劳永逸）**
-
-如果不想配置QMT数据，让系统自动使用TDX数据源：
-
-```bash
-# 安装pytdx
-pip install pytdx
-
-# 测试数据源
-python -c "from easy_xt.data_api import DataAPI; api = DataAPI(); api.connect(); print(api.get_active_source())"
-```
-
-**预期输出**：
-```
-[Connecting to data source...]
-  Trying QMT (xtquant)...
-  [WARN] QMT connection failed
-  Trying TDX (通达信)...
-  [OK] Using TDX (通达信) as data source  ← 自动降级！
-tdx
-```
-
-**TDX的优势**：
-- ✅ 不需要下载数据，直接从通达信服务器获取
-- ✅ 适合测试和学习
-- ✅ 避免QMT数据管理问题
-- ✅ 支持实时行情和历史数据
-
----
-
-#### 📊 三种方案对比
-
-| 方案 | 优点 | 缺点 | 适用场景 | 推荐度 |
-|------|------|------|---------|--------|
-| **一键下载工具** | 一次性下载全部数据，后续使用最快 | 首次下载耗时（1-3小时） | 长期使用、生产环境 | ⭐⭐⭐⭐⭐ |
-| **QMT手动下载** | 只下载需要的股票 | 手动操作繁琐 | 临时测试、少量股票 | ⭐⭐⭐ |
-| **安装pytdx** | 无需下载，立即可用 | 依赖网络，速度较慢 | 快速测试、学习环境 | ⭐⭐⭐⭐ |
-
----
-
-#### 🎯 推荐配置
-
-**本地开发环境**：
-```bash
-# 安装pytdx，自动降级到TDX
-pip install pytdx
-```
-
-**生产/实盘环境**：
-```bash
-# 使用一键下载工具，下载全部A股数据
-cd tools
-python download_all_stocks.py
-```
-
-**测试环境**：
-```python
-# 先用TDX测试，确认代码无误后再用QMT
-from easy_xt.data_api import DataAPI
-
-api = DataAPI()
-api.connect()
-
-# 查看当前数据源
-print(f"数据源: {api.get_active_source()}")
-```
-
----
-
-#### ⚠️ 注意事项
-
-1. **首次下载必须完整**：
-   - QMT需要至少下载一次历史数据
-   - 建议下载最近1-3年的数据
-   - 下载完成后重启QMT客户端
-
-2. **数据更新**：
-   - QMT会在交易时间自动更新当日数据
-   - 如需更新历史数据，重新运行下载工具
-   - 建议每周或每月更新一次
-
-3. **网络要求**：
-   - 下载时需要稳定的网络连接
-   - 建议在网络良好时进行下载
-   - 可以暂停后继续下载
-
-4. **磁盘空间**：
-   - 全部A股数据约2-5GB
-   - 确保磁盘有足够空间
-
----
-
-#### 🔧 故障排查
-
-**问题1：下载工具运行失败**
-```bash
-# 检查QMT是否启动
-# 确保QMT客户端已登录
-
-# 检查xtquant是否安装
-python -c "import xtquant.xtdata as xt; print('OK')"
-
-# 检查QMT连接
-python -c "from easy_xt.data_api import DataAPI; api = DataAPI(); print(api.connect())"
-```
-
-**问题2：下载速度慢**
-- 减少下载数据量（只下载需要的股票）
-- 缩短时间范围（只下载最近1年）
-- 分批下载（多次运行，每次下载不同时间段）
-
-**问题3：下载后仍然报错**
-```python
-# 验证数据是否真的下载成功
-import xtquant.xtdata as xt
-
-# 直接查询本地数据
-data = xt.get_local_data(
-    field_list=['close'],
-    stock_list=['000001.SZ'],
-    period='1d',
-    count=10
-)
-
-if '000001.SZ' in data and data['000001.SZ'] is not None:
-    print(f"✓ 数据已下载: {len(data['000001.SZ'])}条")
-else:
-    print("✗ 数据未下载或下载失败")
-```
-
----
-
-### 4. Tushare配置问题
-
-#### 🚨 问题：Token配置后仍然报错
+#### 问题：Token配置后仍然报错
 
 ```
 ValueError: TUSHARE_TOKEN not found in environment variables
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
 **检查.env文件：**
 
@@ -436,26 +361,19 @@ ValueError: TUSHARE_TOKEN not found in environment variables
 
 2. 检查文件内容格式：
    ```env
-   # 正确格式
+   # 正确格式（不加引号）
    TUSHARE_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
-   # 错误格式（不要加引号）
+   # 错误格式
    TUSHARE_TOKEN="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
    ```
 
 3. 验证环境变量：
    ```bash
-   python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('✓ Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...') if os.getenv('TUSHARE_TOKEN') else print('✗ Token未配置')"
+   python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('Token OK') if os.getenv('TUSHARE_TOKEN') else print('Token 未配置')"
    ```
 
-**手动设置环境变量（临时）：**
-
-```python
-import os
-os.environ['TUSHARE_TOKEN'] = '你的Token'
-```
-
-**永久设置环境变量：**
+**手动设置环境变量（永久）：**
 
 ```powershell
 # PowerShell
@@ -465,167 +383,93 @@ setx TUSHARE_TOKEN "你的Token"
 setx TUSHARE_TOKEN "你的Token"
 ```
 
-⚠️ **注意：** 设置后需要重启终端/IDE才能生效。
+注意：设置后需要**重启终端/IDE**才能生效。
+
+---
+
+### 7. QMT历史数据补充
+
+#### 错误信息
+```
+ERROR: 无法获取股票 ['000001.SZ'] 的数据。可能的原因：
+1. 需要先在迅投客户端中下载历史数据
+2. 股票代码错误
+```
+
+#### 问题原因
+
+QMT刚安装时本地数据库为空，需要先下载历史数据。
+
+#### 解决方案
+
+**方案一：使用项目的一键下载工具**
+
+```bash
+cd tools
+python download_all_stocks.py
+```
+
+**方案二：安装pytdx，自动降级到TDX**
+
+```bash
+pip install pytdx
+```
+
+安装后系统会自动使用通达信数据源，不需要QMT也能获取数据。
+
+**方案三：使用 DuckDB（推荐长期使用）**
+
+按照上方 [第2节](#2-duckdb数据库下载完整步骤) 下载 DuckDB 数据，彻底避免 QMT 数据管理问题。
 
 ---
 
 ## 安装相关
 
-### 5. xtquant安装失败
+### 8. xtquant安装失败
 
-#### 🚨 错误信息
+#### 错误信息
 ```
 ImportError: cannot import name 'datacenter' from 'xtquant'
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
 **必须使用项目提供的特殊版本！**
 
-1. 下载特殊版本：
-   - 访问：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
-   - 下载：`xtquant.rar`
+1. 下载：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0 → `xtquant.rar`
+2. 解压到项目根目录（与 `easy_xt/` 同级）
+3. 验证：`python -c "from xtquant import datacenter; print('OK')"`
 
-2. 解压到项目根目录：
-   ```
-   miniqmt扩展/
-   ├── xtquant/          ← 解压到这里
-   ├── easy_xt/
-   └── README.md
-   ```
+> 不要使用 `pip install xtquant` 安装官方版本！
 
-3. 验证安装：
-   ```bash
-   python -c "from xtquant import datacenter; print('✓ xtquant OK')"
-   ```
+#### 一键检查工具
 
-#### 🔧 使用一键检查工具（推荐）
-
-项目提供了专门的 **xtquant 安装检查工具**，可以自动诊断 xtquant 安装问题：
-
-**工具位置**：`easy_xt/check_xtquant.py`
-
-**使用方法**：
 ```bash
-# 方法1：进入 easy_xt 目录运行
 cd easy_xt
 python check_xtquant.py
-
-# 方法2：从项目根目录运行
-python easy_xt/check_xtquant.py
 ```
-
-**检查内容**：
-- ✓ xtquant 模块是否可以导入
-- ✓ xtquant.datacenter 是否可以导入（关键组件）
-- ✓ xtquant.xtdata 是否可以导入
-
-**结果解读**：
-
-**✅ 检查通过**：
-```
-✓ xtquant 模块可以导入
-✓ xtquant.datacenter 可以导入（关键组件）
-✓ xtquant.xtdata 可以导入
-======================================================================
-✓ 所有检查通过！xtquant 安装正确
-======================================================================
-```
-说明：xtquant 安装正确，可以继续使用。
-
-**❌ 检查失败**：
-```
-✓ xtquant 模块可以导入
-✗ 无法导入 xtquant.datacenter（文件不完整或版本不匹配）
-  错误信息: cannot import name 'datacenter' from 'xtquant'
-
-这是最常见的错误！通常是因为：
-  - GitHub 上的 xtquant 文件不完整（大文件被截断）
-  - 使用了 pip 安装的官方版本（不兼容）
-```
-说明：xtquant 安装不完整，需要按照工具提供的指引重新安装。
-
-**常见问题诊断**：
-
-**问题1：datacenter 文件存在但仍报错**
-
-如果确认 `datacenter.cp*-win_amd64.pyd` 文件存在（例如在 `D:/Programs/Python/xtquant/`），但仍报错 `cannot import name 'datacenter'`，说明 **xtquant 文件夹不在 Python 的搜索路径中**。
-
-**解决方案（任选其一）**：
-
-1. **移动到 site-packages 目录**（最简单）：
-   ```bash
-   # 找到 Python 的 site-packages 目录
-   python -c "import site; print(site.getsitepackages()[0])"
-
-   # 将 xtquant 文件夹复制到上面显示的目录
-   # 例如：C:/Python39/Lib/site-packages/
-   ```
-
-2. **设置 PYTHONPATH 环境变量**：
-   ```bash
-   # 临时设置（当前终端会话有效）
-   set PYTHONPATH=D:/Programs/Python;%PYTHONPATH%
-
-   # 永久设置（Windows 系统环境变量）
-   # 右键"此电脑" → 属性 → 高级系统设置 → 环境变量
-   # 在"系统变量"中新建 PYTHONPATH，值为 D:/Programs/Python
-   ```
-
-3. **移动到项目目录**：
-   ```bash
-   # 将 xtquant 文件夹复制到项目根目录
-   # 这样项目启动时会自动将项目目录加入 Python 搜索路径
-   ```
-
-**问题2：多个 xtquant 版本冲突**
-
-如果安装了多个版本的 xtquant（例如通过 pip 安装的官方版本和项目提供的特殊版本），Python 可能导入了错误的版本。
-
-**解决方案**：
-```bash
-# 查看 xtquant 的实际位置
-python -c "import xtquant; print(xtquant.__file__)"
-
-# 卸载 pip 安装的官方版本
-pip uninstall xtquant
-
-# 确保只保留项目提供的特殊版本
-```
-
-❌ **不要使用 `pip install xtquant` 安装官方版本！**
 
 ---
 
-### 6. 依赖安装失败
+### 9. 依赖安装失败
 
-#### 🚨 常见错误
+#### 常见错误
 
-**错误1：pip安装超时**
 ```
 ReadTimeoutError: HTTPSConnectionPool read timeout
-```
-
-**错误2：某些包无法安装**
-```
 ERROR: Could not find a version that satisfies the requirement
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
 **使用国内镜像源：**
 ```bash
 pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 ```
 
-**升级pip：**
-```bash
-python -m pip install --upgrade pip
-```
-
 **逐个安装依赖：**
 ```bash
-pip install pandas numpy PyQt5 streamlit
+pip install pandas numpy PyQt5 duckdb streamlit
 pip install -e ./easy_xt
 ```
 
@@ -633,176 +477,117 @@ pip install -e ./easy_xt
 
 ## 运行相关
 
-### 7. GUI启动失败
+### 10. GUI启动失败
 
-#### 🚨 错误信息
+#### 错误信息
 ```
 ImportError: No module named 'PyQt5'
 ```
 
-#### ✅ 解决方案
-
-**安装GUI依赖：**
+#### 解决方案
 ```bash
-pip install PyQt5 PyQt5-tools
-```
-
-**检查依赖完整性：**
-```bash
-cd "gui_app"
-pip install -r requirements.txt
+pip install PyQt5
 ```
 
 ---
 
-### 8. 回测报错
+### 11. 回测报错
 
-#### 🚨 常见错误
-
-**错误1：数据为空**
+#### 错误1：数据为空
 ```
 ValueError: No data available for the specified date range
 ```
 
-**错误2：股票代码不存在**
+#### 错误2：股票代码格式错误
 ```
 KeyError: 'STOCK_CODE not found'
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
-**检查数据源优先级：**
+**检查数据是否存在：**
 ```python
-# 确认DuckDB数据库有数据
 import duckdb
-con = duckdb.connect('D:/StockData/stock_data.ddb')
-result = con.execute("SELECT COUNT(*) FROM stock_data").fetchone()
-print(f"数据总量: {result[0]} 条")
+con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+result = con.execute("SELECT COUNT(*), MIN(date), MAX(date) FROM stock_daily").fetchone()
+print(f"数据量: {result[0]} 条, 范围: {result[1]} ~ {result[2]}")
 con.close()
 ```
 
-**使用QMT数据（如果安装了QMT）：**
-```python
-from easy_xt import get_api
-api = get_api()
-api.init_data()  # 使用QMT数据
-```
-
-**检查股票代码格式：**
+**确认股票代码格式：**
 - 正确：`000001.SZ`, `600000.SH`
 - 错误：`000001`, `600000`, `sz000001`
 
 ---
 
-### 9. 策略运行失败
+### 12. 策略运行失败
 
-#### 🚨 常见错误
-
-**错误1：账户未连接**
+#### 错误信息
 ```
 ConnectionError: 无法连接到交易账户
 ```
 
-**错误2：权限不足**
-```
-PermissionError: 没有交易权限
-```
+#### 解决方案
 
-#### ✅ 解决方案
-
-**检查QMT路径配置：**
-```python
-# 确保路径正确
-USERDATA_PATH = r"C:\QMT\userdata"  # 或你的QMT安装路径
-```
-
-**检查QMT是否登录：**
-- 确保QMT客户端已启动
-- 确保已登录交易账户
+- 确保QMT客户端已启动并登录
 - 确保账户有交易权限
-
-**使用模拟账户测试：**
-```python
-# 先在模拟环境测试
-api.add_account('模拟账户ID')
-```
+- 确认 `qmt_path` 配置正确
 
 ---
 
 ## 性能相关
 
-### 10. 回测速度慢
+### 13. 回测速度慢
 
-#### 📊 性能对比
+#### 性能对比
 
-| 数据源 | 回测1000次耗时 | 性能 |
-|--------|----------------|------|
-| DuckDB | ~10秒 | ⚡⚡⚡⚡⚡ |
-| QMT本地 | ~30秒 | ⚡⚡⚡⚡ |
-| Tushare | ~300秒 | ⚡⚡ |
+| 数据源 | 回测1000次耗时 | 推荐场景 |
+|--------|----------------|---------|
+| DuckDB | ~10秒 | 高频回测（推荐） |
+| QMT本地 | ~30秒 | 实盘交易 |
+| Tushare在线 | ~300秒 | 快速测试 |
 
-#### ✅ 优化建议
+#### 优化建议
 
-**优先使用DuckDB：**
+**安装并启用 DuckDB（效果最明显）：**
+
+按照 [第2节](#2-duckdb数据库下载完整步骤) 下载 DuckDB 数据即可，回测时会自动使用。
+
 ```python
 from easyxt_backtest import DataManager
-dm = DataManager(duckdb_path='D:/StockData/stock_data.ddb')
+
+# 自动检测 DuckDB（无需手动指定路径）
+dm = DataManager()
 ```
 
-**批量计算：**
+**使用向量化操作代替循环：**
 ```python
-# ❌ 慢：逐个股票计算
-for stock in stock_list:
-    result = calculate_factor(stock)
-
-# ✅ 快：批量计算
-results = calculate_factors_batch(stock_list)
-```
-
-**使用向量化操作：**
-```python
-# ❌ 慢：循环
+# 慢
 for i in range(len(df)):
     df.loc[i, 'ma5'] = df['close'].iloc[i-5:i].mean()
 
-# ✅ 快：向量化
+# 快
 df['ma5'] = df['close'].rolling(5).mean()
 ```
 
 ---
 
-### 11. 内存占用过高
+### 14. 内存占用过高
 
-#### 🚨 问题
+#### 问题
 ```
 MemoryError: Unable to allocate array
 ```
 
-#### ✅ 解决方案
+#### 解决方案
 
-**分批处理：**
 ```python
-# ❌ 一次加载全部数据
-all_data = load_all_stocks()  # 可能占用几GB内存
-
-# ✅ 分批加载
+# 分批处理
 for batch in stock_batches:
     data = load_batch(batch)
     process(data)
-```
 
-**使用生成器：**
-```python
-def data_generator(stocks):
-    for stock in stocks:
-        yield load_stock_data(stock)
-
-for data in data_generator(stock_list):
-    process(data)  # 处理完立即释放内存
-```
-
-**清理缓存：**
-```python
+# 及时释放
 import gc
 del large_dataframe
 gc.collect()
@@ -810,109 +595,67 @@ gc.collect()
 
 ---
 
-## 🔍 快速诊断工具
+## 快速诊断工具
 
-### 一键检查脚本
+运行以下命令快速检查环境状态：
 
-创建 `check_env.py` 文件：
-
-```python
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-"""快速环境检查工具"""
-
-import sys
-import os
+```bash
+python -c "
+import sys, os
 from pathlib import Path
 
-print("=" * 70)
-print("EasyXT 环境检查工具")
-print("=" * 70)
+print('=' * 50)
+print('EasyXT 环境快速检查')
+print('=' * 50)
 
-# 1. Python版本
-print(f"\n[1] Python版本: {sys.version}")
-if sys.version_info < (3, 9):
-    print("    ⚠️ 警告：建议使用Python 3.9+")
-else:
-    print("    ✓ 版本正常")
+# 1. Python
+print(f'[1] Python {sys.version_info.major}.{sys.version_info.minor}: ', end='')
+print('OK' if sys.version_info >= (3, 8) else '建议升级到3.8+')
 
-# 2. xtquant
-print("\n[2] xtquant模块:")
+# 2. duckdb
 try:
-    from xtquant import datacenter
-    print("    ✓ xtquant已安装")
-except ImportError:
-    print("    ✗ xtquant未安装或版本错误")
-    print("    解决方案：下载特殊版本并解压到项目根目录")
+    import duckdb; print('[2] duckdb: OK')
+except: print('[2] duckdb: 未安装 (pip install duckdb)')
 
 # 3. easy_xt
-print("\n[3] easy_xt模块:")
 try:
-    from easy_xt import get_api
-    print("    ✓ easy_xt已安装")
-except ImportError:
-    print("    ✗ easy_xt未安装")
-    print("    解决方案：pip install -e ./easy_xt")
+    from easy_xt import get_api; print('[3] easy_xt: OK')
+except: print('[3] easy_xt: 未安装 (pip install -e ./easy_xt)')
 
-# 4. DuckDB
-print("\n[4] DuckDB数据库:")
-duckdb_paths = [
-    'D:/StockData/stock_data.ddb',
-    'd:/stockdata/stock_data.ddb',
-    './data/stock_data.ddb'
-]
+# 4. DuckDB数据库
 db_found = False
-for path in duckdb_paths:
-    if Path(path).exists():
-        print(f"    ✓ 找到数据库: {path}")
-        db_found = True
-        break
+for p in ['D:/StockData/stock_data.ddb', 'C:/StockData/stock_data.ddb', 'E:/StockData/stock_data.ddb']:
+    if Path(p).exists():
+        size_mb = os.path.getsize(p) / 1024 / 1024
+        print(f'[4] DuckDB数据库: 找到 ({p}, {size_mb:.1f}MB)')
+        db_found = True; break
 if not db_found:
-    print("    ✗ 未找到DuckDB数据库")
-    print("    解决方案：运行 python run_gui.py 下载数据")
+    print('[4] DuckDB数据库: 未找到 (运行 python run_gui.py 下载)')
 
 # 5. Tushare Token
-print("\n[5] Tushare配置:")
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-    token = os.getenv('TUSHARE_TOKEN')
-    if token:
-        print(f"    ✓ Token已配置: {token[:10]}...")
-    else:
-        print("    ⚠️ Token未配置")
-        print("    解决方案：在项目根目录创建.env文件并添加TUSHARE_TOKEN")
-except ImportError:
-    print("    ⚠️ python-dotenv未安装")
-    print("    解决方案：pip install python-dotenv")
+token = os.environ.get('TUSHARE_TOKEN', '')
+if not token:
+    try:
+        with open('.env') as f:
+            for line in f:
+                if line.startswith('TUSHARE_TOKEN='):
+                    token = line.split('=',1)[1].strip()
+    except: pass
+print(f'[5] Tushare Token: {\"OK (\" + token[:10] + \"...)\" if token else \"未配置\"}')
 
-# 6. GUI依赖
-print("\n[6] GUI依赖:")
-try:
-    import PyQt5
-    print("    ✓ PyQt5已安装")
-except ImportError:
-    print("    ✗ PyQt5未安装")
-    print("    解决方案：pip install PyQt5")
-
-print("\n" + "=" * 70)
-print("检查完成！")
-print("=" * 70)
-```
-
-**使用方法：**
-```bash
-python check_env.py
+print('=' * 50)
+"
 ```
 
 ---
 
-## 📞 获取更多帮助
+## 获取更多帮助
 
 ### 官方文档
-- [项目README](README.md)
-- [101因子平台指南](101因子/101因子分析平台/README.md)
-- [回测系统指南](easyxt_backtest/README.md)
+- [项目 README](README.md)
+- [DuckDB 使用指南](DUCKDB_GUIDE.md)
+- [回测系统指南](../../easyxt_backtest/README.md)
+- [101因子平台指南](../../101因子/101因子分析平台/README.md)
 
 ### 社区支持
 - **GitHub Issues**: https://github.com/quant-king299/EasyXT/issues
@@ -927,4 +670,4 @@ python check_env.py
 
 ---
 
-**最后更新**: 2026-03-08
+**最后更新**: 2026-03-26

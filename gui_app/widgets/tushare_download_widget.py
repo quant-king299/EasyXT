@@ -55,6 +55,20 @@ class TushareDownloadThread(QThread):
             self.log_signal.emit(f"[ERROR] 导入Tushare模块失败: {e}")
             self.TushareDownloader = None
 
+    def _get_db_path(self):
+        """获取DuckDB数据库路径（自动检测）"""
+        common_paths = [
+            'D:/StockData/stock_data.ddb',
+            'C:/StockData/stock_data.ddb',
+            'E:/StockData/stock_data.ddb',
+            './data/stock_data.ddb',
+        ]
+        for path in common_paths:
+            abs_path = os.path.abspath(path)
+            if os.path.exists(abs_path):
+                return abs_path
+        return 'D:/StockData/stock_data.ddb'
+
     def run(self):
         """运行下载任务"""
         if self.TushareDownloader is None:
@@ -91,7 +105,7 @@ class TushareDownloadThread(QThread):
         # 否则从数据库获取
         try:
             import duckdb
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             con = duckdb.connect(db_path, read_only=True)
 
             # 获取所有股票代码
@@ -557,7 +571,7 @@ class TushareDownloadWidget(QWidget):
             task_type=task_type,
             stock_list=stock_list,
             years=years,
-            db_path='D:/StockData/stock_data.ddb'
+            db_path=None  # 自动检测
         )
 
         self.download_thread.log_signal.connect(self.log)

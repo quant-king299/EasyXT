@@ -184,7 +184,7 @@ xtquant/
 最终*.py
 启动*.py
 启动*.bat
-claude-start.bat
+claude-start*.bat
 mock_*.py
 # QMT相关文件 - 只忽略测试文件，保留核心代码
 test_qmt*.py

@@ -625,11 +625,17 @@ A: Tushare Pro采用积分制：
 **Q: 不想用Tushare，有其他选择吗？**
 A: 本项目支持多种数据源，可按需选择：
 - **QMT本地数据**：如果有QMT终端，可直接使用本地历史数据
-- **DuckDB本地数据库**：预先下载的数据文件（回测速度最快）
+- **DuckDB本地数据库**：通过Tushare或QMT下载数据到本地，回测速度最快
 - **akshare**：免费数据接口（功能类似Tushare）
 - **qstock**：免费数据接口
 
 配置优先级：DuckDB > QMT > Tushare > akshare > qstock
+
+**Q: 如何下载DuckDB数据库？**
+A: 两种方式（详见 [DuckDB使用指南](docs/assets/DUCKDB_GUIDE.md)）：
+
+1. **GUI方式（推荐）**：运行 `python run_gui.py`，在"Tushare下载"标签页中勾选"日线行情"和"市值数据"，点击下载。只需Tushare Token，无需QMT。
+2. **命令行方式**：运行 `python tools/setup_duckdb.py`，按提示选择下载模式。
 
 ---
 

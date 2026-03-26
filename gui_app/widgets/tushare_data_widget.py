@@ -73,6 +73,8 @@ class TushareDownloadThread(QThread):
                 self._test_connection()
             elif self.task_type == 'batch_download':
                 self._batch_download()
+            elif self.task_type == 'daily':
+                self._download_daily()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -89,6 +91,27 @@ class TushareDownloadThread(QThread):
             raise ValueError("请输入Tushare Token")
         ts.set_token(token)
         return ts.pro_api()
+
+    def _get_db_path(self):
+        """获取DuckDB数据库路径（自动检测）"""
+        import os
+        # 优先使用环境变量
+        env_path = os.environ.get('DUCKDB_PATH')
+        if env_path and os.path.exists(env_path):
+            return env_path
+        # 常见路径自动检测
+        common_paths = [
+            'D:/StockData/stock_data.ddb',
+            'C:/StockData/stock_data.ddb',
+            'E:/StockData/stock_data.ddb',
+            './data/stock_data.ddb',
+        ]
+        for path in common_paths:
+            abs_path = os.path.abspath(path)
+            if os.path.exists(abs_path):
+                return abs_path
+        # 默认路径（会自动创建目录）
+        return 'D:/StockData/stock_data.ddb'
 
     def _test_connection(self):
         """测试Tushare连接"""
@@ -113,7 +136,7 @@ class TushareDownloadThread(QThread):
         """下载市值数据（全市场，按日期范围）"""
         try:
             pro = self._get_tushare_pro()
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             start_date = self.kwargs.get('start_date', '20240101')
             end_date = self.kwargs.get('end_date', '20241231')
 
@@ -398,7 +421,7 @@ class TushareDownloadThread(QThread):
         """下载财务数据"""
         try:
             pro = self._get_tushare_pro()
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             symbols = self.kwargs.get('symbols', [])
             years = self.kwargs.get('years', 5)
 
@@ -499,7 +522,7 @@ class TushareDownloadThread(QThread):
         """下载分红数据"""
         try:
             pro = self._get_tushare_pro()
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             symbols = self.kwargs.get('symbols', [])
             years = self.kwargs.get('years', 5)
 
@@ -564,7 +587,7 @@ class TushareDownloadThread(QThread):
         """下载资金流向数据"""
         try:
             pro = self._get_tushare_pro()
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             symbols = self.kwargs.get('symbols', [])
             start_date = self.kwargs.get('start_date', (datetime.now() - timedelta(days=30)).strftime('%Y%m%d'))
             end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
@@ -637,7 +660,7 @@ class TushareDownloadThread(QThread):
         """下载股东数据"""
         try:
             pro = self._get_tushare_pro()
-            db_path = self.kwargs.get('db_path', 'D:/StockData/stock_data.ddb')
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
             symbols = self.kwargs.get('symbols', [])
             years = self.kwargs.get('years', 5)
 
@@ -720,6 +743,8 @@ class TushareDownloadThread(QThread):
                     self._download_holders()
                 elif task_type == 'market_cap':
                     self._download_market_cap()
+                elif task_type == 'daily':
+                    self._download_daily()
 
                 self.progress_signal.emit(i + 1, total_tasks)
 
@@ -733,6 +758,133 @@ class TushareDownloadThread(QThread):
     def stop(self):
         """停止下载"""
         self._is_running = False
+
+    def _download_daily(self):
+        """下载日线行情数据（使用Tushare，无需QMT）"""
+        import os
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20230101')
+            end_date = self.kwargs.get('end_date', '20241231')
+            symbols = self.kwargs.get('symbols', [])
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载日线行情数据（Tushare）")
+            self.log_signal.emit("=" * 60)
+
+            # 确保目录存在
+            db_dir = os.path.dirname(db_path)
+            if db_dir:
+                os.makedirs(db_dir, exist_ok=True)
+
+            # 连接数据库
+            conn = duckdb.connect(db_path)
+            self.log_signal.emit(f"数据库: {db_path}")
+
+            # 确保表存在
+            try:
+                conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
+            except:
+                conn.execute("""
+                    CREATE TABLE stock_daily (
+                        stock_code VARCHAR,
+                        symbol_type VARCHAR DEFAULT 'stock',
+                        date DATE,
+                        period VARCHAR DEFAULT '1d',
+                        open DOUBLE,
+                        high DOUBLE,
+                        low DOUBLE,
+                        close DOUBLE,
+                        volume BIGINT,
+                        amount DOUBLE,
+                        adjust_type VARCHAR DEFAULT 'none',
+                        factor DOUBLE DEFAULT 1.0,
+                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                        PRIMARY KEY (stock_code, date, period, adjust_type)
+                    )
+                """)
+                self.log_signal.emit("已创建 stock_daily 表")
+
+            # 如果没有指定股票列表，获取全部A股
+            if not symbols:
+                self.log_signal.emit("获取A股列表...")
+                stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+                symbols = stock_list['ts_code'].tolist()
+
+            # 限制下载数量
+            max_count = self.kwargs.get('max_count', 500)
+            symbols = symbols[:max_count]
+
+            self.log_signal.emit(f"股票数量: {len(symbols)}")
+            self.log_signal.emit(f"日期范围: {start_date} ~ {end_date}")
+
+            # 获取交易日历
+            trade_cal = pro.trade_cal(exchange='SSE', start_date=start_date, end_date=end_date, is_open=1)
+            trade_dates = sorted(trade_cal['cal_date'].tolist())
+            self.log_signal.emit(f"交易日数: {len(trade_dates)}")
+
+            total_inserted = 0
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(symbols, 1):
+                if not self._is_running:
+                    break
+
+                try:
+                    df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date,
+                                   fields='ts_code,trade_date,open,high,low,close,vol,amount')
+
+                    if df is not None and not df.empty:
+                        df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+                        df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+                        df['symbol_type'] = 'stock'
+                        df['period'] = '1d'
+                        df['adjust_type'] = 'none'
+                        df['factor'] = 1.0
+                        df['created_at'] = pd.Timestamp.now()
+                        df['updated_at'] = pd.Timestamp.now()
+
+                        cols = ['stock_code', 'symbol_type', 'date', 'period',
+                                'open', 'high', 'low', 'close', 'volume', 'amount',
+                                'adjust_type', 'factor', 'created_at', 'updated_at']
+                        df = df[cols]
+
+                        # 删除可能已存在的数据，重新插入
+                        conn.execute(f"DELETE FROM stock_daily WHERE stock_code = '{ts_code}' AND period = '1d' AND adjust_type = 'none'")
+                        df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')
+
+                        total_inserted += len(df)
+                        success_count += 1
+                    else:
+                        failed_count += 1
+
+                except Exception as e:
+                    failed_count += 1
+                    if failed_count <= 5:
+                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:40]}")
+
+                # 进度
+                if i % 50 == 0 or i == len(symbols):
+                    self.progress_signal.emit(i, len(symbols))
+                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+
+            conn.close()
+
+            self.log_signal.emit(f"\n日线数据下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.finished_signal.emit({
+                'success': True,
+                'total': len(symbols),
+                'success_count': success_count,
+                'failed_count': failed_count,
+                'total_inserted': total_inserted
+            })
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"日线数据下载失败: {str(e)}\n{traceback.format_exc()}")
 
 
 class TushareDataWidget(QWidget):
@@ -857,12 +1009,14 @@ class TushareDataWidget(QWidget):
 
         # 说明
         info_label = QLabel(
-            "📌 快速下载说明\n\n"
+            "快速下载说明\n\n"
             "快速下载模块提供了一键下载常用数据的功能，包括：\n"
-            "• 市值数据：用于回测和选股\n"
-            "• 财务数据：包括利润表、资产负债表、现金流量表\n"
-            "• 分红数据：历史分红送股数据\n\n"
-            "选择要下载的数据类型，设置参数后点击开始下载。"
+            "- 日线行情：股票每日OHLCV数据（回测必需）\n"
+            "- 市值数据：用于回测和选股（小市值策略必需）\n"
+            "- 财务数据：包括利润表、资产负债表、现金流量表\n"
+            "- 分红数据：历史分红送股数据\n\n"
+            "选择要下载的数据类型，设置参数后点击开始下载。\n"
+            "所有数据保存到 DuckDB 数据库（默认 D:/StockData/stock_data.ddb）"
         )
         info_label.setStyleSheet("""
             QLabel {
@@ -879,9 +1033,13 @@ class TushareDataWidget(QWidget):
         type_group = QGroupBox("选择数据类型")
         type_layout = QGridLayout(type_group)
 
-        self.chk_market_cap = QCheckBox("💰 市值数据")
+        self.chk_daily = QCheckBox("📈 日线行情（OHLCV，回测必需）")
+        self.chk_daily.setChecked(True)
+        type_layout.addWidget(self.chk_daily, 0, 0)
+
+        self.chk_market_cap = QCheckBox("💰 市值数据（小市值策略必需）")
         self.chk_market_cap.setChecked(True)
-        type_layout.addWidget(self.chk_market_cap, 0, 0)
+        type_layout.addWidget(self.chk_market_cap, 0, 1)
 
         self.chk_financial = QCheckBox("📊 财务数据")
         self.chk_financial.setChecked(True)
@@ -1186,6 +1344,23 @@ class TushareDataWidget(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
             return
+
+        if self.chk_daily.isChecked():
+            # 计算日期范围
+            years_back = self.quick_years_spin.value()
+            end_date = datetime.now().strftime('%Y%m%d')
+            start_year = datetime.now().year - years_back
+            start_date = f"{start_year}0101"
+            task_list.append({
+                'name': '日线行情',
+                'type': 'daily',
+                'params': {
+                    'symbols': symbols,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'max_count': self.quick_stock_spin.value()
+                }
+            })
 
         if self.chk_market_cap.isChecked():
             task_list.append({
