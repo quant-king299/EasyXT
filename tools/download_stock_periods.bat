@@ -10,6 +10,9 @@ setlocal enabledelayedexpansion
 
 title 多周期历史数据下载工具
 
+:: 设置控制台编码为UTF-8
+chcp 65001 >nul 2>&1
+
 cls
 echo.
 echo ======================================================================
