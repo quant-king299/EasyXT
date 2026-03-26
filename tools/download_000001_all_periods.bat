@@ -1,5 +1,4 @@
 @echo off
-chcp 65001 >nul
 setlocal enabledelayedexpansion
 
 :: ====================================================================
@@ -11,6 +10,7 @@ setlocal enabledelayedexpansion
 
 title 下载 000001.SZ 所有周期数据
 
+cls
 echo.
 echo ======================================================================
 echo              下载 000001.SZ (平安银行) 所有周期数据
@@ -22,6 +22,7 @@ echo [1/3] 检查Python环境...
 python --version >nul 2>&1
 if errorlevel 1 (
     echo [错误] Python未安装
+    echo.
     pause
     exit /b 1
 )
@@ -32,6 +33,7 @@ echo [2/3] 检查xtquant模块...
 python -c "import xtquant" >nul 2>&1
 if errorlevel 1 (
     echo [错误] xtquant未安装
+    echo.
     pause
     exit /b 1
 )
@@ -39,9 +41,9 @@ echo [OK] xtquant已安装
 
 :: 检查QMT是否启动
 echo [3/3] 检查QMT连接状态...
-python -c "from xtquant import xtdata; client=xtdata.get_client(); exit(0 if client and client.is_connected() else 1)" >nul 2>&1
+python -c "from xtquant import xtdata; c=xtdata.get_client(); print('OK' if c and c.is_connected() else 'FAIL')" >nul 2>&1
 if errorlevel 1 (
-    echo [警告] QMT服务未启动，但将继续尝试下载
+    echo [警告] 无法确定QMT状态，但将继续尝试
 ) else (
     echo [OK] QMT服务已启动
 )
