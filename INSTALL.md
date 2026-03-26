@@ -246,6 +246,36 @@ python -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 OK')"
 
 ---
 
+### 错误 0.1：`ModuleNotFoundError: No module named 'duckdb'`
+
+**错误信息**：
+```
+ModuleNotFoundError: No module named 'duckdb'
+```
+
+**原因**：DuckDB 数据库依赖未安装
+
+**解决方案**：
+
+**方案1：安装 duckdb**
+```powershell
+pip install duckdb
+```
+
+**方案2：重新安装完整依赖**
+```powershell
+pip install -e .
+```
+
+**验证安装**：
+```powershell
+python -c "import duckdb; print('duckdb OK')"
+```
+
+**说明**：DuckDB 是数据存储核心依赖，用于本地数据管理和因子分析
+
+---
+
 ### 错误 1：`ValueError: No file/folder found for module easy_xt`
 
 **错误信息**：

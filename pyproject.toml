@@ -29,7 +29,9 @@ dependencies = [
   "pydantic>=1.10.0",
   "PyQt5>=5.15.0",
   "pillow>=8.0.0",
-  "backtrader>=1.9.78"
+  "backtrader>=1.9.78",
+  "duckdb>=0.9.0",
+  "pyarrow>=10.0.0"
 ]
 
 [project.urls]
