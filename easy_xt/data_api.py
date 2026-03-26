@@ -112,12 +112,60 @@ class DuckDBDataReader:
             import duckdb
             self.conn = duckdb.connect(self.duckdb_path)
             print(f"[OK] 成功连接数据库: {self.duckdb_path}")
+
+            # 检查 stock_daily 表是否存在
+            self._check_tables()
+
         except ImportError:
             print("[ERROR] duckdb未安装，请运行: pip install duckdb")
             raise
         except Exception as e:
             print(f"[ERROR] DuckDB连接失败: {e}")
             raise
+
+    def _check_tables(self):
+        """检查必要的数据表是否存在"""
+        try:
+            tables = self.conn.execute("SHOW TABLES").fetchall()
+            table_names = {t[0] for t in tables}
+
+            if 'stock_daily' not in table_names:
+                print()
+                print("=" * 60)
+                print("[WARN] 数据库中缺少 stock_daily 表（日线行情数据）")
+                print("=" * 60)
+                print()
+                print("当前数据库中只有以下表:", ', '.join(sorted(table_names)) if table_names else '（空）')
+                print()
+                print("你需要先下载日线数据，以下任选一种方式：")
+                print()
+                print("  方式1（推荐，不需要QMT）：")
+                print("    python run_gui.py")
+                print("    → 切换到「Tushare下载」标签页")
+                print("    → 勾选「日线行情」→ 设置股票数量和年份 → 点击下载")
+                print()
+                print("  方式2（命令行，需要Tushare Token）：")
+                print("    python tools/setup_duckdb.py")
+                print()
+                print("  方式3（需要QMT）：")
+                print("    python run_gui.py")
+                print("    → 切换到「数据管理」标签页 → 下载股票数据")
+                print()
+                print("=" * 60)
+                return
+
+            # 检查数据量
+            count = self.conn.execute("SELECT COUNT(*) FROM stock_daily").fetchone()[0]
+            if count == 0:
+                print(f"[WARN] stock_daily 表存在但数据为空（0 条记录），请先下载日线数据")
+            else:
+                date_range = self.conn.execute(
+                    "SELECT MIN(date), MAX(date), COUNT(DISTINCT stock_code) FROM stock_daily"
+                ).fetchone()
+                print(f"[OK] stock_daily: {date_range[2]} 只股票, {date_range[0]} ~ {date_range[1]}")
+
+        except Exception as e:
+            print(f"[WARN] 检查数据表失败: {e}")
 
     def get_stock_list(self, limit: Optional[int] = None) -> List[str]:
         """
@@ -182,7 +230,12 @@ class DuckDBDataReader:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 数据查询失败: {e}")
+            err_msg = str(e)
+            if 'stock_daily' in err_msg and 'does not exist' in err_msg:
+                print(f"[ERROR] 数据查询失败: stock_daily 表不存在")
+                print("        请先下载日线数据: python run_gui.py → Tushare下载 → 勾选「日线行情」")
+            else:
+                print(f"[ERROR] 数据查询失败: {e}")
             return pd.DataFrame()
 
     def get_stock_info(self, stock_code: str) -> Optional[Dict]:

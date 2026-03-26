@@ -32,8 +32,26 @@ from easy_xt.data_api import DuckDBDataReader
 # 配置
 # ============================================================
 
-# DuckDB数据库路径
-DUCKDB_PATH = r'D:/StockData/stock_data.ddb'
+# DuckDB数据库路径（自动检测常见位置，也可手动指定）
+def _detect_duckdb_path():
+    """自动检测DuckDB数据库路径"""
+    candidates = [
+        'D:/StockData/stock_data.ddb',
+        'C:/StockData/stock_data.ddb',
+        'E:/StockData/stock_data.ddb',
+        './data/stock_data.ddb',
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    # 环境变量
+    env = os.environ.get('DUCKDB_PATH')
+    if env:
+        return env
+    # 默认路径（数据库文件可能还未创建）
+    return candidates[0]
+
+DUCKDB_PATH = _detect_duckdb_path()
 
 # 要分析的股票列表
 # 可用股票查询方法：

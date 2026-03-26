@@ -14,6 +14,7 @@
 
 import os
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 
@@ -143,42 +144,156 @@ except Exception as e:
 # --- 3b: 下载日线数据 ---
 print()
 print(">> 下载日线行情数据...")
+
+daily_downloaded = False
+
+# 方式A：使用 Tushare 下载（不需要 QMT，推荐）
 try:
-    factor_platform_path = project_root / "101因子" / "101因子分析平台" / "src"
-    if str(factor_platform_path) not in sys.path:
-        sys.path.insert(0, str(factor_platform_path))
+    import tushare as ts
+    import pandas as pd
 
-    from data_manager import LocalDataManager
-
-    dm = LocalDataManager()
+    ts.set_token(token)
+    pro = ts.pro_api()
 
     # 获取股票列表
-    print("获取A股股票列表...")
-    all_stocks = dm.get_all_stocks_list(include_st=True, include_sz=True, include_kc=True)
-    if all_stocks:
-        stock_list = all_stocks[:100]  # 快速模式先下100只
-        if choice == "2":
-            stock_list = all_stocks[:500]  # 完整模式下500只
-        print(f"将下载 {len(stock_list)} 只股票的日线数据")
-    else:
-        print("无法获取股票列表，使用默认列表")
-        stock_list = ['000001.SZ', '600000.SH', '600519.SH']
+    print("获取A股股票列表（Tushare）...")
+    stock_list_df = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+    stock_list = stock_list_df['ts_code'].tolist()
 
-    # 下载日线数据
-    dm.download_and_save(
-        symbols=stock_list,
-        start_date=daily_start_date.replace('-', ''),
-        end_date=end_date.replace('-', ''),
-        symbol_type='stock'
-    )
-    print("日线数据下载完成")
-except ImportError as e:
-    print(f"日线数据下载失败（缺少依赖）: {e}")
-    print("提示：日线数据下载需要 QMT/xtquant 环境，请确保 QMT 已启动")
-    print("你也可以稍后通过以下方式补充日线数据：")
-    print("  python run_gui.py  → 切换到'本地数据管理'标签页")
+    # 限制数量
+    max_stocks = 100
+    if choice == "2":
+        max_stocks = 500
+    elif choice == "3":
+        max_stocks = len(stock_list)
+    stock_list = stock_list[:max_stocks]
+    print(f"将下载 {len(stock_list)} 只股票的日线数据（Tushare）")
+
+    # 连接数据库
+    import duckdb
+    db_path = None
+    for candidate in ['D:/StockData/stock_data.ddb', 'C:/StockData/stock_data.ddb',
+                     'E:/StockData/stock_data.ddb', './data/stock_data.ddb']:
+        if os.path.exists(candidate):
+            db_path = candidate
+            break
+    if not db_path:
+        db_path = 'D:/StockData/stock_data.ddb'
+        os.makedirs(os.path.dirname(db_path), exist_ok=True)
+
+    conn = duckdb.connect(db_path)
+
+    # 确保表存在
+    try:
+        conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
+    except:
+        conn.execute("""
+            CREATE TABLE stock_daily (
+                stock_code VARCHAR, symbol_type VARCHAR DEFAULT 'stock', date DATE,
+                period VARCHAR DEFAULT '1d', open DOUBLE, high DOUBLE, low DOUBLE,
+                close DOUBLE, volume BIGINT, amount DOUBLE,
+                adjust_type VARCHAR DEFAULT 'none', factor DOUBLE DEFAULT 1.0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (stock_code, date, period, adjust_type)
+            )
+        """)
+        print("已创建 stock_daily 表")
+
+    start_time = time.time()
+    success_count = 0
+    total_records = 0
+
+    for i, ts_code in enumerate(stock_list, 1):
+        try:
+            df = pro.daily(
+                ts_code=ts_code,
+                start_date=daily_start_date,
+                end_date=end_date,
+                fields='ts_code,trade_date,open,high,low,close,vol,amount'
+            )
+            if df is not None and not df.empty:
+                df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+                df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+                df['symbol_type'] = 'stock'
+                df['period'] = '1d'
+                df['adjust_type'] = 'none'
+                df['factor'] = 1.0
+                df['created_at'] = pd.Timestamp.now()
+                df['updated_at'] = pd.Timestamp.now()
+
+                cols = ['stock_code', 'symbol_type', 'date', 'period',
+                        'open', 'high', 'low', 'close', 'volume', 'amount',
+                        'adjust_type', 'factor', 'created_at', 'updated_at']
+                df = df[cols]
+
+                conn.execute(f"DELETE FROM stock_daily WHERE stock_code = '{ts_code}' AND period = '1d' AND adjust_type = 'none'")
+                df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')
+
+                success_count += 1
+                total_records += len(df)
+
+            if i % 50 == 0 or i == len(stock_list):
+                elapsed = time.time() - start_time
+                print(f"  [{i}/{len(stock_list)}] 成功: {success_count} | 记录: {total_records:,} | 耗时: {elapsed/60:.1f}分钟")
+
+        except Exception as e:
+            if success_count < 5:  # 前几只失败才打印详情
+                print(f"  {ts_code} 失败: {str(e)[:50]}")
+
+    conn.close()
+    daily_downloaded = True
+    print(f"日线数据下载完成！成功: {success_count}, 总记录: {total_records:,}")
+
+except ImportError:
+    print("Tushare 未安装，尝试使用 QMT 方式下载日线数据...")
 except Exception as e:
-    print(f"日线数据下载失败: {e}")
+    print(f"Tushare 方式下载失败: {e}")
+    print("尝试使用 QMT 方式下载...")
+
+# 方式B：使用 QMT / LocalDataManager 下载（降级方案）
+if not daily_downloaded:
+    try:
+        factor_platform_path = project_root / "101因子" / "101因子分析平台" / "src"
+        if str(factor_platform_path) not in sys.path:
+            sys.path.insert(0, str(factor_platform_path))
+
+        from data_manager import LocalDataManager
+
+        dm = LocalDataManager()
+
+        print("获取A股股票列表（QMT）...")
+        all_stocks = dm.get_all_stocks_list(include_st=True, include_sz=True, include_kc=True)
+        if all_stocks:
+            stock_list = all_stocks[:100]
+            if choice == "2":
+                stock_list = all_stocks[:500]
+            print(f"将下载 {len(stock_list)} 只股票的日线数据（QMT）")
+        else:
+            print("无法获取股票列表，使用默认列表")
+            stock_list = ['000001.SZ', '600000.SH', '600519.SH']
+
+        dm.download_and_save(
+            symbols=stock_list,
+            start_date=daily_start_date.replace('-', ''),
+            end_date=end_date.replace('-', ''),
+            symbol_type='stock'
+        )
+        daily_downloaded = True
+        print("日线数据下载完成（QMT方式）")
+
+    except ImportError as e:
+        print(f"QMT 方式也失败（缺少依赖）: {e}")
+    except Exception as e:
+        print(f"QMT 方式下载失败: {e}")
+
+if not daily_downloaded:
+    print()
+    print("[WARN] 日线数据下载失败！两种方式均不可用。")
+    print("请尝试以下方式手动下载：")
+    print("  python run_gui.py  → 「Tushare下载」标签页 → 勾选「日线行情」→ 下载")
+    print("  或")
+    print("  python run_gui.py  → 「数据管理」标签页 → 下载股票数据")
 
 # ==================== 步骤4：验证数据 ====================
 print()

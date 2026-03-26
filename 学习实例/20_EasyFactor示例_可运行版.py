@@ -16,7 +16,21 @@ print(" " * 30 + "EasyFactor 使用示例 (DuckDB版)")
 print("=" * 90)
 
 # 配置DuckDB数据库路径（请修改为你的实际路径）
-DUCKDB_PATH = r'D:/StockData/stock_data.ddb'
+# DuckDB数据库路径（自动检测常见位置，也可手动指定）
+def _detect_duckdb_path():
+    candidates = [
+        'D:/StockData/stock_data.ddb',
+        'C:/StockData/stock_data.ddb',
+        'E:/StockData/stock_data.ddb',
+        './data/stock_data.ddb',
+    ]
+    for path in candidates:
+        if os.path.exists(path):
+            return path
+    env = os.environ.get('DUCKDB_PATH')
+    return env if env else candidates[0]
+
+DUCKDB_PATH = _detect_duckdb_path()
 
 # 创建EasyFactor实例
 print("\n[步骤1] 创建EasyFactor实例...")
