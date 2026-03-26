@@ -139,7 +139,282 @@ DuckDB > QMT > Tushare > akshare > qstock
 
 ---
 
-### 3. Tushare配置问题
+### 3. QMT历史数据补充（重要）⭐
+
+#### 🚨 问题描述
+
+**错误信息**：
+```
+ERROR: 无法获取股票 ['000001.SZ'] 的数据。可能的原因：
+1. 需要先在迅投客户端中下载历史数据
+2. 股票代码错误
+3. 网络连接问题
+4. 迅投服务未正常运行
+```
+
+**现象**：
+- QMT客户端能连接成功
+- `download_history_data2()` 下载命令执行完成
+- 但 `get_market_data_ex()` 获取数据时返回空
+- 提示需要先在迅投客户端中下载历史数据
+
+#### 🔍 问题原因
+
+**QMT工作机制**：
+```
+1. 代码调用 download_history_data2()
+   ↓
+2. QMT从服务器下载数据到本地数据库
+   ↓
+3. 代码调用 get_market_data_ex()
+   ↓
+4. QMT从本地数据库读取数据
+   ↓
+5. 如果本地数据库为空 → 返回空 → 报错！❌
+```
+
+**根本原因**：
+- QMT客户端刚安装，本地数据库为空
+- 或者只连接了QMT但没有下载过历史数据
+- 需要先在QMT中补充历史数据才能使用
+
+#### ✅ 解决方案
+
+**⭐ 方案一：使用项目提供的一键下载工具（强烈推荐）**
+
+项目提供了完整的A股数据下载工具，可以一键下载深圳和上海两个交易所的全部A股日线数据。
+
+**工具位置**：`tools/` 目录
+
+```
+miniqmt扩展/
+├── tools/
+│   ├── download_sz_stocks.py      # 下载深圳股票日线数据
+│   ├── download_sh_stocks.py      # 下载上海股票日线数据
+│   ├── download_all_stocks.py     # 下载全部A股日线数据
+│   └── download_all_stock_data.bat # Windows一键批处理脚本
+```
+
+**使用方法**：
+
+**方法1：一键下载全部A股（Windows推荐）**
+```bash
+# 直接双击运行
+tools\download_all_stock_data.bat
+
+# 或在命令行运行
+cd tools
+download_all_stock_data.bat
+```
+
+**方法2：使用Python脚本**
+```bash
+# 下载全部A股（推荐）
+cd tools
+python download_all_stocks.py
+
+# 或分别下载
+python download_sz_stocks.py  # 下载深圳股票
+python download_sh_stocks.py  # 下载上海股票
+```
+
+**方法3：在代码中调用**
+```python
+from easy_xt.data_api import DataAPI
+
+api = DataAPI()
+api.connect()
+
+# 批量下载历史数据
+results = api.download_history_data_batch(
+    stock_list=['000001.SZ', '600000.SH'],  # 股票列表
+    period='1d',                             # 日线
+    start_time='20200101',                    # 开始时间
+    end_time='20241231'                       # 结束时间
+)
+
+# 查看下载结果
+for stock, success in results.items():
+    if success:
+        print(f"✓ {stock} 下载成功")
+    else:
+        print(f"✗ {stock} 下载失败")
+```
+
+**下载说明**：
+- ⚡ **快速模式**：下载最近1年数据，约10-30分钟
+- 📊 **完整模式**：下载全部历史数据，约1-3小时
+- 🔄 **后台运行**：可以最小化QMT客户端，后台继续下载
+- 💾 **数据存储**：下载的数据保存在QMT本地数据库中
+
+---
+
+**方案二：在QMT客户端手动下载**
+
+如果只想下载少量股票数据：
+
+1. **打开QMT客户端**
+
+2. **找到数据下载入口**（不同版本位置可能不同）：
+   ```
+   方式1：终端 → 品种管理 → 下载历史数据
+   方式2：数据管理 → 历史数据下载
+   方式3：右键点击股票 → 下载数据
+   ```
+
+3. **添加测试股票**：
+   ```
+   股票代码：000001.SZ（平安银行）
+   或：600000.SH（浦发银行）
+   或：000002.SZ（万科A）
+   ```
+
+4. **选择时间范围**：
+   ```
+   建议：最近1年或更多
+   开始日期：20230101
+   结束日期：当前日期
+   ```
+
+5. **等待下载完成**
+   - QMT会显示下载进度
+   - 下载完成后即可使用
+
+---
+
+**方案三：安装pytdx，自动降级到TDX（推荐，一劳永逸）**
+
+如果不想配置QMT数据，让系统自动使用TDX数据源：
+
+```bash
+# 安装pytdx
+pip install pytdx
+
+# 测试数据源
+python -c "from easy_xt.data_api import DataAPI; api = DataAPI(); api.connect(); print(api.get_active_source())"
+```
+
+**预期输出**：
+```
+[Connecting to data source...]
+  Trying QMT (xtquant)...
+  [WARN] QMT connection failed
+  Trying TDX (通达信)...
+  [OK] Using TDX (通达信) as data source  ← 自动降级！
+tdx
+```
+
+**TDX的优势**：
+- ✅ 不需要下载数据，直接从通达信服务器获取
+- ✅ 适合测试和学习
+- ✅ 避免QMT数据管理问题
+- ✅ 支持实时行情和历史数据
+
+---
+
+#### 📊 三种方案对比
+
+| 方案 | 优点 | 缺点 | 适用场景 | 推荐度 |
+|------|------|------|---------|--------|
+| **一键下载工具** | 一次性下载全部数据，后续使用最快 | 首次下载耗时（1-3小时） | 长期使用、生产环境 | ⭐⭐⭐⭐⭐ |
+| **QMT手动下载** | 只下载需要的股票 | 手动操作繁琐 | 临时测试、少量股票 | ⭐⭐⭐ |
+| **安装pytdx** | 无需下载，立即可用 | 依赖网络，速度较慢 | 快速测试、学习环境 | ⭐⭐⭐⭐ |
+
+---
+
+#### 🎯 推荐配置
+
+**本地开发环境**：
+```bash
+# 安装pytdx，自动降级到TDX
+pip install pytdx
+```
+
+**生产/实盘环境**：
+```bash
+# 使用一键下载工具，下载全部A股数据
+cd tools
+python download_all_stocks.py
+```
+
+**测试环境**：
+```python
+# 先用TDX测试，确认代码无误后再用QMT
+from easy_xt.data_api import DataAPI
+
+api = DataAPI()
+api.connect()
+
+# 查看当前数据源
+print(f"数据源: {api.get_active_source()}")
+```
+
+---
+
+#### ⚠️ 注意事项
+
+1. **首次下载必须完整**：
+   - QMT需要至少下载一次历史数据
+   - 建议下载最近1-3年的数据
+   - 下载完成后重启QMT客户端
+
+2. **数据更新**：
+   - QMT会在交易时间自动更新当日数据
+   - 如需更新历史数据，重新运行下载工具
+   - 建议每周或每月更新一次
+
+3. **网络要求**：
+   - 下载时需要稳定的网络连接
+   - 建议在网络良好时进行下载
+   - 可以暂停后继续下载
+
+4. **磁盘空间**：
+   - 全部A股数据约2-5GB
+   - 确保磁盘有足够空间
+
+---
+
+#### 🔧 故障排查
+
+**问题1：下载工具运行失败**
+```bash
+# 检查QMT是否启动
+# 确保QMT客户端已登录
+
+# 检查xtquant是否安装
+python -c "import xtquant.xtdata as xt; print('OK')"
+
+# 检查QMT连接
+python -c "from easy_xt.data_api import DataAPI; api = DataAPI(); print(api.connect())"
+```
+
+**问题2：下载速度慢**
+- 减少下载数据量（只下载需要的股票）
+- 缩短时间范围（只下载最近1年）
+- 分批下载（多次运行，每次下载不同时间段）
+
+**问题3：下载后仍然报错**
+```python
+# 验证数据是否真的下载成功
+import xtquant.xtdata as xt
+
+# 直接查询本地数据
+data = xt.get_local_data(
+    field_list=['close'],
+    stock_list=['000001.SZ'],
+    period='1d',
+    count=10
+)
+
+if '000001.SZ' in data and data['000001.SZ'] is not None:
+    print(f"✓ 数据已下载: {len(data['000001.SZ'])}条")
+else:
+    print("✗ 数据未下载或下载失败")
+```
+
+---
+
+### 4. Tushare配置问题
 
 #### 🚨 问题：Token配置后仍然报错
 
@@ -196,7 +471,7 @@ setx TUSHARE_TOKEN "你的Token"
 
 ## 安装相关
 
-### 4. xtquant安装失败
+### 5. xtquant安装失败
 
 #### 🚨 错误信息
 ```
@@ -228,7 +503,7 @@ ImportError: cannot import name 'datacenter' from 'xtquant'
 
 ---
 
-### 5. 依赖安装失败
+### 6. 依赖安装失败
 
 #### 🚨 常见错误
 
@@ -264,7 +539,7 @@ pip install -e ./easy_xt
 
 ## 运行相关
 
-### 6. GUI启动失败
+### 7. GUI启动失败
 
 #### 🚨 错误信息
 ```
@@ -286,7 +561,7 @@ pip install -r requirements.txt
 
 ---
 
-### 7. 回测报错
+### 8. 回测报错
 
 #### 🚨 常见错误
 
@@ -325,7 +600,7 @@ api.init_data()  # 使用QMT数据
 
 ---
 
-### 8. 策略运行失败
+### 9. 策略运行失败
 
 #### 🚨 常见错误
 
@@ -362,7 +637,7 @@ api.add_account('模拟账户ID')
 
 ## 性能相关
 
-### 9. 回测速度慢
+### 10. 回测速度慢
 
 #### 📊 性能对比
 
@@ -402,7 +677,7 @@ df['ma5'] = df['close'].rolling(5).mean()
 
 ---
 
-### 10. 内存占用过高
+### 11. 内存占用过高
 
 #### 🚨 问题
 ```
