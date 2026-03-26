@@ -698,7 +698,235 @@ class DataAPI:
                 raise
             ErrorHandler.log_error(f"获取价格数据失败: {str(e)}")
             raise DataError(f"获取价格数据失败: {str(e)}")
-    
+
+    def _get_price_tdx(self, codes, start, end, period, count, fields, adjust):
+        """使用TDX获取价格数据"""
+        if not self._tdx_provider:
+            raise ConnectionError("TDX数据源未初始化")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用connect()")
+
+        # 标准化股票代码
+        codes = StockCodeUtils.normalize_codes(codes)
+
+        # 处理时间参数
+        from datetime import datetime
+        if count:
+            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
+            start_date = None
+        else:
+            start_date = TimeUtils.normalize_date(start) if start else '20200101'
+            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
+            count = 1000  # TDX使用count参数
+
+        # 处理字段
+        if not fields:
+            fields = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        elif isinstance(fields, str):
+            fields = [fields]
+        elif not isinstance(fields, list):
+            fields = list(fields)
+
+        # 周期映射
+        period_map = {
+            '1m': '1',
+            '5m': '5',
+            '15m': '15',
+            '30m': '30',
+            '1h': '60',
+            '1d': 'D',
+            '1w': 'W',
+            '1M': 'M'
+        }
+        tdx_period = period_map.get(period, 'D')
+
+        try:
+            # 批量获取K线数据
+            all_data = []
+            for code in codes:
+                try:
+                    # 移除市场后缀，TDX provider会自动处理
+                    clean_code = code.split('.')[0]
+
+                    kline_data = self._tdx_provider.get_kline_data(
+                        code=clean_code,
+                        period=tdx_period,
+                        count=min(count, 1000)  # TDX限制每次最多1000条
+                    )
+
+                    if kline_data:
+                        for item in kline_data:
+                            record = {
+                                'time': item.get('datetime', ''),
+                                'code': code
+                            }
+
+                            # 添加字段
+                            if 'open' in fields:
+                                record['open'] = item.get('open', 0)
+                            if 'high' in fields:
+                                record['high'] = item.get('high', 0)
+                            if 'low' in fields:
+                                record['low'] = item.get('low', 0)
+                            if 'close' in fields:
+                                record['close'] = item.get('close', 0)
+                            if 'volume' in fields:
+                                record['volume'] = item.get('volume', 0)
+                            if 'amount' in fields:
+                                record['amount'] = item.get('amount', 0)
+
+                            all_data.append(record)
+
+                except Exception as e:
+                    ErrorHandler.log_error(f"获取TDX数据失败 {code}: {e}")
+                    continue
+
+            if not all_data:
+                raise DataError(f"无法获取股票 {codes} 的TDX数据")
+
+            # 创建DataFrame
+            df = pd.DataFrame(all_data)
+
+            # 处理时间格式
+            try:
+                df['time'] = pd.to_datetime(df['time'], errors='coerce')
+                df = df.dropna(subset=['time'])
+            except Exception as e:
+                ErrorHandler.log_error(f"时间格式转换失败: {e}")
+
+            # 过滤时间范围
+            if start_date:
+                df = df[df['time'] >= pd.to_datetime(start_date)]
+            if end_date:
+                df = df[df['time'] <= pd.to_datetime(end_date)]
+
+            if df.empty:
+                raise DataError(f"时间范围内无数据: {start_date} - {end_date}")
+
+            return df.sort_values(['code', 'time']).reset_index(drop=True)
+
+        except Exception as e:
+            if isinstance(e, (ConnectionError, DataError)):
+                raise
+            ErrorHandler.log_error(f"获取TDX价格数据失败: {str(e)}")
+            raise DataError(f"获取TDX价格数据失败: {str(e)}")
+
+    def _get_price_eastmoney(self, codes, start, end, period, count, fields, adjust):
+        """使用Eastmoney获取价格数据"""
+        if not self._eastmoney_provider:
+            raise ConnectionError("Eastmoney数据源未初始化")
+
+        if not self._connected:
+            raise ConnectionError("数据服务未连接，请先调用connect()")
+
+        # 标准化股票代码
+        codes = StockCodeUtils.normalize_codes(codes)
+
+        # 处理时间参数
+        from datetime import datetime
+        if count:
+            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
+            start_date = None
+        else:
+            start_date = TimeUtils.normalize_date(start) if start else '20200101'
+            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
+            count = 1000  # Eastmoney使用count参数
+
+        # 处理字段
+        if not fields:
+            fields = ['open', 'high', 'low', 'close', 'volume', 'amount']
+        elif isinstance(fields, str):
+            fields = [fields]
+        elif not isinstance(fields, list):
+            fields = list(fields)
+
+        # 周期映射
+        period_map = {
+            '1m': '1',
+            '5m': '5',
+            '15m': '15',
+            '30m': '30',
+            '1h': '60',
+            '1d': 'D',
+            '1w': 'W',
+            '1M': 'M'
+        }
+        em_period = period_map.get(period, 'D')
+
+        try:
+            # 批量获取K线数据
+            all_data = []
+            for code in codes:
+                try:
+                    # 移除市场后缀，Eastmoney provider会自动处理
+                    clean_code = code.split('.')[0]
+
+                    kline_data = self._eastmoney_provider.get_kline_data(
+                        code=clean_code,
+                        period=em_period,
+                        count=min(count, 1000),
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+
+                    if kline_data:
+                        for item in kline_data:
+                            record = {
+                                'time': item.get('datetime', ''),
+                                'code': code
+                            }
+
+                            # 添加字段
+                            if 'open' in fields:
+                                record['open'] = item.get('open', 0)
+                            if 'high' in fields:
+                                record['high'] = item.get('high', 0)
+                            if 'low' in fields:
+                                record['low'] = item.get('low', 0)
+                            if 'close' in fields:
+                                record['close'] = item.get('close', 0)
+                            if 'volume' in fields:
+                                record['volume'] = item.get('volume', 0)
+                            if 'amount' in fields:
+                                record['amount'] = item.get('amount', 0)
+
+                            all_data.append(record)
+
+                except Exception as e:
+                    ErrorHandler.log_error(f"获取Eastmoney数据失败 {code}: {e}")
+                    continue
+
+            if not all_data:
+                raise DataError(f"无法获取股票 {codes} 的Eastmoney数据")
+
+            # 创建DataFrame
+            df = pd.DataFrame(all_data)
+
+            # 处理时间格式
+            try:
+                df['time'] = pd.to_datetime(df['time'], errors='coerce')
+                df = df.dropna(subset=['time'])
+            except Exception as e:
+                ErrorHandler.log_error(f"时间格式转换失败: {e}")
+
+            # 过滤时间范围
+            if start_date:
+                df = df[df['time'] >= pd.to_datetime(start_date)]
+            if end_date:
+                df = df[df['time'] <= pd.to_datetime(end_date)]
+
+            if df.empty:
+                raise DataError(f"时间范围内无数据: {start_date} - {end_date}")
+
+            return df.sort_values(['code', 'time']).reset_index(drop=True)
+
+        except Exception as e:
+            if isinstance(e, (ConnectionError, DataError)):
+                raise
+            ErrorHandler.log_error(f"获取Eastmoney价格数据失败: {str(e)}")
+            raise DataError(f"获取Eastmoney价格数据失败: {str(e)}")
+
     @ErrorHandler.handle_api_error
     def get_current_price(self, codes: Union[str, List[str]]) -> pd.DataFrame:
         """
