@@ -95,8 +95,5 @@
       "min_trade_amount": 100,
       "min_trade_amount_comment": "最小交易数量（手/股）"
     }
-  },
-  "logging": {
-    "level": "DEBUG"
   }
 }

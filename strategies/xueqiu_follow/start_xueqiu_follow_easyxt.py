@@ -278,9 +278,24 @@ def load_config() -> Optional[Dict[str, Any]]:
         portfolios = config_data.get('portfolios', {}).get('portfolios', [])
         portfolio_names = [p.get('name', '未知') for p in portfolios if p.get('enabled', False)]
         
-        # 检查雪球cookie配置
-        xueqiu_cookie = config_data.get('xueqiu_settings', {}).get('cookie', '')
+        # 检查雪球cookie配置（优先从.env读取）
+        xueqiu_cookie = ''
+        # current_dir = strategies/xueqiu_follow，向上两级到项目根目录
+        env_cookie_path = os.path.join(os.path.dirname(os.path.dirname(current_dir)), '.env')
+        if os.path.exists(env_cookie_path):
+            with open(env_cookie_path, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith('XUEQIU_COOKIE='):
+                        xueqiu_cookie = line[len('XUEQIU_COOKIE='):]
+                        break
+        if not xueqiu_cookie:
+            xueqiu_cookie = config_data.get('xueqiu_settings', {}).get('cookie', '')
         if xueqiu_cookie:
+            # 将.env中的cookie注入到config_data，供后续使用
+            if 'xueqiu_settings' not in config_data:
+                config_data['xueqiu_settings'] = {}
+            config_data['xueqiu_settings']['cookie'] = xueqiu_cookie
             print("✅ 雪球cookie配置已加载")
         else:
             print("⚠️ 雪球cookie未配置，可能无法获取真实持仓数据")

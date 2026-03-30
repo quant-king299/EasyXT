@@ -196,8 +196,8 @@
   },
   "xueqiu_settings": {
     "xueqiu_settings_comment": "雪球登录与用户信息（敏感字段谨慎使用）",
-    "cookie": "ookiesu=511773730039143; device_id=5305e3bc6df3b50447584439cb4241e1; Hm_lvt_1db88642e346389874251b5a1eded6e3=1773730027; HMACCOUNT=607E458517C1B03D; xq_a_token=ac430ef3ae4a0aeaeab14feda3b650a994242455; xqat=ac430ef3ae4a0aeaeab14feda3b650a994242455; xq_id_token=eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiJ9.eyJ1aWQiOjg3NzMyNTgxNzYsImlzcyI6InVjIiwiZXhwIjoxNzc2MzIyMTk5LCJjdG0iOjE3NzM3MzAxOTk3MDMsImNpZCI6ImQ5ZDBuNEFadXAifQ.hwspuArGXkyiBVmB-M-3Oo40_QDyw7J63MdbdmXJuWDuQ6NQWZUTCjBjug-Zlq7AKUf8tFG8cvln4R5M45s5313rWMowpiE8RbK_KLedhfki7-f4Jy0zcuEXOBnTC-dzogfI8PMOuM4WWt79FmZfJ82I3n_k-iQ0Z2fYBhysoQ_mPMAo7I6QJ4vCBsniPjdtqsuua25t4MpylSihroaC2XttEpAtk0726zN2Ky0GCkaJXJzRVHFXjKRg58MnCS6mLWpnydo-Vc7Q4XYcnYe9-m-KtiO-WHzz0XDSeb7D25_0f2Y7MfSrjuAC5urn9tM0CjcvlVz9QfM_Vvim-eGurg; xq_r_token=df48d4397c0460669dfd42aac0975456069e5671; xq_is_login=1; u=8773258176; is_overseas=0; Hm_lpvt_1db88642e346389874251b5a1eded6e3=1773731487; ssxmod_itna=1-eq0xcDyD0AD=0Qqi7qitaDOeG7YiOaq7DzxCvyK0C7DLxn4GQDUlYND7qgD4RTViq4iGE7nw3wKDGXxKKxiNDAg40iDC8mLGP260iupqGhYWR3eOfGG4IN8jQWqpjOkxZDccNHyxZgo5xGLDY=DCMx7KEhrDYYLDBYD74G_DDeDigrDzTTDtqD9lDDFfeDLDAUNOr_4LCD8mrxQx7fbKeDuDGUOwb4QlDDgfeD_lDDMKeG2lG9TyBEGceGW0WxD0wxKAbhhvW8Eo6FCy6ysPKqG5nBGpFE=ZQn3xYE4TFKQs5WNmze7muVrWe7iGr7G9WG3nDPlGkjYlChPYeqWmq7GwCqe7GkDYUe0rDGIlADaetKr/_5ZjyYYAVWRDsGdabNWRKZxQUh4nYxYTbzibBhN_Gx80i1ixXiqrDQQi_FSKhrPeD; ssxmod_itna2=1-eq0xcDyD0AD=0Qqi7qitaDOeG7YiOaq7DzxCvyK0C7DLxn4GQDUlYND7qgD4RTViq4iGE7nw3wDnnA_Q52nDQqKD0yGxNzQ4Iu_756LyNq=YMAd8P4Daeaeab14feda3b650a994242455",
-    "cookie_comment": "雪球登录cookie（敏感信息，不建议公开传播）",
+    "cookie": "",
+    "cookie_comment": "雪球登录cookie已迁移至.env文件（XUEQIU_COOKIE），此处留空",
     "update_time": "2025-10-16T12:00:00",
     "update_time_comment": "上述cookie更新时间（ISO格式）",
     "user_id": "8773258176",

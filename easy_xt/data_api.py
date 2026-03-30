@@ -526,7 +526,6 @@ class DataAPI:
         # 标准化股票代码
         # normalize_codes 已经能够正确处理字符串（包括逗号分隔的字符串）和列表
         codes = StockCodeUtils.normalize_codes(codes)
-        print(f"[DEBUG] data_api.py get_price: codes类型={type(codes)}, 值={codes}")
 
         # 处理时间参数
         from datetime import datetime

@@ -65,6 +65,10 @@
 - 安装报错？运行失败？性能问题？
 - 这里收集了最常见的问题和解决方案！
 
+### 🏗️ 我想了解系统架构
+
+→ 📐 **[系统架构文档 (ARCHITECTURE)](ARCHITECTURE.md)** - 了解项目整体设计、模块关系和技术选型
+
 ---
 
 ## 🌍 跨平台支持
@@ -272,7 +276,7 @@ result.print_summary()
 
 **💡 提示**：
 - ✅ **不需要DuckDB** - 无参数即可使用QMT/Tushare数据
-- 🚀 **DuckDB是可选的** - 如果有，速度提升10倍（查看[快速开始指南](QUICK_START.md)）
+- 🚀 **DuckDB是可选的** - 如果有，速度提升10倍
 
 **📖 详细文档**：[easyxt_backtest/README.md](easyxt_backtest/README.md)
 

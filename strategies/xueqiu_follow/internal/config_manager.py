@@ -11,6 +11,27 @@ from pathlib import Path
 import logging
 # from ..utils.crypto_utils import encrypt_password, decrypt_password
 
+
+def _load_env_cookie():
+    """从项目根目录的 .env 文件加载 XUEQIU_COOKIE"""
+    # 向上查找项目根目录（包含 .env 文件的目录）
+    current = Path(__file__).resolve()
+    for parent in current.parents:
+        env_path = parent / '.env'
+        if env_path.exists():
+            try:
+                with open(env_path, 'r', encoding='utf-8') as f:
+                    for line in f:
+                        line = line.strip()
+                        if line.startswith('XUEQIU_COOKIE='):
+                            cookie = line[len('XUEQIU_COOKIE='):]
+                            if cookie:
+                                return cookie
+            except Exception:
+                pass
+            break
+    return None
+
 logger = logging.getLogger(__name__)
 
 
@@ -80,7 +101,15 @@ class ConfigManager:
                 
                 # 加载完整的统一配置，包括settings、xueqiu_settings、xueqiu等所有部分
                 self._settings = config_data
-                
+
+                # 从 .env 文件注入雪球 cookie（覆盖配置文件中的空值）
+                env_cookie = _load_env_cookie()
+                if env_cookie:
+                    if 'xueqiu_settings' not in self._settings:
+                        self._settings['xueqiu_settings'] = {}
+                    self._settings['xueqiu_settings']['cookie'] = env_cookie
+                    logger.info("从.env文件加载XUEQIU_COOKIE成功")
+
                 logger.info("统一配置文件加载成功")
                 
                 # 然后尝试加载雪球专用配置文件并合并配置
