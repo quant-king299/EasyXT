@@ -12,7 +12,6 @@ import os
 project_path = os.path.join(os.path.dirname(__file__), '..', '..')
 sys.path.insert(0, project_path)
 
-from src.easyxt_adapter.api_wrapper import get_easyxt_instance
 from src.factor_engine.alpha101 import Alpha101Factors
 from src.factor_engine.alpha191 import Alpha191Factors, calculate_alpha191_factor
 
@@ -22,12 +21,19 @@ class FactorCalculator:
     因子计算器主类
     整合数据获取、因子计算、分析功能
     """
-    
+
     def __init__(self):
         """初始化因子计算器"""
-        self.easyxt_api = get_easyxt_instance()
+        self.easyxt_api = None  # 延迟初始化
         self.factor_data = {}
         self.raw_data = None
+
+    def _get_api(self):
+        """获取API实例（延迟初始化）"""
+        if self.easyxt_api is None:
+            from src.easyxt_adapter.api_wrapper import get_easyxt_instance
+            self.easyxt_api = get_easyxt_instance()
+        return self.easyxt_api
     
     def load_data(self, symbols: List[str], start_date: str, end_date: str,
                   fields: Optional[List[str]] = None) -> pd.DataFrame:
@@ -44,7 +50,7 @@ class FactorCalculator:
             pd.DataFrame: 加载的数据
         """
         print(f"正在加载数据: {symbols} 从 {start_date} 到 {end_date}")
-        self.raw_data = self.easyxt_api.get_market_data(
+        self.raw_data = self._get_api().get_market_data(
             symbols=symbols,
             start_date=start_date,
             end_date=end_date,

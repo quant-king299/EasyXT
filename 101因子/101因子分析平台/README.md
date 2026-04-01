@@ -10,6 +10,44 @@
 - 📈 **完整分析工具**：IC分析、分层回测、绩效评估
 - 🔌 **EasyXT集成**：无缝对接EasyXT数据接口
 
+## 📌 数据获取（重要）
+
+在使用本平台前，您需要准备股票数据。
+
+### 推荐数据源：Tushare
+
+🔗 **[Tushare注册链接（含邀请码344724）](https://tushare.pro/weborder/#/login?reg=344724)**
+
+**为什么推荐Tushare？**
+- ✅ 数据质量高，覆盖A股、港股、美股
+- ✅ 免费版120次/天，足够学习使用
+- ✅ API文档完善，调用简单
+- ✅ 社区活跃，问题容易解决
+- ✅ 通过本链接注册可获得额外积分
+
+**注册步骤：**
+1. 点击上方链接注册
+2. 完善个人信息
+3. 获取API Token
+4. 开始调用API下载数据
+
+**快速示例：**
+```python
+import tushare as ts
+ts.set_token('your_token')
+pro = ts.pro_api()
+df = pro.daily(ts_code='000001.SZ', start_date='20230101', end_date='20231231')
+```
+
+**其他数据源：**
+- QMT/MiniQMT - 本地行情软件
+- AKShare - 免费开源数据库
+- Baostock - 免费历史数据
+
+> 💡 **提示**: 更多数据获取方法请查看 [疑难问题解答](docs/assets/TROUBLESHOOTING.md)
+
+---
+
 ## 🚀 快速启动
 
 ### 方式1：启动增强版UI（推荐）
@@ -144,7 +182,12 @@ results = engine.execute()
 - **[USER_GUIDE.md](USER_GUIDE.md)** - 详细使用指南
   - 界面操作说明
   - 节点配置方法
-  - 常见问题解答
+
+- **[TROUBLESHOOTING.md](docs/assets/TROUBLESHOOTING.md)** - 疑难问题解答 ⭐
+  - 数据获取（含Tushare注册链接）
+  - 安装配置
+  - 运行问题
+  - 性能优化
 
 - **[IMPLEMENTATION_GUIDE.md](IMPLEMENTATION_GUIDE.md)** - 技术实现文档
   - 架构设计说明
