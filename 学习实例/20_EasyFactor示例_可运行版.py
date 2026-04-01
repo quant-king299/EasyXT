@@ -2,13 +2,32 @@
 EasyFactor 使用示例 - 可运行版本 (DuckDB版)
 
 展示EasyFactor的主要功能
+
+【导入方式说明】
+# 方式1：从easy_xt导入（原有方式，仍然有效）
+from easy_xt.factor_library import EasyFactor, create_easy_factor
+
+# 方式2：从factors导入（推荐，统一接口）
+from factors import EasyFactor, create_easy_factor
+
+# 新增功能导入
+from factors.pricing import FamaFrenchCalculator
+from factors.analysis import ICAnalyzer, GroupBacktester
+from factors.custom import SmallCapQualityFactor
 """
 
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# 使用原有的导入方式（向后兼容）
 from easy_xt.factor_library import EasyFactor, create_easy_factor
+
+# 新功能导入示例（注释掉，避免影响原有代码）
+# from factors.pricing import FamaFrenchCalculator
+# from factors.analysis import ICAnalyzer
+# from factors.custom import SmallCapQualityFactor
+
 import pandas as pd
 
 print("=" * 90)

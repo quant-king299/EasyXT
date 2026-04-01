@@ -12,14 +12,35 @@ EasyFactor 扩展模块演示（完整版）
 - 767万条历史数据记录（2015-2026）
 - 增强版基本面因子（29个因子）
 - 智能缓存（首次下载，后续读取本地）
+
+【新增：factors统一模块】
+- 定价因子：Fama-French三因子/四因子
+- 因子分析：IC/IR分析、分组回测
+- 自定义因子：小市值质量因子等
+
+【导入方式说明】
+# 方式1：从easy_xt导入（原有方式，仍然有效）
+from easy_xt.factor_library import create_easy_factor
+from easy_xt.fundamental_enhanced import FundamentalAnalyzerEnhanced
+
+# 方式2：从factors导入（推荐，统一接口）
+from factors import EasyFactor, FundamentalAnalyzerEnhanced
+from factors.pricing import FamaFrenchCalculator
+from factors.analysis import ICAnalyzer, GroupBacktester
+from factors.custom import SmallCapQualityFactor
 """
 
 import sys
 import os
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+# 使用原有的导入方式（向后兼容）
 from easy_xt.factor_library import create_easy_factor
 from easy_xt.fundamental_enhanced import FundamentalAnalyzerEnhanced, get_enhanced_fundamental_factors, get_batch_enhanced_factors
+
+# 同时也支持新的导入方式
+# from factors import EasyFactor, FundamentalAnalyzerEnhanced
+
 import pandas as pd
 
 print("=" * 90)
