@@ -22,6 +22,7 @@ class DataManagerConfig:
         # DuckDB路径（None = 自动检测或不用DuckDB）
         'duckdb_path': None,  # 改为None，避免硬编码路径
         'tushare_token': None,
+        'tushare_token_2': None,  # 备用token（限流时自动切换）
         'qmt_path': None,
         # 数据源优先级（改为智能模式，优先使用本地可用数据源）
         'preferred_sources': None,  # None = 自动检测可用数据源
@@ -105,6 +106,10 @@ class DataManagerConfig:
         # Tushare Token
         if 'TUSHARE_TOKEN' in os.environ:
             self.config['tushare_token'] = os.environ['TUSHARE_TOKEN']
+
+        # Tushare 备用Token（限流时自动切换）
+        if 'TUSHARE_TOKEN_2' in os.environ:
+            self.config['tushare_token_2'] = os.environ['TUSHARE_TOKEN_2']
 
         # DuckDB路径
         if 'DUCKDB_PATH' in os.environ:
@@ -219,6 +224,7 @@ class DataManagerConfig:
             },
             'tushare': {
                 'token': self.get('tushare_token'),
+                'token_2': self.get('tushare_token_2'),
                 'enabled': self.get('tushare_token') is not None
             },
             'qmt': {

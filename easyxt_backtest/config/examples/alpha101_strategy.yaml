@@ -21,6 +21,7 @@ backtest:
   initial_cash: 1000000
   commission: 0.001
   slippage: 0.001
+  engine: "enhanced"           # 回测引擎: enhanced(增强引擎，推荐) 或 backtrader(传统引擎)
 
 # 股票池配置
 universe:

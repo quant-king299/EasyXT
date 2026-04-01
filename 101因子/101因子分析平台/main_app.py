@@ -557,7 +557,7 @@ def main():
                         try:
                             from easyxt_backtest.data import create_data_manager
                             from easyxt_backtest.strategies.config_driven_strategy import ConfigDrivenStrategy
-                            from easyxt_backtest.backtest_engine import BacktestEngine
+                            from easyxt_backtest.enhanced_backtest_engine import EnhancedBacktestEngine
 
                             # 创建数据管理器
                             data_manager = None
@@ -573,7 +573,7 @@ def main():
                             strategy = ConfigDrivenStrategy(config, data_manager=data_manager)
 
                             # 创建回测引擎
-                            engine = BacktestEngine(
+                            engine = EnhancedBacktestEngine(
                                 initial_cash=initial_cash,
                                 commission=commission,
                                 data_manager=data_manager

@@ -224,6 +224,10 @@ def init_editor_session_state():
         st.session_state.strategy_name = "我的策略"
     if 'strategy_description' not in st.session_state:
         st.session_state.strategy_description = ""
+    if 'universe_type' not in st.session_state:
+        st.session_state.universe_type = "沪深300"
+    if 'universe_index_code' not in st.session_state:
+        st.session_state.universe_index_code = "000300.SH"
 
 
 def render_factor_selector():
@@ -453,6 +457,45 @@ def render_basic_config():
             format="%.4f"
         )
 
+    # 股票池配置
+    st.markdown("**股票池配置**")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        universe_options = {
+            "沪深300": "000300.SH",
+            "中证500": "000905.SH",
+            "中证1000": "000852.SH",
+            "上证50": "000016.SH",
+            "创业板指": "399006.SZ",
+            "科创50": "000688.SH",
+            "全A股": "all"
+        }
+
+        selected_universe = st.selectbox(
+            "股票池",
+            options=list(universe_options.keys()),
+            index=0,
+            help="选择股票池指数"
+        )
+
+        st.session_state.universe_type = selected_universe
+        st.session_state.universe_index_code = universe_options[selected_universe]
+
+    with col2:
+        st.info(f"""
+        **当前股票池**: {selected_universe}
+
+        **指数代码**: {universe_options[selected_universe]}
+
+        **说明**:
+        - 沪深300: 300只大盘股
+        - 中证500: 500只中盘股
+        - 中证1000: 1000只小盘股
+        - 全A股: 所有A股（数据量大）
+        """)
+
     return {
         'start_date': start_date,
         'end_date': end_date,
@@ -587,8 +630,8 @@ def generate_yaml_config(backtest_config: Dict, portfolio_config: Dict, rebalanc
         },
         'backtest': backtest_config,
         'universe': {
-            'type': 'index',
-            'index_code': '000300.SH'  # 默认沪深300
+            'type': 'index' if st.session_state.universe_index_code != 'all' else 'all',
+            'index_code': st.session_state.universe_index_code
         },
         'exclude_filters': [],
         'scoring_factors': [],

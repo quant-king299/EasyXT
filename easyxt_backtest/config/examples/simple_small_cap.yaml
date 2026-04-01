@@ -23,6 +23,7 @@ backtest:
   initial_cash: 1000000        # 初始资金 (100万)
   commission: 0.001            # 佣金率 (0.1%)
   slippage: 0.001              # 滑点 (0.1%)
+  engine: "enhanced"           # 回测引擎: enhanced(增强引擎，推荐) 或 backtrader(传统引擎)
 
 # ============================================================
 # 股票池配置

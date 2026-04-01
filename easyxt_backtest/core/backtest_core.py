@@ -258,3 +258,101 @@ class DataManager:
         )
 
         return data
+
+    def get_connection_status(self) -> dict:
+        """
+        获取数据源连接状态
+
+        Returns:
+            dict: 包含 active_source 和 source_status 的字典
+        """
+        # 尝试检查各个数据源的可用性
+        source_status = {
+            'qmt': {'available': False, 'connected': False},
+            'duckdb': {'available': False, 'connected': False},
+            'local': {'available': False, 'connected': False},
+            'qstock': {'available': False, 'connected': False},
+            'akshare': {'available': False, 'connected': False},
+        }
+
+        # 检查 QMT
+        try:
+            import easy_xt
+            api = easy_xt.get_api()
+            if hasattr(api, 'data') and hasattr(api.data, 'get_current_price'):
+                # 尝试获取一个测试数据
+                test_df = api.data.get_current_price(['000001.SZ'])
+                if test_df is not None and not test_df.empty:
+                    source_status['qmt']['available'] = True
+                    source_status['qmt']['connected'] = True
+                else:
+                    source_status['qmt']['available'] = True
+                    source_status['qmt']['connected'] = False
+        except:
+            pass
+
+        # 检查 DuckDB
+        try:
+            import os
+            from dotenv import load_dotenv
+            load_dotenv()
+            duckdb_path = os.getenv('DUCKDB_PATH')
+            if duckdb_path and os.path.exists(duckdb_path):
+                import duckdb
+                conn = duckdb.connect(duckdb_path)
+                # 简单测试查询
+                result = conn.execute("SELECT 1").fetchone()
+                if result:
+                    source_status['duckdb']['available'] = True
+                    source_status['duckdb']['connected'] = True
+                conn.close()
+        except:
+            pass
+
+        # 检查 qstock
+        try:
+            import qstock
+            source_status['qstock']['available'] = True
+            source_status['qstock']['connected'] = True
+        except:
+            pass
+
+        # 检查 akshare
+        try:
+            import akshare as ak
+            source_status['akshare']['available'] = True
+            source_status['akshare']['connected'] = True
+        except:
+            pass
+
+        # 本地缓存总是可用的
+        source_status['local']['available'] = True
+        source_status['local']['connected'] = True
+
+        # 确定活跃数据源（优先级：qmt > duckdb > qstock > akshare > local > mock）
+        active_source = 'mock'
+        if source_status['qmt']['connected']:
+            active_source = 'qmt'
+        elif source_status['duckdb']['connected']:
+            active_source = 'duckdb'
+        elif source_status['qstock']['connected']:
+            active_source = 'qstock'
+        elif source_status['akshare']['connected']:
+            active_source = 'akshare'
+        elif source_status['local']['connected']:
+            active_source = 'local'
+
+        return {
+            'active_source': active_source,
+            'source_status': source_status
+        }
+
+    def refresh_source_status(self):
+        """
+        刷新数据源状态
+
+        此方法用于重新检查所有数据源的可用性
+        """
+        # 触发状态重新检查
+        # 实际检查会在下次调用 get_connection_status() 时进行
+        pass

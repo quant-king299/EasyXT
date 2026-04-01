@@ -45,7 +45,7 @@ class FundamentalFactor(BaseFactor):
             fundamental_data = self._get_fundamental_data(stock_pool, date, self.field)
 
             if fundamental_data is None or fundamental_data.empty:
-                print(f"⚠️ 无法获取基本面数据 [{self.field}] at {date}")
+                print(f"[WARNING] Cannot get fundamental data [{self.field}] at {date}")
                 # 返回空的Series，索引为股票池
                 return pd.Series(index=stock_pool, dtype=float)
 
@@ -62,7 +62,7 @@ class FundamentalFactor(BaseFactor):
             return result
 
         except Exception as e:
-            print(f"❌ 计算基本面因子失败 [{self.field}]: {e}")
+            print(f"[ERROR] Failed to calculate fundamental factor [{self.field}]: {e}")
             return pd.Series(index=stock_pool, dtype=float)
 
     def _get_fundamental_data(self, stock_pool: List[str], date: str, field: str):
@@ -89,10 +89,10 @@ class FundamentalFactor(BaseFactor):
             elif hasattr(self.data_manager, 'get_factor'):
                 return self.data_manager.get_factor(stock_pool, date, field)
             else:
-                print(f"⚠️ data_manager不支持获取基本面数据")
+                print(f"[WARNING] data_manager does not support getting fundamental data")
                 return None
         except Exception as e:
-            print(f"⚠️ 获取基本面数据失败 [{field}]: {e}")
+            print(f"[WARNING] Failed to get fundamental data [{field}]: {e}")
             return None
 
 

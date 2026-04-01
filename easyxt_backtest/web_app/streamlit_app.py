@@ -25,6 +25,7 @@ sys.path.insert(0, str(project_root))
 from easyxt_backtest.config import load_strategy_config, StrategyConfig
 from easyxt_backtest.strategies.config_driven_strategy import ConfigDrivenStrategy
 from easyxt_backtest.backtest_engine import BacktestEngine
+from easyxt_backtest.enhanced_backtest_engine import EnhancedBacktestEngine, run_enhanced_backtest
 from easyxt_backtest.live_trading.code_generator import LiveCodeGenerator
 
 # 导入数据模块
@@ -478,10 +479,37 @@ def page_backtest():
     else:
         st.warning("⚠️ 使用模拟数据：仅支持技术因子，不支持基本面因子")
 
+    # 引擎选择
+    st.markdown("---")
+
+    # 从配置中读取默认引擎类型
+    default_engine = config.backtest_config.get('engine', 'enhanced')
+
+    # 调试：显示配置中的引擎设置
+    st.caption(f"💾 配置文件中的引擎设置: `{default_engine}`")
+
+    engine_type = st.radio(
+        "🔧 回测引擎",
+        options=["enhanced", "backtrader"],
+        index=0 if default_engine == "enhanced" else 1,
+        format_func=lambda x: "增强引擎（推荐）" if x == "enhanced" else "Backtrader引擎",
+        horizontal=True,
+        help="增强引擎：自建框架，参考vnpy设计，更快速、更灵活\nBacktrader引擎：成熟的第三方框架"
+    )
+
+    if engine_type == "enhanced":
+        st.info("✨ 增强引擎特点：自建框架，参考vnpy设计，支持每日盯市计算，性能优化")
+    else:
+        st.warning("⚠️ Backtrader引擎：传统框架，数据加载较慢（已优化但不如增强引擎）")
+
     # 运行回测
     if st.button("🚀 开始回测", type="primary", use_container_width=True):
         with st.spinner("⏳ 正在运行回测..."):
             try:
+                # 调试信息
+                st.info(f"🔧 调试: 配置中的引擎 = `{config.backtest_config.get('engine', 'NOT FOUND')}`")
+                st.info(f"🔧 调试: 用户选择的引擎 = `{engine_type}`")
+
                 # 创建数据管理器
                 data_manager = None
                 if use_real_data:
@@ -497,12 +525,23 @@ def page_backtest():
                 # 创建策略
                 strategy = ConfigDrivenStrategy(config, data_manager=data_manager)
 
-                # 创建回测引擎
-                engine = BacktestEngine(
-                    initial_cash=config.backtest_config['initial_cash'],
-                    commission=config.backtest_config['commission'],
-                    data_manager=data_manager
-                )
+                # 根据引擎类型创建不同的回测引擎
+                if engine_type == "enhanced":
+                    # 使用增强引擎（自建框架）
+                    st.success("🚀 使用增强引擎运行回测...")
+                    engine = EnhancedBacktestEngine(
+                        initial_cash=config.backtest_config['initial_cash'],
+                        commission=config.backtest_config['commission'],
+                        data_manager=data_manager
+                    )
+                else:
+                    # 使用Backtrader引擎
+                    st.warning("⏳ 使用Backtrader引擎运行回测...")
+                    engine = BacktestEngine(
+                        initial_cash=config.backtest_config['initial_cash'],
+                        commission=config.backtest_config['commission'],
+                        data_manager=data_manager
+                    )
 
                 # 运行回测
                 result = engine.run_backtest(
@@ -756,8 +795,8 @@ def page_analysis():
     with col2:
         st.metric("交易次数", f"{len(result.trades)}")
     with col3:
-        if not result.returns.empty:
-            win_rate = (result.returns > 0).sum() / len(result.returns)
+        if not result.returns.empty and 'net_pnl' in result.returns.columns:
+            win_rate = (result.returns['net_pnl'] > 0).sum() / len(result.returns)
             st.metric("胜率", f"{win_rate:.2%}")
 
     st.markdown("---")

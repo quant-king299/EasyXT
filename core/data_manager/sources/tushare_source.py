@@ -29,7 +29,17 @@ class TushareSource(BaseDataSource):
         """
         super().__init__(config)
 
-        self.token = config.get('token')
+        # 支持多token轮换（限流时自动切换）
+        self.tokens = []
+        primary = config.get('token')
+        secondary = config.get('token_2')
+        if primary:
+            self.tokens.append(primary)
+        if secondary:
+            self.tokens.append(secondary)
+
+        self.token = self.tokens[0] if self.tokens else None
+        self._active_token_idx = 0
         self._connection = None  # Tushare API实例
         self.is_connected = False
 
@@ -47,42 +57,112 @@ class TushareSource(BaseDataSource):
         try:
             import tushare as ts
 
-            if not self.token:
+            if not self.tokens:
                 print("[TushareSource] 未提供Tushare Token")
                 return False
 
-            # 设置token并创建API实例
-            ts.set_token(self.token)
-            self._connection = ts.pro_api()
+            # 尝试每个token
+            for i, token in enumerate(self.tokens):
+                try:
+                    ts.set_token(token)
+                    conn = ts.pro_api()
 
-            # 测试连接 - 使用最近一个交易日
-            test_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
-            try:
-                test_df = self._connection.daily(
-                    ts_code='000001.SZ',
-                    trade_date=test_date,
-                    fields='ts_code,trade_date,close'
-                )
-            except:
-                # 如果测试失败，尝试使用固定日期
-                test_df = self._connection.daily(
-                    ts_code='000001.SZ',
-                    trade_date='20230103',
-                    fields='ts_code,trade_date,close'
-                )
+                    # 测试连接
+                    test_date = (datetime.now() - timedelta(days=1)).strftime('%Y%m%d')
+                    try:
+                        conn.daily(ts_code='000001.SZ', trade_date=test_date,
+                                   fields='ts_code,trade_date,close')
+                    except:
+                        conn.daily(ts_code='000001.SZ', trade_date='20230103',
+                                   fields='ts_code,trade_date,close')
 
-            self.is_connected = True
-            print("[TushareSource] 连接成功")
-            return True
+                    self._connection = conn
+                    self.token = token
+                    self._active_token_idx = i
+                    self.is_connected = True
+                    label = f"主token" if i == 0 else f"备用token({i})"
+                    print(f"[TushareSource] {label}连接成功")
+                    return True
+                except Exception as e:
+                    label = f"主token" if i == 0 else f"备用token({i})"
+                    print(f"[TushareSource] {label}连接失败: {e}")
+                    continue
+
+            print("[TushareSource] 所有token均连接失败")
+            self._connection = None
+            self.is_connected = False
+            return False
 
         except ImportError:
             print("[TushareSource] tushare模块未安装")
             return False
-        except Exception as e:
-            print(f"[TushareSource] 连接失败: {e}")
-            self._connection = None
-            self.is_connected = False
+
+    def _is_rate_limited(self, error: Exception) -> bool:
+        """判断异常是否为限流"""
+        err_msg = str(error).lower()
+        rate_limit_keywords = ['limit', 'rate', 'freq', 'exceed', '每分钟',
+                               'restricted', 'timeout', 'too many', '频次']
+        return any(kw in err_msg for kw in rate_limit_keywords)
+
+    def _switch_token(self) -> bool:
+        """
+        切换到下一个token
+
+        Returns:
+            bool: 是否切换成功
+        """
+        if len(self.tokens) <= 1:
             return False
+
+        import tushare as ts
+        next_idx = (self._active_token_idx + 1) % len(self.tokens)
+        next_token = self.tokens[next_idx]
+
+        try:
+            ts.set_token(next_token)
+            self._connection = ts.pro_api()
+            self.token = next_token
+            self._active_token_idx = next_idx
+            label = f"主token" if next_idx == 0 else f"备用token({next_idx})"
+            print(f"[TushareSource] 已切换到{label}")
+            return True
+        except Exception as e:
+            print(f"[TushareSource] 切换token失败: {e}")
+            return False
+
+    def _api_call_with_fallback(self, api_func, *args, **kwargs):
+        """
+        带token轮换的API调用
+
+        遇到限流错误时自动切换到备用token重试
+
+        Args:
+            api_func: API调用函数
+            *args, **kwargs: API参数
+
+        Returns:
+            API返回结果
+        """
+        last_error = None
+
+        for attempt in range(len(self.tokens)):
+            try:
+                result = api_func(*args, **kwargs)
+                return result
+            except Exception as e:
+                last_error = e
+                if self._is_rate_limited(e):
+                    print(f"[TushareSource] 请求被限流，尝试切换token...")
+                    if not self._switch_token():
+                        break
+                    # 切换成功后重试
+                    continue
+                else:
+                    # 非限流错误，不切换token，直接抛出
+                    raise
+
+        # 所有token都失败了
+        raise last_error
 
     def get_price(self,
                   symbol: str,
@@ -115,8 +195,9 @@ class TushareSource(BaseDataSource):
             # 标准化股票代码
             symbol = self.normalize_symbol(symbol)
 
-            # 调用API
-            df = self._connection.daily(
+            # 调用API（带token轮换）
+            df = self._api_call_with_fallback(
+                self._connection.daily,
                 ts_code=symbol,
                 start_date=start_date,
                 end_date=end_date
@@ -207,8 +288,9 @@ class TushareSource(BaseDataSource):
             # 构建字段列表
             fields_str = 'ts_code,trade_date,' + ','.join(fields)
 
-            # 批量查询全市场数据
-            df = self._connection.daily_basic(
+            # 批量查询全市场数据（带token轮换）
+            df = self._api_call_with_fallback(
+                self._connection.daily_basic,
                 trade_date=date,
                 fields=fields_str
             )
@@ -220,7 +302,8 @@ class TushareSource(BaseDataSource):
                         date_obj = datetime.strptime(date, '%Y%m%d')
                         prev_date = (date_obj - timedelta(days=i)).strftime('%Y%m%d')
 
-                        df = self._connection.daily_basic(
+                        df = self._api_call_with_fallback(
+                            self._connection.daily_basic,
                             trade_date=prev_date,
                             fields=fields_str
                         )
@@ -273,8 +356,9 @@ class TushareSource(BaseDataSource):
                 print(f"[TushareSource] 日期格式错误: {start_date} - {end_date}")
                 return None
 
-            # 获取交易日历（上海证券交易所）
-            df = self._connection.trade_cal(
+            # 获取交易日历（带token轮换）
+            df = self._api_call_with_fallback(
+                self._connection.trade_cal,
                 exchange='SSE',
                 start_date=start_date,
                 end_date=end_date,
@@ -328,8 +412,9 @@ class TushareSource(BaseDataSource):
             return None
 
         try:
-            # 获取股票列表
-            df = self._connection.stock_basic(
+            # 获取股票列表（带token轮换）
+            df = self._api_call_with_fallback(
+                self._connection.stock_basic,
                 exchange=exchange,
                 list_status=list_status,
                 fields='ts_code,name,area,industry,list_date'
@@ -358,7 +443,8 @@ class TushareSource(BaseDataSource):
             return None
 
         try:
-            df = self._connection.index_basic(
+            df = self._api_call_with_fallback(
+                self._connection.index_basic,
                 market='SSE',
                 fields='ts_code,name,market,publisher,category,base_date,base_point,list_date'
             )
@@ -384,8 +470,9 @@ class TushareSource(BaseDataSource):
         """
         return {
             'source': 'Tushare',
-            'token_provided': self.token is not None,
-            'token_prefix': self.token[:10] + '...' if self.token else None,
+            'token_count': len(self.tokens),
+            'active_token_idx': self._active_token_idx,
+            'active_token_prefix': self.token[:10] + '...' if self.token else None,
             'api_delay': self.api_delay,
             'max_retries': self.max_retries,
             'is_connected': self.is_connected
