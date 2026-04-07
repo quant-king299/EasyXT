@@ -400,38 +400,87 @@ class WorkflowEngine:
                                 if isinstance(value, pd.Series) and not value.empty:
                                     factor_data = value
                                     break
-        
-        # 获取收益率数据 - 优先尝试从上游节点获取
-        returns_data = self._get_input_data(params, results, 'returns_data')
-        
+
+        # 重要：强制从数据加载节点获取收益率数据，而不是从因子节点
+        returns_data = None
+        print(f"[DEBUG] IC分析 - 开始查找收益率数据")
+
+        # 首先检查params中是否明确指定了returns_data
+        if 'returns_data' in params and params['returns_data'] is not None:
+            returns_data = params['returns_data']
+            print(f"[DEBUG] IC分析从params获取returns_data")
+        else:
+            # 优先从数据加载节点（data_loader）获取收益率数据
+            for node_id in self.execution_order:
+                if node_id in results and results[node_id] is not None:
+                    result = results[node_id]
+                    # 检查节点类型，优先选择data_loader
+                    node = self.nodes.get(node_id)
+                    node_type = node.node_type if node else ''
+
+                    print(f"[DEBUG] 检查节点 {node_id}, 类型: {node_type}")
+
+                    # 只从data_loader类型节点获取收益率数据
+                    if node_type == 'data_loader' and isinstance(result, pd.DataFrame) and not result.empty:
+                        # 优先使用已计算的returns列
+                        if 'returns' in result.columns:
+                            returns_data = result['returns']
+                            print(f"[DEBUG] IC分析从data_loader节点 {node_id} 使用已计算的returns列: {returns_data.shape}")
+                            break
+                        # 其次使用close列计算
+                        elif 'close' in result.columns:
+                            returns_data = result.groupby(level=1)['close'].pct_change()
+                            print(f"[DEBUG] IC分析从data_loader节点 {node_id} 从close计算收益率: {returns_data.shape}")
+                            break
+
+            # 如果没有找到data_loader，尝试从其他节点获取
+            if returns_data is None or (hasattr(returns_data, 'empty') and returns_data.empty):
+                print(f"[DEBUG] 未找到data_loader节点，尝试从其他节点获取收益率数据")
+                returns_data = self._get_input_data(params, results, 'returns_data')
+
         # 如果没有直接获取到收益率数据，尝试从数据加载节点获取并计算收益率
         if returns_data is None or (hasattr(returns_data, 'empty') and returns_data.empty):
-            # 尝试从数据加载节点的结果中获取价格数据并计算收益率
+            # 尝试从数据加载节点的结果中获取数据
             for node_id in reversed(self.execution_order):
                 if node_id in results and results[node_id] is not None:
                     result = results[node_id]
                     if isinstance(result, pd.DataFrame) and not result.empty:
-                        # 检查是否是价格数据（包含close列）
-                        if 'close' in result.columns:
+                        # 优先使用已计算的returns列
+                        if 'returns' in result.columns:
+                            try:
+                                returns_data = result['returns']
+                                print(f"[DEBUG] IC分析使用已计算的returns列: {returns_data.shape}")
+                                break
+                            except:
+                                pass
+                        # 其次使用close列计算（但优先级低）
+                        elif 'close' in result.columns:
                             try:
                                 # 按股票分组计算收益率
                                 returns_data = result.groupby(level=1)['close'].pct_change()
+                                print(f"[DEBUG] IC分析从close计算收益率: {returns_data.shape}")
                                 break
                             except:
                                 pass
                     elif isinstance(result, dict):
-                        # 如果结果是字典，检查是否包含价格数据
-                        if 'price_data' in result and result['price_data'] is not None:
+                        # 如果结果是字典，检查是否包含returns或price_data
+                        if 'returns' in result and result['returns'] is not None:
+                            returns_data = result['returns']
+                            print(f"[DEBUG] IC分析从字典获取returns: {returns_data.shape if hasattr(returns_data, 'shape') else 'N/A'}")
+                            break
+                        elif 'price_data' in result and result['price_data'] is not None:
                             price_data = result['price_data']
-                            if isinstance(price_data, pd.DataFrame) and 'close' in price_data.columns:
+                            if isinstance(price_data, pd.DataFrame) and 'returns' in price_data.columns:
+                                returns_data = price_data['returns']
+                                print(f"[DEBUG] IC分析从price_data获取returns: {returns_data.shape if hasattr(returns_data, 'shape') else 'N/A'}")
+                                break
+                            elif isinstance(price_data, pd.DataFrame) and 'close' in price_data.columns:
                                 try:
                                     returns_data = price_data.groupby(level=1)['close'].pct_change()
+                                    print(f"[DEBUG] IC分析从price_data的close计算收益率: {returns_data.shape}")
                                     break
                                 except:
                                     pass
-                        elif 'returns' in result and result['returns'] is not None:
-                            returns_data = result['returns']
-                            break
         
         # 如果仍然没有收益率数据，尝试从因子数据的同源数据计算
         if (returns_data is None or (hasattr(returns_data, 'empty') and returns_data.empty)) and factor_data is not None:
@@ -493,9 +542,47 @@ class WorkflowEngine:
                     else:
                         # 索引不完全相同，需要对齐
                         factor_data, returns_data = factor_data.align(returns_data, join='inner')
-                
-                ic_series = analyzer.calculate_ic(factor_data, returns_data)  # type: ignore
+
+                # 数据质量验证和清理
+                print(f"[DEBUG] IC计算前的数据质量检查:")
+                print(f"  factor_data: 形状={factor_data.shape}, NaN数量={factor_data.isna().sum()}, "
+                      f"NaN占比={factor_data.isna().sum()/len(factor_data)*100:.2f}%")
+                print(f"  returns_data: 形状={returns_data.shape}, NaN数量={returns_data.isna().sum()}, "
+                      f"NaN占比={returns_data.isna().sum()/len(returns_data)*100:.2f}%")
+
+                # 删除任何一方的NaN值，确保数据对齐
+                combined_data = pd.DataFrame({
+                    'factor': factor_data,
+                    'returns': returns_data
+                }).dropna()
+
+                print(f"[DEBUG] 删除NaN后: 有效数据量={len(combined_data)}, "
+                      f"删除数据量={len(factor_data)-len(combined_data)} "
+                      f"({(len(factor_data)-len(combined_data))/len(factor_data)*100:.1f}%)")
+
+                # 检查是否有足够的数据
+                if len(combined_data) < 100:
+                    raise ValueError(f"IC分析数据不足：有效数据量仅{len(combined_data)}条，建议至少100条")
+
+                # 重新提取清理后的数据
+                factor_data_clean = combined_data['factor']
+                returns_data_clean = combined_data['returns']
+
+                # 添加调试信息
+                print(f"[DEBUG] IC计算数据检查:")
+                print(f"  factor_data前5个值: {factor_data_clean.head().values}")
+                print(f"  returns_data前5个值: {returns_data_clean.head().values}")
+                print(f"  factor_data名称: {factor_data_clean.name if hasattr(factor_data_clean, 'name') else 'N/A'}")
+                print(f"  returns_data名称: {returns_data_clean.name if hasattr(returns_data_clean, 'name') else 'N/A'}")
+
+                ic_series = analyzer.calculate_ic(factor_data_clean, returns_data_clean)  # type: ignore
                 ic_stats = analyzer.calculate_ic_stats(ic_series)
+
+                print(f"[DEBUG] IC计算结果:")
+                print(f"  ic_mean: {ic_stats['ic_mean']:.6f}")
+                print(f"  ic_std: {ic_stats['ic_std']:.6f}")
+                print(f"  ic_ir: {ic_stats['ic_ir']:.6f}")
+                print(f"  有效IC期数: {len(ic_series.dropna())}/{len(ic_series)}")
                 
                 return {
                     'ic_series': ic_series,
@@ -744,6 +831,7 @@ class WorkflowEngine:
                     'sharpe_ratio': ls_performance.get('sharpe_ratio', 0),
                     'returns': backtest_result['backtest_results'].get('long_short_returns', pd.DataFrame()),
                     'long_short_spread': ls_performance.get('annual_return', 0),  # 使用年化收益作为spread
+                    'trade_details': backtest_result['backtest_results'].get('trade_details', pd.DataFrame())  # 添加交易明细
                 }
 
                 # 转换分层回测结果

@@ -18,25 +18,77 @@ class ICAnalysis:
     IC (Information Coefficient) 分析类
     用于分析因子与未来收益率的相关性
     """
-    
+
     def __init__(self):
         self.ic_data = {}
         self.ic_stats = {}
-    
-    def calculate_ic(self, factor_data: pd.Series, 
-                     returns_data: pd.Series, 
+
+    def validate_data(self, factor_data: pd.Series, returns_data: pd.Series) -> Dict[str, any]:
+        """
+        验证数据质量
+
+        Args:
+            factor_data: 因子数据
+            returns_data: 收益率数据
+
+        Returns:
+            Dict: 数据质量报告
+        """
+        report = {
+            'total_factor_points': len(factor_data),
+            'total_return_points': len(returns_data),
+            'factor_nan_count': factor_data.isna().sum(),
+            'return_nan_count': returns_data.isna().sum(),
+            'factor_nan_ratio': factor_data.isna().sum() / len(factor_data) if len(factor_data) > 0 else 0,
+            'return_nan_ratio': returns_data.isna().sum() / len(returns_data) if len(returns_data) > 0 else 0,
+            'is_valid': True,
+            'warnings': []
+        }
+
+        # 检查数据量
+        if len(factor_data) < 100:
+            report['warnings'].append(f"因子数据量过少：{len(factor_data)}条，建议至少100条")
+            report['is_valid'] = False
+
+        # 检查NaN比例
+        if report['factor_nan_ratio'] > 0.5:
+            report['warnings'].append(f"因子数据NaN比例过高：{report['factor_nan_ratio']:.1%}")
+            report['is_valid'] = False
+
+        if report['return_nan_ratio'] > 0.5:
+            report['warnings'].append(f"收益率数据NaN比例过高：{report['return_nan_ratio']:.1%}")
+            report['is_valid'] = False
+
+        # 检查数据变化性
+        if factor_data.notna().sum() > 0:
+            factor_std = factor_data.std()
+            if factor_std == 0 or pd.isna(factor_std):
+                report['warnings'].append("因子数据无变化，标准差为0")
+                report['is_valid'] = False
+
+        return report
+
+    def calculate_ic(self, factor_data: pd.Series,
+                     returns_data: pd.Series,
                      periods: int = 1) -> pd.Series:
         """
         计算IC (Information Coefficient)
-        
+
         Args:
             factor_data: 因子数据，索引为[date, symbol]
             returns_data: 收益率数据，索引为[date, symbol]
             periods: 收益率期数（默认1期后）
-            
+
         Returns:
             pd.Series: IC序列
         """
+        # 数据质量验证
+        data_quality = self.validate_data(factor_data, returns_data)
+        if not data_quality['is_valid']:
+            print(f"[WARN] IC分析数据质量检查失败:")
+            for warning in data_quality['warnings']:
+                print(f"  - {warning}")
+
         # 确保数据按日期对齐
         aligned_factor, aligned_returns = factor_data.align(returns_data, join='inner')
         

@@ -169,6 +169,12 @@ class BacktestExporter:
                 lambda x: f"{x:.4f}" if pd.notna(x) else '-'
             )
 
+        # 格式化分组信息
+        if 'group' in trade_detail_export.columns:
+            trade_detail_export['分组'] = trade_detail_export['group'].apply(
+                lambda x: f"第{x}组" if pd.notna(x) else '-'
+            )
+
         # 重命名列
         column_mapping = {
             'symbol': '股票代码',
@@ -177,11 +183,18 @@ class BacktestExporter:
         }
         trade_detail_export = trade_detail_export.rename(columns=column_mapping)
 
-        # 选择要导出的列
-        export_columns = [
+        # 选择要导出的列（包括分组信息）
+        export_columns_base = [
             '交易日期', '股票代码', '方向', '操作',
             '交易价格', '权重', '因子值'
         ]
+
+        # 如果有分组信息，添加到导出列
+        if '分组' in trade_detail_export.columns:
+            export_columns_base.append('分组')
+
+        # 只导出存在的列
+        export_columns = [col for col in export_columns_base if col in trade_detail_export.columns]
         trade_detail_export = trade_detail_export[export_columns]
 
         trade_detail_export.to_excel(writer, sheet_name='交易明细', index=False)
@@ -294,6 +307,12 @@ def export_trade_details_to_excel(trade_details: pd.DataFrame,
                 lambda x: f"{x:.4f}" if pd.notna(x) else '-'
             )
 
+        # 格式化分组信息
+        if 'group' in trade_detail_export.columns:
+            trade_detail_export['分组'] = trade_detail_export['group'].apply(
+                lambda x: f"第{x}组" if pd.notna(x) else '-'
+            )
+
         # 重命名列
         column_mapping = {
             'symbol': '股票代码',
@@ -302,11 +321,18 @@ def export_trade_details_to_excel(trade_details: pd.DataFrame,
         }
         trade_detail_export = trade_detail_export.rename(columns=column_mapping)
 
-        # 选择要导出的列
-        export_columns = [
+        # 选择要导出的列（包括分组信息）
+        export_columns_base = [
             '交易日期', '股票代码', '方向', '操作',
             '交易价格', '权重', '因子值'
         ]
+
+        # 如果有分组信息，添加到导出列
+        if '分组' in trade_detail_export.columns:
+            export_columns_base.append('分组')
+
+        # 只导出存在的列
+        export_columns = [col for col in export_columns_base if col in trade_detail_export.columns]
         trade_detail_export = trade_detail_export[export_columns]
 
         trade_detail_export.to_excel(writer, sheet_name='交易明细', index=False)

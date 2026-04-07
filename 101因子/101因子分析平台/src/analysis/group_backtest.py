@@ -198,6 +198,11 @@ class GroupBacktestEngine:
         group_returns_list = []
         long_short_returns_list = []
 
+        # 交易明细记录
+        trade_details = []
+        previous_long_stocks = set()  # 上一期做多组合的股票
+        previous_short_stocks = set()  # 上一期做空组合的股票
+
         # 按时间回测
         for i in range(len(rebalance_dates) - 1):
             current_date = rebalance_dates[i]
@@ -216,6 +221,11 @@ class GroupBacktestEngine:
                 n_groups
             )
 
+            # 获取做多和做空组合的股票
+            # 做多：第1组（group=0），做空：最后一组（group=n_groups-1）
+            long_stocks = set(current_factors[current_factors['group'] == 0]['stock_code'].tolist())
+            short_stocks = set(current_factors[current_factors['group'] == n_groups - 1]['stock_code'].tolist())
+
             # 计算收益
             period_returns = returns_df[
                 (returns_df['date'] > current_date) &
@@ -233,6 +243,22 @@ class GroupBacktestEngine:
             if group_ret is not None:
                 group_ret['date'] = current_date
                 group_returns_list.append(group_ret)
+
+                # 记录交易明细
+                self._record_trade_details(
+                    trade_details,
+                    current_date,
+                    current_factors,
+                    long_stocks,
+                    short_stocks,
+                    previous_long_stocks,
+                    previous_short_stocks,
+                    n_groups
+                )
+
+                # 更新上期持仓
+                previous_long_stocks = long_stocks
+                previous_short_stocks = short_stocks
 
             # 计算多空收益
             if group_ret is not None and len(group_ret) > 1:
@@ -288,9 +314,19 @@ class GroupBacktestEngine:
         else:
             long_short_series = pd.DataFrame()
 
+        # 转换交易明细为DataFrame
+        trade_details_df = pd.DataFrame(trade_details)
+        if not trade_details_df.empty:
+            # 按日期排序
+            trade_details_df = trade_details_df.sort_values('date')
+            print(f"[DEBUG] 交易明细记录数: {len(trade_details_df)}")
+        else:
+            print("[WARNING] 没有生成交易明细")
+
         return {
             'group_returns': group_returns_df,
             'long_short_returns': long_short_series,
+            'trade_details': trade_details_df,  # 添加交易明细
             'n_periods': len(group_returns_list)
         }
 
@@ -312,6 +348,90 @@ class GroupBacktestEngine:
             groups[sorted_indices[start_idx:end_idx]] = i + 1
 
         return groups
+
+    def _record_trade_details(self,
+                             trade_details: list,
+                             current_date: pd.Timestamp,
+                             current_factors: pd.DataFrame,
+                             long_stocks: set,
+                             short_stocks: set,
+                             previous_long_stocks: set,
+                             previous_short_stocks: set,
+                             n_groups: int) -> None:
+        """
+        记录交易明细
+
+        Args:
+            trade_details: 交易明细列表（引用传递）
+            current_date: 当前调仓日期
+            current_factors: 当前因子数据
+            long_stocks: 当前做多组合股票集合
+            short_stocks: 当前做空组合股票集合
+            previous_long_stocks: 上期做多组合股票集合
+            previous_short_stocks: 上期做空组合股票集合
+            n_groups: 分组数量
+        """
+        # 计算权重（等权重）
+        long_weight = 1.0 / len(long_stocks) if long_stocks else 0
+        short_weight = 1.0 / len(short_stocks) if short_stocks else 0
+
+        # 做多组合：新买入的股票
+        for stock in long_stocks - previous_long_stocks:
+            stock_factor = current_factors[current_factors['stock_code'] == stock]
+            if not stock_factor.empty:
+                factor_val = stock_factor['factor'].iloc[0]
+                trade_details.append({
+                    'date': current_date,
+                    'symbol': stock,
+                    'direction': '做多',
+                    'action': '买入',
+                    'price': np.nan,  # 分组回测中没有逐笔价格，使用收盘价平均
+                    'weight': long_weight,
+                    'factor_value': factor_val,
+                    'group': 1  # 第1组
+                })
+
+        # 做多组合：卖出的股票
+        for stock in previous_long_stocks - long_stocks:
+            trade_details.append({
+                'date': current_date,
+                'symbol': stock,
+                'direction': '做多',
+                'action': '卖出',
+                'price': np.nan,
+                'weight': 0,
+                'factor_value': np.nan,
+                'group': 1
+            })
+
+        # 做空组合：新卖出的股票
+        for stock in short_stocks - previous_short_stocks:
+            stock_factor = current_factors[current_factors['stock_code'] == stock]
+            if not stock_factor.empty:
+                factor_val = stock_factor['factor'].iloc[0]
+                trade_details.append({
+                    'date': current_date,
+                    'symbol': stock,
+                    'direction': '做空',
+                    'action': '卖出',
+                    'price': np.nan,
+                    'weight': short_weight,
+                    'factor_value': factor_val,
+                    'group': n_groups  # 最后一组
+                })
+
+        # 做空组合：平仓的股票
+        for stock in previous_short_stocks - short_stocks:
+            trade_details.append({
+                'date': current_date,
+                'symbol': stock,
+                'direction': '做空',
+                'action': '平仓',
+                'price': np.nan,
+                'weight': 0,
+                'factor_value': np.nan,
+                'group': n_groups
+            })
 
     def _calculate_group_returns_with_cost(self,
                                           factor_df: pd.DataFrame,
@@ -394,10 +514,22 @@ class GroupBacktestEngine:
             total_ls = cumulative_ls.iloc[-1] - 1
             annual_ls = ls_returns.mean() * 252
 
+            # 计算最大回撤
+            cummax_ls = cumulative_ls.cummax()
+            drawdown_ls = (cumulative_ls - cummax_ls) / cummax_ls
+            max_drawdown_ls = drawdown_ls.min()
+
+            # 计算夏普比率（使用更准确的方法）
+            if ls_returns.std() > 0:
+                sharpe_ratio = ls_returns.mean() / ls_returns.std() * np.sqrt(252)
+            else:
+                sharpe_ratio = 0.0
+
             summary['long_short'] = {
                 'total_return': total_ls,
                 'annual_return': annual_ls,
-                'sharpe_ratio': ls_returns.mean() / ls_returns.std() * np.sqrt(252) if ls_returns.std() > 0 else 0
+                'sharpe_ratio': sharpe_ratio,
+                'max_drawdown': abs(max_drawdown_ls) if not np.isnan(max_drawdown_ls) else 0.0
             }
 
         return summary

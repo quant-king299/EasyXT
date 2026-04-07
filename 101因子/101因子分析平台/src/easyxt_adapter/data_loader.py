@@ -427,8 +427,8 @@ class EasyXTDataLoader:
         # 计算vwap（成交量加权平均价）- 这里简化处理
         df['vwap'] = (df['high'] + df['low'] + df['close']) / 3
 
-        # 按股票分组计算returns - 使用更安全的方法避免MultiIndex破坏
-        df['returns'] = df.groupby(level=1)['close'].pct_change()
+        # 按股票分组计算returns - 使用新的API避免警告
+        df['returns'] = df.groupby(level=1)['close'].pct_change(fill_method=None)
 
         return df
     

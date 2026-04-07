@@ -1312,8 +1312,9 @@ class WorkflowUIEnhanced:
                             if isinstance(ls_results, dict) and 'trade_details' in ls_results:
                                 trade_details = ls_results['trade_details']
 
-                        if trade_details is None or trade_details.empty:
+                        if trade_details is None or (isinstance(trade_details, pd.DataFrame) and trade_details.empty):
                             st.warning("⚠️ 没有找到交易明细数据")
+                            st.info("💡 交易明细在分组回测中生成，请确保回测已完成")
                         else:
                             # 创建临时文件
                             timestamp = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
