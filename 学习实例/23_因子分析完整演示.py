@@ -73,9 +73,22 @@ import matplotlib
 # 不设置后端，让matplotlib自动选择交互式后端（Windows会用TkAgg）
 import matplotlib.pyplot as plt
 
-# 设置中文字体
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Microsoft YaHei']
-plt.rcParams['axes.unicode_minus'] = False
+# 设置中文字体（优先使用系统字体）
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
+
+# 测试中文字体是否可用
+try:
+    plt.figure(figsize=(1, 1))
+    plt.text(0.5, 0.5, '测试中文', fontsize=12)
+    plt.close()
+    print("[OK] 中文字体设置成功")
+except Exception as e:
+    print(f"[WARN] 中文字体设置失败: {e}")
+    # 如果中文字体失败，使用英文标签
+    USE_CHINESE = False
+else:
+    USE_CHINESE = True
 
 print("=" * 80)
 print(" " * 20 + "因子分析完整工作流演示（DuckDB真实数据）")
@@ -306,7 +319,16 @@ engine = GroupBacktestEngine()
 visualizer = FactorAnalysisVisualizer()
 
 print("\n运行快速IC测试...")
-ic_result = engine.quick_ic_test(df, df)
+
+# 准备因子数据和收益率数据（分别传入）
+factor_df = df[['date', 'stock_code', 'factor']].copy()
+returns_df = df[['date', 'stock_code', 'return']].copy()
+returns_df = returns_df.rename(columns={'return': 'ret'})  # 重命名为ret
+
+print(f"[DEBUG] 因子数据: {factor_df.shape}, 因子范围: [{factor_df['factor'].min():.4f}, {factor_df['factor'].max():.4f}]")
+print(f"[DEBUG] 收益数据: {returns_df.shape}, 收益范围: [{returns_df['ret'].min():.4f}, {returns_df['ret'].max():.4f}]")
+
+ic_result = engine.quick_ic_test(factor_df, returns_df)
 
 # 显示IC统计结果
 print("\n[IC统计结果]")
@@ -396,26 +418,31 @@ axes[1, 0].set_ylabel('累计IC')
 axes[1, 0].grid(True, alpha=0.3)
 
 # 子图4: IC统计摘要文本
-stats_text = f"""
-IC统计摘要
-━━━━━━━━━━━━━
-IC均值:     {ic_result['ic_mean']:.4f}
-IC标准差:   {ic_result['ic_std']:.4f}
-IC_IR:      {ic_result['ic_ir']:.4f}
-IC绝对值:   {ic_result['ic_abs_mean']:.4f}
-t统计量:    {ic_result['t_stat']:.2f}
-p值:        {ic_result['p_value']:.4f}
-IC为正比例:  {ic_result['ic_positive_ratio']:.1%}
+# 确保中文字体设置
+plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'Arial Unicode MS', 'DejaVu Sans']
+plt.rcParams['axes.unicode_minus'] = False
 
-━━━━━━━━━━━━━
-预测能力: {'优秀' if abs_ic > 0.05 else '良好' if abs_ic > 0.03 else '一般'}
-稳定性:   {'优秀' if ic_ir > 1.0 else '良好' if ic_ir > 0.5 else '一般'}
+# 使用英文标签避免编码问题
+stats_text = f"""
+IC Statistics Summary
+══════════════════════
+IC Mean:     {ic_result['ic_mean']:.4f}
+IC Std Dev:  {ic_result['ic_std']:.4f}
+IC IR:       {ic_result['ic_ir']:.4f}
+IC Abs Mean: {ic_result['ic_abs_mean']:.4f}
+t-statistic: {ic_result['t_stat']:.2f}
+p-value:     {ic_result['p_value']:.4f}
+IC>0 Ratio:  {ic_result['ic_positive_ratio']:.1%}
+
+══════════════════════
+Prediction: {'Excellent' if abs_ic > 0.05 else 'Good' if abs_ic > 0.03 else 'Fair'}
+Stability:  {'Excellent' if ic_ir > 1.0 else 'Good' if ic_ir > 0.5 else 'Fair'}
 """
 axes[1, 1].text(0.1, 0.5, stats_text, fontsize=11,
                 verticalalignment='center', family='monospace',
                 bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 axes[1, 1].axis('off')
-axes[1, 1].set_title('IC统计摘要', fontsize=12, fontweight='bold')
+axes[1, 1].set_title('IC Statistics Summary', fontsize=12, fontweight='bold')
 
 plt.tight_layout()
 fig_stats.savefig('demo_ic_statistics.png', dpi=150, bbox_inches='tight')

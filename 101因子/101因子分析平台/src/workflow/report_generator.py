@@ -185,6 +185,18 @@ class ReportGenerator:
         # 收益曲线图表
         html_parts.append(self._generate_equity_curve_chart(results))
 
+        # IC分析图表（如果有IC分析节点）
+        if node_results:
+            ic_chart = self._generate_ic_analysis_charts(node_results)
+            if ic_chart:
+                html_parts.append(ic_chart)
+
+        # 分组回测图表（如果有回测节点）
+        if node_results:
+            group_backtest_chart = self._generate_group_backtest_charts(node_results)
+            if group_backtest_chart:
+                html_parts.append(group_backtest_chart)
+
         # 核心指标解读
         html_parts.append(self._generate_metrics_section(normalized_results))
 
@@ -944,6 +956,33 @@ class ReportGenerator:
         start_date = results.get('start_date', '未知')
         end_date = results.get('end_date', '未知')
         trading_days = results.get('trading_days', 0)
+        rebalance_freq = results.get('rebalance_freq', 'unknown')
+
+        # 根据调仓频率确定显示的标签和单位
+        if rebalance_freq == 'monthly':
+            time_label = '调仓次数'
+            time_unit = '次'
+            time_desc = f'（月频调仓，约{trading_days}个月）'
+        elif rebalance_freq == 'weekly':
+            time_label = '调仓次数'
+            time_unit = '次'
+            time_desc = f'（周频调仓，约{trading_days}周）'
+        elif rebalance_freq == 'daily':
+            time_label = '交易日数'
+            time_unit = '天'
+            time_desc = '（日频调仓）'
+        else:
+            # 未知频率，根据数值判断
+            if trading_days < 50:
+                # 可能是月频调仓
+                time_label = '调仓次数'
+                time_unit = '次'
+                time_desc = ''
+            else:
+                # 可能是日频
+                time_label = '交易日数'
+                time_unit = '天'
+                time_desc = ''
 
         return f"""
                 <div class="section">
@@ -959,8 +998,8 @@ class ReportGenerator:
                                 <div style="font-size: 1.3rem; font-weight: bold; color: #667eea;">{end_date}</div>
                             </div>
                             <div>
-                                <div style="font-size: 0.9rem; color: #9ca3af; margin-bottom: 0.3rem;">交易日数</div>
-                                <div style="font-size: 1.3rem; font-weight: bold; color: #667eea;">{trading_days} 天</div>
+                                <div style="font-size: 0.9rem; color: #9ca3af; margin-bottom: 0.3rem;">{time_label}</div>
+                                <div style="font-size: 1.3rem; font-weight: bold; color: #667eea;">{trading_days} {time_unit}{time_desc}</div>
                             </div>
                         </div>
                     </div>
@@ -1276,6 +1315,13 @@ class ReportGenerator:
         end_date = source.get('end_date') or results.get('end_date')
         trading_days = source.get('trading_days') or results.get('trading_days', 0)
 
+        # 提取调仓频率参数
+        rebalance_freq = None
+        if 'backtest_result' in results:
+            backtest_result = results['backtest_result']
+            if isinstance(backtest_result, dict) and 'parameters' in backtest_result:
+                rebalance_freq = backtest_result['parameters'].get('freq')
+
         # 如果没有直接提供日期，尝试从long_short_results中提取
         if (not start_date or not end_date) and 'long_short_results' in results:
             ls_results = results['long_short_results']
@@ -1306,8 +1352,9 @@ class ReportGenerator:
         normalized['start_date'] = start_date if start_date else '未知'
         normalized['end_date'] = end_date if end_date else '未知'
         normalized['trading_days'] = trading_days if trading_days else 0
+        normalized['rebalance_freq'] = rebalance_freq if rebalance_freq else 'unknown'
 
-        print(f"[DEBUG] 提取的日期信息: start_date={normalized['start_date']}, end_date={normalized['end_date']}, trading_days={normalized['trading_days']}")
+        print(f"[DEBUG] 提取的日期信息: start_date={normalized['start_date']}, end_date={normalized['end_date']}, trading_days={normalized['trading_days']}, freq={normalized['rebalance_freq']}")
 
         # 转换为Python原生类型（避免numpy类型）
         normalized['ls_total_return'] = float(normalized['ls_total_return'])
@@ -1841,3 +1888,304 @@ class ReportGenerator:
         advices.append("📚 实盘前先用模拟盘验证至少3个月")
 
         return advices
+
+    def _generate_ic_analysis_charts(self, node_results: Dict) -> str:
+        """
+        从IC分析节点结果生成图表
+
+        Args:
+            node_results: 各节点的执行结果
+
+        Returns:
+            str: HTML图表内容，如果没有IC数据则返回空字符串
+        """
+        if not MATPLOTLIB_AVAILABLE:
+            return ''
+
+        try:
+            # 查找IC分析节点结果
+            ic_result = None
+            for node_id, result in node_results.items():
+                if result is not None and isinstance(result, dict):
+                    # 检查是否包含IC相关数据
+                    if 'ic_stats' in result or 'ic_series' in result:
+                        ic_result = result
+                        break
+
+            if not ic_result:
+                print("[DEBUG] 未找到IC分析节点结果")
+                return ''
+
+            # 提取IC数据
+            ic_series = ic_result.get('ic_series')
+            if ic_series is None:
+                print("[DEBUG] IC分析结果中没有ic_series")
+                return ''
+
+            # 获取因子名称
+            factor_name = ic_result.get('factor_name', 'alpha001')
+
+            # 创建IC分析图表（2x2布局）
+            fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+            fig.suptitle(f'{factor_name.upper()} - IC分析图表', fontsize=16, fontweight='bold')
+
+            # 确保中文字体
+            plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+            plt.rcParams['axes.unicode_minus'] = False
+
+            # 1. IC时序图（左上）
+            ax1 = axes[0, 0]
+            colors = ['green' if v >= 0 else 'red' for v in ic_series.values]
+            ax1.bar(range(len(ic_series)), ic_series.values, color=colors, alpha=0.7)
+            ax1.axhline(y=ic_series.mean(), color='blue', linestyle='--', linewidth=2, label=f'IC均值: {ic_series.mean():.4f}')
+            ax1.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            ax1.set_title('IC时序图', fontsize=12, fontweight='bold')
+            ax1.set_xlabel('时间')
+            ax1.set_ylabel('IC值')
+            ax1.legend()
+            ax1.grid(True, alpha=0.3)
+
+            # 2. IC分布直方图（右上）
+            ax2 = axes[0, 1]
+            # 用try-except处理直方图绘制，避免任何bin相关错误
+            try:
+                ic_range = ic_series.max() - ic_series.min()
+                # 只有当数据范围足够大且数据点足够多时才绘制直方图
+                if ic_range > 1e-10 and len(ic_series) > 10:  # 范围要大于10^-10
+                    # 使用auto模式让matplotlib自动确定合适的bins数量
+                    ax2.hist(ic_series.values, bins='auto', color='skyblue', edgecolor='black', alpha=0.7)
+                    ax2.axvline(ic_series.mean(), color='red', linestyle='--', linewidth=2, label=f'均值: {ic_series.mean():.4f}')
+                    ax2.axvline(0, color='black', linestyle='-', linewidth=0.5)
+                    ax2.set_title('IC分布直方图', fontsize=12, fontweight='bold')
+                    ax2.set_xlabel('IC值')
+                    ax2.set_ylabel('频数')
+                    ax2.legend()
+                    ax2.grid(True, alpha=0.3)
+                else:
+                    # 数据范围太小或数据点太少，显示文本提示
+                    ax2.text(0.5, 0.5, f'IC值范围太小\n无法绘制直方图\n范围: [{ic_series.min():.4f}, {ic_series.max():.4f}]\n唯一值数量: {len(ic_series.unique())}',
+                            ha='center', va='center', fontsize=9,
+                            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                    ax2.set_title('IC分布直方图', fontsize=12, fontweight='bold')
+            except Exception as e:
+                # 如果直方图绘制仍然失败，显示错误信息
+                print(f"[WARN] IC直方图绘制失败: {e}")
+                ax2.text(0.5, 0.5, f'IC直方图绘制失败\n错误: {str(e)[:50]}',
+                        ha='center', va='center', fontsize=9,
+                        bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.5))
+                ax2.set_title('IC分布直方图', fontsize=12, fontweight='bold')
+
+            # 3. 累计IC曲线（左下）
+            ax3 = axes[1, 0]
+            cumulative_ic = ic_series.cumsum()
+            ax3.plot(range(len(cumulative_ic)), cumulative_ic.values, color='purple', linewidth=2, marker='o', markersize=3)
+            ax3.axhline(y=0, color='black', linestyle='-', linewidth=0.5)
+            ax3.set_title('累计IC曲线', fontsize=12, fontweight='bold')
+            ax3.set_xlabel('时间')
+            ax3.set_ylabel('累计IC值')
+            ax3.grid(True, alpha=0.3)
+
+            # 4. IC统计摘要（右下）
+            ax4 = axes[1, 1]
+            ax4.axis('off')
+
+            # 计算统计指标
+            ic_mean = ic_series.mean()
+            ic_std = ic_series.std()
+            ic_ir = ic_mean / ic_std if ic_std != 0 else 0
+
+            # 统计文本
+            stats_text = f"""
+            IC统计分析
+
+            IC均值: {ic_mean:.4f}
+            IC标准差: {ic_std:.4f}
+            IC_IR: {ic_ir:.4f}
+            IC最大值: {ic_series.max():.4f}
+            IC最小值: {ic_series.min():.4f}
+            IC>0的次数: {(ic_series > 0).sum()} ({(ic_series > 0).sum()/len(ic_series)*100:.1f}%)
+            """
+
+            ax4.text(0.1, 0.5, stats_text, fontsize=11, family='monospace',
+                    verticalalignment='center', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+
+            plt.tight_layout()
+
+            # 转换为base64
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            plt.close()
+
+            print(f"[DEBUG] IC分析图表生成成功")
+
+            # 返回HTML
+            return f'''
+                <div class="section">
+                    <h2 class="section-title">📊 IC分析图表</h2>
+                    <div style="text-align: center; padding: 1rem;">
+                        <img src="data:image/png;base64,{img_base64}"
+                             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+                             alt="IC分析图表">
+                        <div style="margin-top: 1rem; font-size: 0.9rem; color: #6b7280;">
+                            💡 <strong>左上图</strong>: IC时序图，显示每期的IC值 |
+                            <strong>右上图</strong>: IC分布直方图，显示IC值的分布情况 |
+                            <strong>左下图</strong>: 累计IC曲线，显示IC的累计变化 |
+                            <strong>右下图</strong>: IC统计摘要
+                        </div>
+                    </div>
+                </div>
+            '''
+
+        except Exception as e:
+            print(f"[ERROR] 生成IC分析图表失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return ''
+
+    def _generate_group_backtest_charts(self, node_results: Dict) -> str:
+        """
+        从回测节点结果生成分组回测图表
+
+        Args:
+            node_results: 各节点的执行结果
+
+        Returns:
+            str: HTML图表内容，如果没有回测数据则返回空字符串
+        """
+        if not MATPLOTLIB_AVAILABLE:
+            return ''
+
+        try:
+            # 查找回测节点结果
+            backtest_result = None
+            for node_id, result in node_results.items():
+                if result is not None and isinstance(result, dict):
+                    # 检查是否包含回测相关数据
+                    if 'group_returns' in result or 'long_short_results' in result:
+                        backtest_result = result
+                        break
+
+            if not backtest_result:
+                print("[DEBUG] 未找到回测节点结果")
+                return ''
+
+            # 提取分组收益数据（可能在多个位置）
+            group_returns = backtest_result.get('group_returns')
+            if group_returns is None:
+                # 尝试从backtest_result字段中的backtest_results子字典获取
+                backtest_data = backtest_result.get('backtest_result', {})
+                if isinstance(backtest_data, dict):
+                    backtest_results = backtest_data.get('backtest_results', {})
+                    group_returns = backtest_results.get('group_returns')
+
+            if group_returns is None or (isinstance(group_returns, pd.DataFrame) and group_returns.empty):
+                print("[DEBUG] 回测结果中没有有效的group_returns")
+                print(f"[DEBUG] backtest_result键: {list(backtest_result.keys())}")
+                # 检查是否有backtest_result字段
+                if 'backtest_result' in backtest_result:
+                    print(f"[DEBUG] backtest_result.backtest_results键: {list(backtest_result['backtest_result'].keys())}")
+                    if 'backtest_results' in backtest_result['backtest_result']:
+                        print(f"[DEBUG] backtest_results键: {list(backtest_result['backtest_result']['backtest_results'].keys())}")
+                # 不返回空字符串，继续生成图表（显示提示信息）
+
+            # 提取多空策略收益
+            ls_returns = backtest_result.get('long_short_results', {})
+            if isinstance(ls_returns, dict):
+                cumulative_ls = ls_returns.get('cumulative_return')
+            else:
+                cumulative_ls = None
+
+            # 获取因子名称
+            factor_name = backtest_result.get('factor_name', 'alpha001')
+
+            # 创建分组回测图表（2x1布局）
+            fig, axes = plt.subplots(2, 1, figsize=(12, 10))
+            fig.suptitle(f'{factor_name.upper()} - 分组回测图表', fontsize=16, fontweight='bold')
+
+            # 确保中文字体
+            plt.rcParams['font.sans-serif'] = ['SimHei', 'Microsoft YaHei', 'Arial Unicode MS', 'DejaVu Sans']
+            plt.rcParams['axes.unicode_minus'] = False
+
+            # 1. 各组累计收益曲线
+            ax1 = axes[0]
+
+            # group_returns是DataFrame，列名是组别
+            if group_returns is not None and isinstance(group_returns, pd.DataFrame) and not group_returns.empty:
+                for col in group_returns.columns:
+                    if col != 'date':
+                        ax1.plot(group_returns.index, group_returns[col], label=f'第{col}组', linewidth=1.5)
+                ax1.set_title('各组累计收益曲线', fontsize=12, fontweight='bold')
+                ax1.set_xlabel('日期')
+                ax1.set_ylabel('累计收益率')
+                ax1.legend(loc='best')
+                ax1.grid(True, alpha=0.3)
+            else:
+                # 如果没有分组收益数据，显示提示文本
+                ax1.text(0.5, 0.5, '暂无分组收益数据\n请检查回测结果',
+                        ha='center', va='center', fontsize=12,
+                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax1.set_title('各组累计收益曲线', fontsize=12, fontweight='bold')
+
+            # 2. 多空策略累计收益
+            ax2 = axes[1]
+
+            if cumulative_ls is not None and isinstance(cumulative_ls, (pd.Series, pd.DataFrame)):
+                if isinstance(cumulative_ls, pd.DataFrame):
+                    cumulative_ls = cumulative_ls.iloc[:, 0]
+
+                # 绘制累计收益曲线
+                ax2.plot(cumulative_ls.index, cumulative_ls.values, label='多空策略', linewidth=2, color='green')
+
+                # 添加盈亏区域
+                ax2.fill_between(cumulative_ls.index, 1, cumulative_ls.values,
+                                where=(cumulative_ls.values >= 1), alpha=0.3, color='green', label='盈利')
+                ax2.fill_between(cumulative_ls.index, 1, cumulative_ls.values,
+                                where=(cumulative_ls.values < 1), alpha=0.3, color='red', label='亏损')
+
+                ax2.set_title('多空策略累计收益', fontsize=12, fontweight='bold')
+                ax2.set_xlabel('日期')
+                ax2.set_ylabel('累计净值')
+                ax2.legend(loc='best')
+                ax2.grid(True, alpha=0.3)
+                ax2.axhline(y=1, color='black', linestyle='--', linewidth=0.5)
+            else:
+                # 如果没有数据，显示提示文本
+                ax2.text(0.5, 0.5, '暂无多空策略数据',
+                        ha='center', va='center', fontsize=12,
+                        bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                ax2.set_title('多空策略累计收益', fontsize=12, fontweight='bold')
+
+            plt.tight_layout()
+
+            # 转换为base64
+            buf = io.BytesIO()
+            plt.savefig(buf, format='png', dpi=100, bbox_inches='tight')
+            buf.seek(0)
+            img_base64 = base64.b64encode(buf.read()).decode('utf-8')
+            plt.close()
+
+            print(f"[DEBUG] 分组回测图表生成成功")
+
+            # 返回HTML
+            return f'''
+                <div class="section">
+                    <h2 class="section-title">📊 分组回测图表</h2>
+                    <div style="text-align: center; padding: 1rem;">
+                        <img src="data:image/png;base64,{img_base64}"
+                             style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"
+                             alt="分组回测图表">
+                        <div style="margin-top: 1rem; font-size: 0.9rem; color: #6b7280;">
+                            💡 <strong>上图</strong>: 各组累计收益曲线，显示因子值分组的收益表现 |
+                            <strong>下图</strong>: 多空策略累计收益，显示做多高因子值股票、做空低因子值股票的策略表现
+                        </div>
+                    </div>
+                </div>
+            '''
+
+        except Exception as e:
+            print(f"[ERROR] 生成分组回测图表失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return ''

@@ -323,11 +323,15 @@ class GroupBacktestEngine:
 
         # 获取日期范围内的股票收益（支持ret或return列）
         ret_col = 'ret' if 'ret' in returns_df.columns else 'return'
-        stock_returns = returns_df.groupby('stock_code')[ret_col].apply(lambda x: (1 + x).prod() - 1)
 
-        # 扣减交易成本（简化处理：一次性扣减）
+        # 修复：对于日收益率数据，应该计算平均日收益
+        # 而不是复合收益，避免收益被放大
+        stock_returns = returns_df.groupby('stock_code')[ret_col].mean()
+
+        # 扣减交易成本（按调仓次数分摊）
+        # 假设每次调仓的成本是commission + slippage
         total_cost = commission + slippage
-        stock_returns = stock_returns * (1 - total_cost)
+        stock_returns = stock_returns - total_cost
 
         # 计算各分组收益
         for group_id in range(1, factor_df['group'].max() + 1):
@@ -472,7 +476,9 @@ class GroupBacktestEngine:
 
         # 转换为MultiIndex Series格式（ICAnalysis需要的格式）
         factor_series = factor_df.pivot(index='date', columns='stock_code', values='factor')
-        returns_series = returns_df.pivot(index='date', columns='stock_code', values='return')
+        # 支持ret或return列名
+        ret_col = 'ret' if 'ret' in returns_df.columns else 'return'
+        returns_series = returns_df.pivot(index='date', columns='stock_code', values=ret_col)
 
         # 展平为MultiIndex Series
         factor_multi = factor_series.stack()

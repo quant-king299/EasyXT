@@ -76,15 +76,51 @@ class FactorAnalysisVisualizer:
 
         # 2. IC分布图
         ic_clean = ic_series.dropna()
-        axes[1].hist(ic_clean, bins=30, density=True, alpha=0.7, edgecolor='black', color='steelblue')
-        axes[1].axvline(x=ic_clean.mean(), color='red', linestyle='--',
-                       linewidth=2, label=f'均值: {ic_clean.mean():.4f}')
-        axes[1].axvline(x=0, color='black', linestyle='-', linewidth=1, label='零线')
-        axes[1].set_title(f'{factor_name} - IC分布', fontsize=14, fontweight='bold')
-        axes[1].set_xlabel('IC值')
-        axes[1].set_ylabel('密度')
-        axes[1].legend(loc='best')
-        axes[1].grid(True, alpha=0.3)
+
+        # 用try-except处理直方图绘制，避免bin数量错误
+        try:
+            ic_range = ic_clean.max() - ic_clean.min()
+            # 只有当数据范围足够大且数据点足够多时才绘制直方图
+            if ic_range > 1e-10 and len(ic_clean) > 10:
+                # 使用auto模式让matplotlib自动确定合适的bins数量
+                axes[1].hist(ic_clean, bins='auto', density=True, alpha=0.7,
+                           edgecolor='black', color='steelblue')
+                axes[1].axvline(x=ic_clean.mean(), color='red', linestyle='--',
+                               linewidth=2, label=f'均值: {ic_clean.mean():.4f}')
+                axes[1].axvline(x=0, color='black', linestyle='-', linewidth=1, label='零线')
+                axes[1].set_title(f'{factor_name} - IC分布', fontsize=14, fontweight='bold')
+                axes[1].set_xlabel('IC值')
+                axes[1].set_ylabel('密度')
+                axes[1].legend(loc='best')
+                axes[1].grid(True, alpha=0.3)
+            else:
+                # 数据范围太小或数据点太少，显示文本提示
+                axes[1].text(0.5, 0.5,
+                           f'IC值范围太小，无法绘制直方图\n\n'
+                           f'IC均值: {ic_clean.mean():.4f}\n'
+                           f'IC标准差: {ic_clean.std():.4f}\n'
+                           f'唯一值数量: {len(ic_clean.unique())}\n'
+                           f'数据范围: [{ic_clean.min():.4f}, {ic_clean.max():.4f}]',
+                           ha='center', va='center', fontsize=10,
+                           bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+                axes[1].set_title(f'{factor_name} - IC分布（数据范围小）', fontsize=14, fontweight='bold')
+                axes[1].set_xticks([])
+                axes[1].set_yticks([])
+        except Exception as e:
+            # 如果直方图绘制失败，显示错误信息
+            print(f"[WARN] IC分布直方图绘制失败: {e}")
+            axes[1].text(0.5, 0.5,
+                       f'IC分布直方图绘制失败\n\n'
+                       f'IC统计信息:\n'
+                       f'均值: {ic_clean.mean():.4f}\n'
+                       f'标准差: {ic_clean.std():.4f}\n'
+                       f'最小值: {ic_clean.min():.4f}\n'
+                       f'最大值: {ic_clean.max():.4f}',
+                       ha='center', va='center', fontsize=9,
+                       bbox=dict(boxstyle='round', facecolor='lightcoral', alpha=0.5))
+            axes[1].set_title(f'{factor_name} - IC分布', fontsize=14, fontweight='bold')
+            axes[1].set_xticks([])
+            axes[1].set_yticks([])
 
         # 3. IC累计统计图
         cumulative_ic = ic_series.cumsum()

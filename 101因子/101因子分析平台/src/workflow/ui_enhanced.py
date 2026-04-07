@@ -1373,49 +1373,89 @@ class WorkflowUIEnhanced:
                         else:
                             st.metric("股票数量", f"{len(unique_symbols)} 只")
 
-                    st.markdown("#### 前10条数据")
+                    st.markdown("#### 数据统计")
 
-                    # 显示数据统计信息
-                    st.info(f"📊 数据范围: [{result.min():.6f}, {result.max():.6f}], 均值: {result.mean():.6f}")
+                    # 特殊处理：如果是信号数据（值为-1, 0, 1），显示信号分布
+                    if result.dtype in ['int64', 'int32'] and set(result.unique()).issubset({-1, 0, 1}):
+                        signal_counts = result.value_counts()
+                        total = len(result)
 
-                    # 调试信息
-                    print(f"[DEBUG] _render_series_result - result类型: {type(result)}, dtype: {result.dtype}")
-                    print(f"[DEBUG] _render_series_result - result前5个值: {result.head().tolist()}")
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("做多(1)", f"{signal_counts.get(1, 0):,}",
+                                    f"{signal_counts.get(1, 0)/total*100:.1f}%")
+                        with col2:
+                            st.metric("做空(-1)", f"{signal_counts.get(-1, 0):,}",
+                                    f"{signal_counts.get(-1, 0)/total*100:.1f}%")
+                        with col3:
+                            st.metric("观望(0)", f"{signal_counts.get(0, 0):,}",
+                                    f"{signal_counts.get(0, 0)/total*100:.1f}%")
 
-                    # 改进：显示前10条，但确保包含非零值（如果有的话）
-                    series_to_show = result.head(10)
+                        st.info("💡 信号说明：1=做多, -1=做空, 0=观望。大部分股票标记为观望是正常的，只交易最具代表性的股票。")
 
-                    # 检查前10条是否全是0或接近0
-                    if (series_to_show.abs() < 0.0001).all() and result.abs().max() > 0.01:
-                        # 如果前10条都接近0，但数据中有明显非零值，则重新采样
-                        print(f"[DEBUG] 前10条数据都接近0，重新采样显示更有代表性的数据")
-                        # 选取：最大值、最小值、中间值附近的数据
-                        max_idx = result.idxmax()
-                        min_idx = result.idxmin()
-                        median_val = result.median()
-                        median_idx = (result - median_val).abs().idxmin()
+                        # 显示一些示例信号
+                        st.markdown("#### 信号示例")
+                        # 选取包含所有类型信号的样本
+                        sample_long = result[result == 1].head(2)
+                        sample_short = result[result == -1].head(2)
+                        sample_neutral = result[result == 0].head(2)
 
-                        # 组合样本：前3条 + 最大值 + 最小值 + 中位数附近 + 最后3条
-                        sample_indices = list(result.head(3).index) + [max_idx, min_idx, median_idx] + list(result.tail(3).index)
-                        # 去重
-                        sample_indices = list(dict.fromkeys(sample_indices))  # 保持顺序并去重
-                        series_to_show = result.loc[sample_indices]
+                        sample_data = pd.concat([sample_long, sample_short, sample_neutral])
 
-                        st.info(f"💡 原前10条数据都接近0，已自动切换为代表性数据显示")
+                        formatted_sample = []
+                        for idx, value in sample_data.items():
+                            date_val, symbol_val = idx
+                            signal_label = "做多" if value == 1 else "做空" if value == -1 else "观望"
+                            formatted_sample.append({
+                                'date': str(date_val),
+                                'symbol': str(symbol_val),
+                                'signal': signal_label,
+                                'value': int(value)
+                            })
 
-                    formatted_data = []
-                    for idx, value in series_to_show.items():
-                        date_val, symbol_val = idx
-                        formatted_data.append({
-                            'date': str(date_val),
-                            'symbol': str(symbol_val),
-                            'value': f'{value:.6f}'  # 显示6位小数
-                        })
+                        st.dataframe(pd.DataFrame(formatted_sample), width="stretch")
+                    else:
+                        # 非信号数据，显示数据范围和前10条
+                        st.info(f"📊 数据范围: [{result.min():.6f}, {result.max():.6f}], 均值: {result.mean():.6f}")
 
-                    print(f"[DEBUG] _render_series_result - formatted_data前3个: {formatted_data[:3]}")
+                        # 调试信息
+                        print(f"[DEBUG] _render_series_result - result类型: {type(result)}, dtype: {result.dtype}")
+                        print(f"[DEBUG] _render_series_result - result前5个值: {result.head().tolist()}")
 
-                    display_df = pd.DataFrame(formatted_data)
-                    st.dataframe(display_df, width="stretch")
+                        # 改进：显示前10条，但确保包含非零值（如果有的话）
+                        series_to_show = result.head(10)
+
+                        # 检查前10条是否全是0或接近0
+                        if (series_to_show.abs() < 0.0001).all() and result.abs().max() > 0.01:
+                            # 如果前10条都接近0，但数据中有明显非零值，则重新采样
+                            print(f"[DEBUG] 前10条数据都接近0，重新采样显示更有代表性的数据")
+                            # 选取：最大值、最小值、中间值附近的数据
+                            max_idx = result.idxmax()
+                            min_idx = result.idxmin()
+                            median_val = result.median()
+                            median_idx = (result - median_val).abs().idxmin()
+
+                            # 组合样本：前3条 + 最大值 + 最小值 + 中位数附近 + 最后3条
+                            sample_indices = list(result.head(3).index) + [max_idx, min_idx, median_idx] + list(result.tail(3).index)
+                            # 去重
+                            sample_indices = list(dict.fromkeys(sample_indices))  # 保持顺序并去重
+                            series_to_show = result.loc[sample_indices]
+
+                            st.info(f"💡 原前10条数据都接近0，已自动切换为代表性数据显示")
+
+                        formatted_data = []
+                        for idx, value in series_to_show.items():
+                            date_val, symbol_val = idx
+                            formatted_data.append({
+                                'date': str(date_val),
+                                'symbol': str(symbol_val),
+                                'value': f'{value:.6f}'  # 显示6位小数
+                            })
+
+                        print(f"[DEBUG] _render_series_result - formatted_data前3个: {formatted_data[:3]}")
+
+                        display_df = pd.DataFrame(formatted_data)
+                        st.dataframe(display_df, width="stretch")
 
                     if len(result) <= 100:
                         with st.expander("📈 数据摘要", expanded=False):

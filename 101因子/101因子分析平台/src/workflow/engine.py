@@ -600,12 +600,12 @@ class WorkflowEngine:
         return weights
 
     def _execute_backtester(self, params: Dict[str, Any], results: Dict[str, Any]) -> Dict[str, Any]:
-        """执行回测节点"""
-        from src.analysis.backtest import BacktestEngine
-        
+        """执行回测节点 - 使用GroupBacktestEngine"""
+        from src.analysis.group_backtest import GroupBacktestEngine
+
         # 从上游节点获取因子数据
         factor_data = self._get_input_data(params, results, 'factor_data')
-        
+
         # 如果没有直接获取到因子数据，尝试从最近的因子计算结果中获取
         if factor_data is None or (hasattr(factor_data, 'empty') and factor_data.empty):
             # 遍历已执行的结果，寻找因子数据
@@ -635,10 +635,10 @@ class WorkflowEngine:
                                     factor_data = candidate
                                     print(f"[DEBUG] 回测节点从字典的 factor_data 键获取到正确的数据: shape={candidate.shape}, index_names={candidate.index.names}")
                                     break
-        
+
         # 获取价格数据
         price_data = self._get_input_data(params, results, 'price_data')
-        
+
         # 如果没有直接获取到价格数据，尝试从数据加载节点获取
         if price_data is None or (hasattr(price_data, 'empty') and price_data.empty):
             for node_id in reversed(self.execution_order):
@@ -670,7 +670,7 @@ class WorkflowEngine:
                             if all(col in result.columns for col in temp_required_cols):
                                 price_data = result
                                 break
-        
+
         if factor_data is not None and not (hasattr(factor_data, 'empty') and factor_data.empty) and \
            price_data is not None and not (hasattr(price_data, 'empty') and price_data.empty):
 
@@ -678,42 +678,114 @@ class WorkflowEngine:
             print(f"[DEBUG] factor_data: type={type(factor_data)}, shape={factor_data.shape}, index_names={factor_data.index.names if hasattr(factor_data.index, 'names') else 'N/A'}")
             print(f"[DEBUG] price_data: type={type(price_data)}, shape={price_data.shape}, index_names={price_data.index.names if hasattr(price_data.index, 'names') else 'N/A'}")
 
-            backtester = BacktestEngine()
-
-            # 解析weight_method参数（从格式 "equal: 等权重" 中提取 "equal"）
-            weight_method_raw = params.get('weight_method', 'equal')
-            if isinstance(weight_method_raw, str) and ':' in weight_method_raw:
-                weight_method = weight_method_raw.split(':')[0].strip()
+            # 数据格式转换：GroupBacktestEngine需要returns数据
+            # 从price_data中提取returns列
+            if 'returns' in price_data.columns:
+                returns_data = price_data[['returns']].copy()
+                # 重命名returns列为ret（GroupBacktestEngine期望的列名）
+                returns_data = returns_data.rename(columns={'returns': 'ret'})
+                # 重置索引以获取date和stock_code列
+                returns_data = returns_data.reset_index()
+                # 重命名symbol列为stock_code（GroupBacktestEngine期望的列名）
+                if 'symbol' in returns_data.columns:
+                    returns_data = returns_data.rename(columns={'symbol': 'stock_code'})
+                print(f"[DEBUG] 转换后的returns_data: shape={returns_data.shape}, columns={returns_data.columns.tolist()}")
             else:
-                weight_method = weight_method_raw
+                raise ValueError("price_data中缺少'returns'列，无法进行回测")
+
+            # 准备factor_data格式
+            factor_df = factor_data.reset_index()
+            if 'symbol' in factor_df.columns:
+                factor_df = factor_df.rename(columns={'symbol': 'stock_code'})
+            # 确保有factor列名
+            if not hasattr(factor_data, 'name') or factor_data.name is None:
+                if len(factor_df.columns) == 3:  # date, stock_code, 还有一列数值列
+                    factor_df = factor_df.rename(columns={factor_df.columns[-1]: 'factor'})
+            else:
+                factor_df = factor_df.rename(columns={factor_data.name: 'factor'})
+
+            print(f"[DEBUG] 转换后的factor_df: shape={factor_df.shape}, columns={factor_df.columns.tolist()}")
+
+            # 创建GroupBacktestEngine
+            backtester = GroupBacktestEngine()
+
+            # 解析参数
+            # 支持新的参数格式，同时保持向后兼容
+            n_groups = params.get('n_groups', params.get('n_quantiles', 5))
+            freq = params.get('freq', 'monthly')  # 默认月频调仓，降低交易成本
+            commission = params.get('commission', params.get('transaction_cost', 0.00025))
+            slippage = params.get('slippage', 0.001)
+
+            print(f"[INFO] 使用GroupBacktestEngine进行分组回测:")
+            print(f"  分组数量: {n_groups}")
+            print(f"  调仓频率: {freq}")
+            print(f"  手续费率: {commission:.4%}")
+            print(f"  滑点: {slippage:.2%}")
 
             try:
-                # 运行多空组合回测
-                ls_results = backtester.backtest_long_short_portfolio(
-                    factor_data=factor_data,  # type: ignore
-                    price_data=price_data,
-                    top_quantile=params.get('top_quantile', 0.2),
-                    bottom_quantile=params.get('bottom_quantile', 0.2),
-                    transaction_cost=params.get('transaction_cost', 0.001),
-                    weight_method=weight_method,
-                    fixed_n_stocks=params.get('fixed_n_stocks', None)
+                # 运行分组回测
+                backtest_result = backtester.run_backtest(
+                    factor_data=factor_df,
+                    returns_data=returns_data,
+                    n_groups=n_groups,
+                    freq=freq,
+                    commission=commission,
+                    slippage=slippage
                 )
-                
-                # 运行分层回测
-                n_quantiles = params.get('n_quantiles', 5)
-                quantile_results = backtester.backtest_quantile_portfolio(
-                    factor_data=factor_data,  # type: ignore
-                    price_data=price_data,
-                    n_quantiles=n_quantiles
-                )
-                
+
+                # 转换结果格式以保持向后兼容
+                # 提取多空策略结果
+                performance_summary = backtest_result.get('performance_summary', {})
+                ls_performance = performance_summary.get('long_short', {})
+
+                ls_results = {
+                    'total_return': ls_performance.get('total_return', 0),
+                    'annual_return': ls_performance.get('annual_return', 0),
+                    'sharpe_ratio': ls_performance.get('sharpe_ratio', 0),
+                    'returns': backtest_result['backtest_results'].get('long_short_returns', pd.DataFrame()),
+                    'long_short_spread': ls_performance.get('annual_return', 0),  # 使用年化收益作为spread
+                }
+
+                # 转换分层回测结果
+                group_returns = backtest_result['backtest_results'].get('group_returns', pd.DataFrame())
+                quantile_results = {}
+
+                if not group_returns.empty:
+                    # 计算每组的统计指标
+                    cumulative_returns = (1 + group_returns).cumprod()
+                    for col in group_returns.columns:
+                        group_name = f'Q{col}' if str(col).isdigit() else str(col)
+                        group_ret_series = group_returns[col]
+
+                        quantile_results[group_name] = {
+                            'total_return': cumulative_returns[col].iloc[-1] - 1 if len(cumulative_returns) > 0 else 0,
+                            'annual_return': group_ret_series.mean() * 252 if len(group_ret_series) > 0 else 0,
+                            'volatility': group_ret_series.std() * np.sqrt(252) if len(group_ret_series) > 0 else 0,
+                            'sharpe_ratio': (group_ret_series.mean() / group_ret_series.std() * np.sqrt(252)) if len(group_ret_series) > 0 and group_ret_series.std() > 0 else 0,
+                            'returns': group_ret_series
+                        }
+
+                # 添加单调性测试结果到summary
+                monotonicity = backtest_result.get('monotonicity_test', {})
+                summary = self._summarize_backtest_results(ls_results, quantile_results)
+                summary['monotonicity'] = monotonicity
+
+                print(f"[INFO] 分组回测完成")
+                print(f"  多空策略总收益: {ls_results['total_return']:.2%}")
+                print(f"  多空策略年化收益: {ls_results['annual_return']:.2%}")
+                print(f"  多空策略夏普比率: {ls_results['sharpe_ratio']:.4f}")
+                print(f"  单调性: {monotonicity.get('trend', 'unknown')}, 相关系数: {monotonicity.get('correlation', 0):.4f}")
+
                 return {
                     'long_short_results': ls_results,
                     'quantile_results': quantile_results,
-                    'summary': self._summarize_backtest_results(ls_results, quantile_results)
+                    'summary': summary,
+                    'backtest_result': backtest_result  # 保留完整结果供进一步分析
                 }
             except Exception as e:
-                print(f"回测执行出错: {e}")
+                print(f"[ERROR] 回测执行出错: {e}")
+                import traceback
+                traceback.print_exc()
                 # 返回默认结果
                 return {
                     'long_short_results': {'error': str(e)},
@@ -721,12 +793,12 @@ class WorkflowEngine:
                     'summary': {}
                 }
         else:
-            print(f"回测节点数据不足: factor_data is None: {factor_data is None}, price_data is None: {price_data is None}")
+            print(f"[ERROR] 回测节点数据不足: factor_data is None: {factor_data is None}, price_data is None: {price_data is None}")
             if factor_data is not None:
                 print(f"factor_data type: {type(factor_data)}, empty: {hasattr(factor_data, 'empty') and factor_data.empty}")
             if price_data is not None:
                 print(f"price_data type: {type(price_data)}, empty: {hasattr(price_data, 'empty') and price_data.empty}")
-            
+
             raise ValueError("回测节点缺少因子数据或价格数据")
     
     def _execute_performance_analyzer(self, params: Dict[str, Any], results: Dict[str, Any]) -> Dict[str, Any]:

@@ -51,6 +51,9 @@ reports/
 output/
 *.html
 
+# Demo图表文件
+demo_*.png
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb

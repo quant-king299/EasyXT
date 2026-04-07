@@ -283,6 +283,11 @@ logs/
 reports/
 tests/
 demo*/
+
+# Demo图表文件
+demo_*.png
+demo_*.jpg
+demo_*.jpeg
 deploy/
 demo_config_new/
 PLAN.md
@@ -410,3 +415,4 @@ PROJECT_ISSUES.md
 新建.md
 101因子/101因子分析平台/demo_new_features.py
 101因子/101因子分析平台/generate_ic_charts.py
+factor_analysis_report.txt

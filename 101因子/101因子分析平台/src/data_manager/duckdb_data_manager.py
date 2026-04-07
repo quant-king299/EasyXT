@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import warnings
 
 from .duckdb_storage import DuckDBStorage
-from .metadata_db_extended import MetadataDBExtended
+from .metadata_db_extended import MetadataDB as MetadataDBExtended
 
 
 class DuckDBDataManager:

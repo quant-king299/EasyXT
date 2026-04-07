@@ -1,0 +1,109 @@
+# DuckDB缓存配置文件
+# 101因子分析平台 - 数据加载优化配置
+
+# ========================================
+# 缓存配置
+# ========================================
+
+# 是否启用DuckDB缓存（默认：true）
+# - true: 优先从DuckDB读取数据，速度快
+# - false: 每次都从QMT下载，数据最新但较慢
+USE_DUCKDB_CACHE: true
+
+# 缓存路径配置
+CACHE_PATH: "../data/duckdb_cache"
+
+# 数据库文件名
+DATABASE_FILE: "stock_cache.ddb"
+METADATA_FILE: "cache_metadata.db"
+
+# ========================================
+# 缓存策略配置
+# ========================================
+
+# 缓存有效期（天），0表示永久有效
+CACHE_EXPIRY_DAYS: 0
+
+# 是否自动更新缓存
+AUTO_UPDATE_CACHE: false
+
+# 缓存更新频率（天）
+CACHE_UPDATE_FREQUENCY: 7
+
+# ========================================
+# 性能配置
+# ========================================
+
+# DuckDB线程数
+DUCKDB_THREADS: 4
+
+# DuckDB内存限制
+DUCKDB_MEMORY_LIMIT: "4GB"
+
+# 压缩算法（zstd/snappy/lz4）
+COMPRESSION: "zstd"
+
+# ========================================
+# 日志配置
+# ========================================
+
+# 是否显示详细的调试信息
+DEBUG_MODE: false
+
+# 是否显示缓存命中/未命中信息
+SHOW_CACHE_INFO: true
+
+# ========================================
+# 使用说明
+# ========================================
+
+"""
+配置文件使用说明：
+
+1. 基本使用：
+   - 设置 USE_DUCKDB_CACHE: true 启用缓存
+   - 设置 USE_DUCKDB_CACHE: false 禁用缓存
+
+2. 首次运行：
+   - 系统会从QMT下载数据
+   - 自动保存到DuckDB缓存
+   - 相对较慢（和之前一样）
+
+3. 后续运行：
+   - 系统优先从DuckDB读取
+   - 速度提升5-20倍
+   - 不依赖QMT客户端状态
+
+4. 缓存管理：
+   - 使用 test_duckdb_cache.py 测试缓存效果
+   - 定期清理旧缓存释放空间
+   - 可以手动删除 cache 目录
+
+5. 离线使用：
+   - 缓存后可以在QMT离线时使用
+   - 适合批量分析和回测
+"""
+
+# ========================================
+# 高级配置示例
+# ========================================
+
+# 示例1: 开发阶段（禁用缓存，获取最新数据）
+"""
+USE_DUCKDB_CACHE: false
+DEBUG_MODE: true
+"""
+
+# 示例2: 生产环境（启用缓存，最大化性能）
+"""
+USE_DUCKDB_CACHE: true
+AUTO_UPDATE_CACHE: true
+CACHE_UPDATE_FREQUENCY: 7
+DEBUG_MODE: false
+"""
+
+# 示例3: 离线分析（纯缓存模式）
+"""
+USE_DUCKDB_CACHE: true
+SHOW_CACHE_INFO: true
+"""
