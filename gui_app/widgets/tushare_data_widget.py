@@ -68,13 +68,17 @@ class TushareDownloadThread(QThread):
             elif self.task_type == 'moneyflow':
                 self._download_moneyflow()
             elif self.task_type == 'holders':
-                self.__download_holders()
+                self._download_holders()
             elif self.task_type == 'test_connection':
                 self._test_connection()
             elif self.task_type == 'batch_download':
                 self._batch_download()
             elif self.task_type == 'daily':
                 self._download_daily()
+            elif self.task_type == 'index_data':
+                self._download_index_data()
+            elif self.task_type == 'stock_basic':
+                self._download_stock_basic()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -886,6 +890,195 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"日线数据下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    def _download_index_data(self):
+        """下载指数数据"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            index_codes = self.kwargs.get('index_codes', [
+                '000300.SH',  # 沪深300
+                '000905.SH',  # 中证500
+                '000906.SH',  # 中证800
+                '000852.SH',  # 中证1000
+                '399303.SZ'   # 国证2000
+            ])
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载指数数据")
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit(f"指数数量: {len(index_codes)}")
+            self.log_signal.emit(f"日期范围: {start_date} - {end_date}")
+
+            # 连接数据库
+            conn = duckdb.connect(db_path)
+
+            # 创建指数数据表（包含所有字段）
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS index_data (
+                    ts_code VARCHAR,
+                    trade_date DATE,
+                    open DECIMAL(10,2),
+                    high DECIMAL(10,2),
+                    low DECIMAL(10,2),
+                    close DECIMAL(10,2),
+                    pre_close DECIMAL(10,2),
+                    change DECIMAL(10,2),
+                    pct_chg DECIMAL(10,4),
+                    vol DECIMAL(18,2),
+                    amount DECIMAL(18,2),
+                    PRIMARY KEY (ts_code, trade_date)
+                )
+            """)
+
+            total_count = 0
+            success_count = 0
+
+            for i, index_code in enumerate(index_codes, 1):
+                if not self._is_running:
+                    break
+
+                try:
+                    self.log_signal.emit(f"\n[{i}/{len(index_codes)}] 下载 {index_code}...")
+
+                    df = pro.index_daily(
+                        ts_code=index_code,
+                        start_date=start_date,
+                        end_date=end_date
+                    )
+
+                    if df is not None and not df.empty:
+                        # 保存到数据库 - 使用DuckDB原生方法
+                        try:
+                            # 保留所有11个字段
+                            df_insert = df[[
+                                'ts_code', 'trade_date', 'open', 'high', 'low', 'close',
+                                'pre_close', 'change', 'pct_chg', 'vol', 'amount'
+                            ]].copy()
+
+                            # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
+                            df_insert['trade_date'] = pd.to_datetime(
+                                df_insert['trade_date'], format='%Y%m%d'
+                            ).dt.strftime('%Y-%m-%d')
+
+                            # 准备数据：将DataFrame转换为元组列表
+                            insert_data = [tuple(row) for row in df_insert.itertuples(index=False, name=None)]
+
+                            # 执行批量插入（11个字段）
+                            conn.executemany("""
+                                INSERT OR REPLACE INTO index_data
+                                (ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, insert_data)
+
+                            total_count += len(df)
+                            success_count += 1
+                            self.log_signal.emit(f"  ✅ 成功: {len(df)} 条记录")
+                        except Exception as e:
+                            self.log_signal.emit(f"  ❌ 保存失败: {e}")
+                    else:
+                        self.log_signal.emit(f"  ❌ 无数据")
+
+                    self.progress_signal.emit(i, len(index_codes))
+
+                except Exception as e:
+                    self.log_signal.emit(f"  ❌ {index_code} 下载失败: {e}")
+                    continue
+
+                time.sleep(0.5)  # 避免请求过快
+
+            conn.close()
+            self.finished_signal.emit({'success': True, 'total': total_count})
+            self.log_signal.emit(f"\n✅ 指数数据下载完成！总计: {total_count:,} 条记录")
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"指数数据下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_stock_basic(self):
+        """下载股票基本信息"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载股票基本信息")
+            self.log_signal.emit("=" * 60)
+
+            # 连接数据库
+            conn = duckdb.connect(db_path)
+
+            # 创建stock_basic表
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS stock_basic (
+                    ts_code VARCHAR PRIMARY KEY,
+                    symbol VARCHAR,
+                    name VARCHAR,
+                    area VARCHAR,
+                    industry VARCHAR,
+                    market VARCHAR,
+                    list_date DATE,
+                    is_hs VARCHAR,
+                    update_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            self.log_signal.emit("✅ 数据库连接成功")
+            self.log_signal.emit("正在获取股票列表...")
+
+            # 获取股票列表
+            df = pro.stock_basic(
+                exchange='',
+                list_status='L',
+                fields='ts_code,symbol,name,area,industry,market,list_date,is_hs'
+            )
+
+            if df is None or df.empty:
+                self.error_signal.emit("获取股票列表失败")
+                return
+
+            self.log_signal.emit(f"✅ 获取到 {len(df)} 只股票")
+
+            # 转换日期格式
+            df['list_date'] = pd.to_datetime(df['list_date'], format='%Y%m%d', errors='coerce')
+
+            # 删除旧数据
+            conn.execute("DELETE FROM stock_basic")
+
+            # 插入新数据
+            insert_count = 0
+            for _, row in df.iterrows():
+                try:
+                    conn.execute("""
+                        INSERT INTO stock_basic
+                        (ts_code, symbol, name, area, industry, market, list_date, is_hs)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """, [
+                        row['ts_code'],
+                        row['symbol'],
+                        row['name'],
+                        row['area'],
+                        row['industry'],
+                        row['market'],
+                        row['list_date'],
+                        row['is_hs']
+                    ])
+                    insert_count += 1
+                except Exception as e:
+                    self.log_signal.emit(f"  ⚠️  {row['ts_code']} 插入失败: {e}")
+                    continue
+
+            conn.close()
+
+            self.finished_signal.emit({'success': True, 'total': insert_count})
+            self.log_signal.emit(f"\n✅ 股票基本信息下载完成！")
+            self.log_signal.emit(f"   总计: {insert_count} 只股票")
+            self.log_signal.emit(f"   用于：过滤ST股票、新股、停牌股票")
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"股票基本信息下载失败: {str(e)}\n{traceback.format_exc()}")
 
 class TushareDataWidget(QWidget):
     """Tushare数据下载组件（整合版）"""
@@ -951,6 +1144,14 @@ class TushareDataWidget(QWidget):
         # 股东数据标签页
         holders_tab = self._create_holders_tab()
         tab_widget.addTab(holders_tab, "👥 股东数据")
+
+        # 指数数据标签页
+        index_data_tab = self._create_index_data_tab()
+        tab_widget.addTab(index_data_tab, "📊 指数数据")
+
+        # 股票基本信息标签页
+        stock_basic_tab = self._create_stock_basic_tab()
+        tab_widget.addTab(stock_basic_tab, "📝 股票信息")
 
         layout.addWidget(tab_widget)
 
@@ -1305,6 +1506,63 @@ class TushareDataWidget(QWidget):
         layout.addStretch()
         return tab
 
+    def _create_index_data_tab(self):
+        """创建指数数据标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        config_group = QGroupBox("下载配置")
+        config_layout = QFormLayout(config_group)
+
+        self.index_years_spin = QSpinBox()
+        self.index_years_spin.setRange(1, 20)
+        self.index_years_spin.setValue(5)
+        self.index_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.index_years_spin)
+
+        layout.addWidget(config_group)
+
+        info_label = QLabel(
+            "📌 说明：指数数据包括沪深300、中证500、中证800、中证1000、国证2000等主要指数，"
+            "用于计算定价因子（MKT、SMB、HML、UMD）和作为回测基准。"
+        )
+        info_label.setStyleSheet("color: #666; padding: 5px;")
+        layout.addWidget(info_label)
+
+        download_btn = QPushButton("🚀 开始下载指数数据")
+        download_btn.setFont(QFont("Microsoft YaHei", 10))
+        download_btn.clicked.connect(self.start_download_index_data)
+        layout.addWidget(download_btn)
+
+        layout.addStretch()
+        return tab
+
+    def _create_stock_basic_tab(self):
+        """创建股票基本信息标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 说明
+        info_label = QLabel(
+            "📌 说明：股票基本信息包括股票代码、名称、行业、上市日期等，"
+            "用于101因子平台的样本筛选和过滤。\n\n"
+            "主要用途：\n"
+            "• 过滤ST股票（*ST, ST等）\n"
+            "• 过滤新股（上市不足60天）\n"
+            "• 过滤停牌股票\n"
+            "• 按行业分类进行分组回测"
+        )
+        info_label.setStyleSheet("color: #666; padding: 5px;")
+        layout.addWidget(info_label)
+
+        download_btn = QPushButton("🚀 开始下载股票信息")
+        download_btn.setFont(QFont("Microsoft YaHei", 10))
+        download_btn.clicked.connect(self.start_download_stock_basic)
+        layout.addWidget(download_btn)
+
+        layout.addStretch()
+        return tab
+
     def test_connection(self):
         """测试连接"""
         token = self.token_edit.text().strip()
@@ -1637,6 +1895,64 @@ class TushareDataWidget(QWidget):
             token=token,
             symbols=symbols,
             years=self.holders_years_spin.value()
+        )
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.start()
+
+    def start_download_index_data(self):
+        """开始下载指数数据"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载指数数据...")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        from datetime import datetime, timedelta
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=self.index_years_spin.value() * 365)
+
+        self.download_thread = TushareDownloadThread(
+            'index_data',
+            token=token,
+            start_date=start_date.strftime('%Y%m%d'),
+            end_date=end_date.strftime('%Y%m%d')
+        )
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.start()
+
+    def start_download_stock_basic(self):
+        """开始下载股票基本信息"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载股票基本信息...")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        self.download_thread = TushareDownloadThread(
+            'stock_basic',
+            token=token
         )
         self.download_thread.log_signal.connect(self._on_log)
         self.download_thread.progress_signal.connect(self._on_progress)

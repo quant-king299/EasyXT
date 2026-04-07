@@ -102,25 +102,49 @@ class EasyXTDataLoader:
         try:
             from src.data_manager.duckdb_data_manager import DuckDBDataManager
 
-            # 配置DuckDB路径
-            project_root = Path(__file__).parents[2]  # 回到101因子分析平台目录
-            data_dir = project_root / 'data' / 'duckdb_cache'
+            # 配置DuckDB路径 - 使用GUI下载的数据
+            # GUI数据路径: D:/StockData/stock_data.ddb
+            # 包含：PE、PB、市值、换手率等完整数据
 
-            # 创建DuckDB管理器
-            self.duckdb_manager = DuckDBDataManager(config={
-                'data_paths': {
-                    'root_dir': str(data_dir),
-                    'database': 'stock_cache.ddb',
-                    'metadata': 'cache_metadata.db'
-                },
-                'storage': {
-                    'format': 'duckdb',
-                    'compression': 'zstd'
-                }
-            })
+            # 使用GUI的数据库（只读模式）
+            gui_db_path = Path('D:/StockData/stock_data.ddb')
 
-            print(f"[OK] DuckDB缓存管理器初始化成功")
-            print(f"     缓存路径: {data_dir}")
+            if gui_db_path.exists():
+                # 使用GUI数据库
+                self.duckdb_manager = DuckDBDataManager(config={
+                    'data_paths': {
+                        'root_dir': str(gui_db_path.parent),
+                        'database': gui_db_path.name,
+                        'metadata': 'cache_metadata.db'
+                    },
+                    'storage': {
+                        'format': 'duckdb',
+                        'compression': 'zstd'
+                    }
+                })
+
+                print(f"[OK] DuckDB缓存管理器初始化成功")
+                print(f"     使用GUI数据库: {gui_db_path}")
+            else:
+                # GUI数据库不存在，使用本地缓存（兼容旧配置）
+                project_root = Path(__file__).parents[2]
+                data_dir = project_root / 'data' / 'duckdb_cache'
+
+                self.duckdb_manager = DuckDBDataManager(config={
+                    'data_paths': {
+                        'root_dir': str(data_dir),
+                        'database': 'stock_cache.ddb',
+                        'metadata': 'cache_metadata.db'
+                    },
+                    'storage': {
+                        'format': 'duckdb',
+                        'compression': 'zstd'
+                    }
+                })
+
+                print(f"[OK] DuckDB缓存管理器初始化成功")
+                print(f"     使用本地缓存: {data_dir}")
+                print(f"     [WARNING] 建议在GUI中下载数据以获取PE、PB等估值数据")
 
         except ImportError as e:
             print(f"[WARN] DuckDB模块未安装，无法使用缓存功能: {e}")

@@ -14,7 +14,8 @@ USE_DUCKDB_CACHE: true
 CACHE_PATH: "../data/duckdb_cache"
 
 # 数据库文件名
-DATABASE_FILE: "stock_cache.ddb"
+# 使用GUI下载的数据库（包含PE、PB、市值数据）
+DATABASE_FILE: "D:/StockData/stock_data.ddb"
 METADATA_FILE: "cache_metadata.db"
 
 # ========================================

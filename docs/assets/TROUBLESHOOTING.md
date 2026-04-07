@@ -14,6 +14,7 @@
   - [数据下载失败](#5-数据下载失败)
   - [Tushare配置问题](#6-tushare配置问题)
   - [QMT历史数据补充](#7-qmt历史数据补充)
+  - [用download_all_stocks.py下载了.DAT文件，如何导入DuckDB并复权？](#8-用download_all_stocks.py下载了dat文件如何导入duckdb并复权)
 - [安装相关](#安装相关)
 - [运行相关](#运行相关)
 - [性能相关](#性能相关)
@@ -423,6 +424,71 @@ pip install pytdx
 
 ---
 
+### 8. 用download_all_stocks.py下载了.DAT文件，如何导入DuckDB并复权？
+
+#### 症状
+
+使用了 `tools/download_all_stocks.py` 下载了全部A股数据，文件保存在 QMT 的 `.DAT` 格式中（如 `userdata_mini/datadir/SZ/86400/000001.DAT`），但想导入到 DuckDB（`stock_data.ddb`）并使用五维复权功能，不知道怎么操作。
+
+#### 问题原因
+
+`download_all_stocks.py` 只做了一件事：调用 `xtdata.download_history_data()` 把数据下载到 QMT 的 `.DAT` 本地文件。**它不会自动把数据提取出来存到 DuckDB。**
+
+完整的下载流程应该是三步：
+
+```
+① xtdata.download_history_data()  →  下载数据到 .DAT 文件
+② xtdata.get_market_data_ex()     →  从 .DAT 读取为 Python DataFrame
+③ 写入 DuckDB + 五维复权          →  存入 stock_data.ddb
+```
+
+`download_all_stocks.py` 只做了第①步，缺少第②③步。
+
+#### 解决方案
+
+**不需要手动转换 .DAT 文件！** 直接使用 GUI 界面操作即可：
+
+**情况一：.DAT 文件已经下载好了（你之前运行过 download_all_stocks.py）**
+
+1. 启动 GUI：`python run_gui.py`
+2. 切换到 **"📊 数据管理"** 标签页
+3. 点击 **"🔄 更新缺失数据"** 按钮
+4. 系统会通过 QMT API（`xtdata.get_market_data_ex()`）自动读取已有的 .DAT 文件，提取数据并存入 DuckDB
+
+> 已经下载好的 .DAT 文件不会被浪费，QMT API 会直接从本地 .DAT 文件读取，不需要重新从网络下载。
+
+**情况二：还没有下载过数据，想一步到位**
+
+1. 启动 GUI：`python run_gui.py`
+2. 切换到 **"📊 数据管理"** 标签页
+3. 设置日期范围（建议开始日期设为5年前）
+4. 点击 **"📥 下载A股数据"** 按钮
+5. 系统会自动完成：下载 → 读取 → 存入 DuckDB → 五维复权，一条龙搞定
+
+**情况三：只想下载单只股票**
+
+1. 启动 GUI：`python run_gui.py`
+2. 切换到 **"📊 数据管理"** 标签页
+3. 在 "🎯 手动下载单个标的" 区域输入股票代码（如 `000001.SZ`）
+4. 选择数据类型和日期范围
+5. 点击 **"⬇️ 下载单个标的"**
+
+#### 关于五维复权
+
+数据存入 DuckDB 后，在 **"📈 数据查看器"** 标签页可以切换五种复权方式查看数据：
+
+| 复权类型 | 说明 | 用途 |
+|---------|------|------|
+| 不复权 | 除权除息后的原始价格 | 看真实交易价格 |
+| 前复权 | 以最新价格为基准调整历史 | 看K线图最常用 |
+| 后复权 | 以上市首日为基准调整当前 | 计算真实收益率 |
+| 等比前复权 | 几何平均消除除权跳空 | 连续K线 |
+| 等比后复权 | 几何平均消除跳空 | 连续收益曲线 |
+
+> 提示：不要使用 `download_all_stocks.py` 下载数据，直接用 GUI 里的按钮就行，省时省力。
+
+---
+
 ## 安装相关
 
 ### 8. xtquant安装失败
@@ -670,4 +736,4 @@ print('=' * 50)
 
 ---
 
-**最后更新**: 2026-03-26
+**最后更新**: 2026-04-07

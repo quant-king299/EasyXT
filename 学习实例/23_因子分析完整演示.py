@@ -241,7 +241,7 @@ try:
            MAX(date) as end_date,
            COUNT(DISTINCT stock_code) as n_stocks
     FROM stock_daily
-    WHERE date >= '2023-01-01'
+    WHERE date >= '2023-01-01' AND date <= '2023-12-31'
     """
     stats = conn.execute(stats_query).fetchdf()
 
@@ -251,13 +251,13 @@ try:
     end_date = stats['end_date'].iloc[0]
 
     print(f"[数据统计] 数据库共有 {n_stocks_total:,.0f} 只股票")
-    print(f"           时间范围: {start_date} 至 {end_date}")
-    print(f"           总记录数: {total_records:,.0f}")
+    print(f"           分析时间范围: 2023年全年")
+    print(f"           可用记录数: {total_records:,.0f}")
 
     # 选择部分股票进行分析（选择100只股票以加快速度）
     print("\n选择100只股票进行分析...")
 
-    # 读取数据
+    # 读取数据 - 使用2023年全年数据
     data_query = """
     SELECT date, stock_code, close,
            LAG(close, 1) OVER (PARTITION BY stock_code ORDER BY date) as prev_close
@@ -265,10 +265,10 @@ try:
         SELECT * FROM stock_daily
         WHERE stock_code IN (
             SELECT DISTINCT stock_code FROM stock_daily
-            WHERE date >= '2023-01-01'
+            WHERE date >= '2023-01-01' AND date <= '2023-12-31'
             LIMIT 100
         )
-        AND date >= '2023-01-01'
+        AND date >= '2023-01-01' AND date <= '2023-12-31'
     )
     QUALIFY prev_close IS NOT NULL
     ORDER BY stock_code, date
@@ -284,18 +284,53 @@ try:
     # 计算收益率
     df_raw['return'] = df_raw['close'] / df_raw['prev_close'] - 1
 
-    # 计算一个简单的动量因子作为演示（20日收益率）
+    # 计算一个简单的动量因子作为演示（5日收益率，避免与1日收益率高度相关）
+    # 注意：不要使用过长的窗口，否则因子会和收益高度相关
     df_raw['factor'] = df_raw.groupby('stock_code')['close'].transform(
-        lambda x: x.pct_change(20)
+        lambda x: x.pct_change(5)  # 使用5日而不是20日
     )
 
     # 删除缺失值
-    df = df_raw[['date', 'stock_code', 'factor', 'return']].dropna()
+    df_raw = df_raw.dropna()
+    df = df_raw[['date', 'stock_code', 'factor', 'return']].copy()
+
+    # 数据验证：检查因子和收益的相关性
+    correlation = df['factor'].corr(df['return'])
+    print(f"\n[数据验证] 因子与收益率相关系数: {correlation:.4f}")
+    if abs(correlation) > 0.95:
+        print(f"[警告] 相关系数过高({correlation:.4f})，因子和收益几乎完全相关！")
+        print(f"        这会导致IC分析失效，请检查因子计算逻辑")
+
+    # 检查数据量
+    n_dates = df['date'].nunique()
+    if n_dates < 20:
+        print(f"[警告] 交易日数太少({n_dates}个)，IC分析结果可能不可靠")
+        print(f"        建议至少需要60个交易日（约3个月）的数据")
 
     print(f"[OK] 数据读取完成: {len(df):,} 条记录")
     print(f"  分析股票数: {df['stock_code'].nunique()}")
     print(f"  日期范围: {df['date'].min()} 至 {df['date'].max()}")
     print(f"  平均收益率: {df['return'].mean():.4%}")
+
+    # 检查数据相关性（调试信息）
+    print(f"\n[DEBUG] 数据相关性检查:")
+    print(f"  因子值范围: [{df['factor'].min():.4f}, {df['factor'].max():.4f}]")
+    print(f"  收益率范围: [{df['return'].min():.4f}, {df['return'].max():.4f}]")
+    print(f"  因子标准差: {df['factor'].std():.4f}")
+    print(f"  收益率标准差: {df['return'].std():.4f}")
+    print(f"  唯一日期数: {df['date'].nunique()}")
+    print(f"  每只股票平均记录数: {len(df) / df['stock_code'].nunique():.1f}")
+
+    # 检查是否有重复数据或异常相关性
+    if df['factor'].std() < 1e-10 or df['return'].std() < 1e-10:
+        print("\n[警告] 数据标准差接近0，可能导致IC计算异常！")
+        print(f"  因子值可能全部相同，样本量过小或数据有问题")
+
+    # 如果数据量太少，给出警告
+    if df['date'].nunique() < 10:
+        print(f"\n[错误] 数据量不足！只有{df['date'].nunique()}个交易日，无法进行有效的IC分析")
+        print("        建议至少需要20个交易日以上的数据")
+        sys.exit(1)
 
 except Exception as e:
     print(f"[错误] DuckDB读取失败: {e}")

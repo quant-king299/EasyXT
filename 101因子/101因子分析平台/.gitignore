@@ -37,10 +37,16 @@ data/
 data/raw/
 data/factors/
 data/cache/
+data/duckdb_cache/  # 旧的DuckDB缓存目录（已弃用，使用GUI数据）
 data/*.db
+data/*.ddb
 data/*.parquet
 data/**/*.parquet
 *.parquet
+
+# 数据库文件（使用GUI统一管理）
+# GUI数据路径: D:/StockData/stock_data.ddb
+# 101因子平台不再维护独立的数据库文件
 
 # 日志
 logs/
