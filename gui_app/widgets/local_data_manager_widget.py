@@ -337,6 +337,7 @@ class DataDownloadThread(QThread):
             success_count = 0
             failed_count = 0
             skipped_count = 0
+            skipped_list = []
             failed_list = []
 
             # === 步骤1: 批量收集所有数据（不写入数据库） ===
@@ -440,8 +441,10 @@ class DataDownloadThread(QThread):
                             else:
                                 self.log_signal.emit(f"  [{i+1}/{total}] {stock_code}: ⚠️ 无新数据（已是最新）")
                                 skipped_count += 1
+                                skipped_list.append(stock_code)
                         else:
                             skipped_count += 1
+                            skipped_list.append(stock_code)
                     else:
                         failed_count += 1
                         failed_list.append(stock_code)
@@ -558,6 +561,17 @@ class DataDownloadThread(QThread):
                     self.log_signal.emit(f"    ✗ {failed_item}")
                 if len(failed_list) > 20:
                     self.log_signal.emit(f"    ... 还有 {len(failed_list) - 20} 只")
+                self.log_signal.emit("=" * 70)
+
+            # 输出跳过清单
+            if skipped_list:
+                self.log_signal.emit("")
+                self.log_signal.emit("=" * 70)
+                self.log_signal.emit(f"  跳过清单 ({len(skipped_list)} 只):")
+                for skipped_code in skipped_list[:30]:
+                    self.log_signal.emit(f"    ⊗ {skipped_code}")
+                if len(skipped_list) > 30:
+                    self.log_signal.emit(f"    ... 还有 {len(skipped_list) - 30} 只")
                 self.log_signal.emit("=" * 70)
 
         except ImportError as e:
@@ -2670,8 +2684,9 @@ class LocalDataManagerWidget(QWidget):
         total = result.get('total', 0)
         success = result.get('success', 0)
         failed = result.get('failed', 0)
+        skipped = result.get('skipped', 0)
 
-        msg = f"下载完成！\n总数: {total}\n成功: {success}\n失败: {failed}"
+        msg = f"下载完成！\n总数: {total}\n成功: {success}\n跳过: {skipped}\n失败: {failed}"
 
         if failed > 0:
             QMessageBox.warning(self, "下载完成", msg)
