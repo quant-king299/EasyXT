@@ -288,7 +288,8 @@ class AdvancedDataViewer(QWidget):
         self.current_data = None
         self.init_ui()
         self.apply_dark_theme()
-        self.load_initial_data()
+        # 不在初始化时加载数据，延迟到用户首次访问时加载
+        # 这样即使没有DuckDB数据库，GUI也能正常启动
 
     def init_ui(self):
         """初始化UI - 上下分栏布局"""
@@ -507,13 +508,20 @@ class AdvancedDataViewer(QWidget):
     def load_stock_list(self, filter_type: str = 'all'):
         """加载股票列表"""
         try:
+            # 检查数据库文件是否存在
+            db_path = Path(r'D:/StockData/stock_data.ddb')
+            if not db_path.exists():
+                # 数据库不存在，清空表格并显示提示
+                self.stock_table.setRowCount(0)
+                return
+
             # 构建筛选条件
             where_clause = ""
             if filter_type != 'all':
                 where_clause = f"WHERE symbol_type = '{filter_type}'"
 
             if DB_MANAGER_AVAILABLE:
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+                manager = get_db_manager(db_path)
 
                 query = f"""
                     SELECT
@@ -531,7 +539,7 @@ class AdvancedDataViewer(QWidget):
 
                 df = manager.execute_read_query(query)
             else:
-                con = duckdb.connect(r'D:/StockData/stock_data.ddb', read_only=True)
+                con = duckdb.connect(db_path, read_only=True)
                 df = con.execute(f"""
                     SELECT stock_code, symbol_type, COUNT(*) as count,
                            MIN(date) as min_date, MAX(date) as max_date
@@ -546,7 +554,16 @@ class AdvancedDataViewer(QWidget):
             self.populate_stock_table(df)
 
         except Exception as e:
-            QMessageBox.warning(self, "错误", f"加载股票列表失败: {e}")
+            # 只在调试时显示详细错误
+            import traceback
+            print(f"加载股票列表失败: {e}")
+            print(traceback.format_exc())
+
+            # 检查是否是数据库不存在的问题
+            if "Cannot open file" in str(e) or "系统找不到指定的路径" in str(e):
+                self.stock_table.setRowCount(0)
+            else:
+                QMessageBox.warning(self, "错误", f"加载股票列表失败: {e}")
 
     def populate_stock_table(self, df: pd.DataFrame):
         """填充股票表格"""

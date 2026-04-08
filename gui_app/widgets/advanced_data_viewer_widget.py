@@ -92,8 +92,10 @@ class AdvancedDataViewerWidget(QWidget):
         self.current_stock = None
         self.current_data = None
         self.search_timer = None  # 搜索延迟定时器
+        self.data_loaded = False  # 标记数据是否已加载
         self.init_ui()
-        self.load_initial_data()
+        # 不在初始化时加载数据，延迟到用户首次访问时加载
+        # 这样即使没有DuckDB数据库，GUI也能正常启动
 
     def init_ui(self):
         """初始化UI"""
@@ -375,6 +377,14 @@ class AdvancedDataViewerWidget(QWidget):
     def load_stock_list(self, filter_type: str = 'all', search_text: str = ''):
         """加载股票列表（支持全局搜索）"""
         try:
+            # 检查数据库文件是否存在
+            db_path = r'D:/StockData/stock_data.ddb'
+            if not os.path.exists(db_path):
+                # 数据库不存在，显示友好提示而不是错误
+                self.data_stats_label.setText("⚠️ 未找到DuckDB数据库，请先下载数据")
+                self.stock_table.setRowCount(0)
+                return
+
             # 构建WHERE子句
             conditions = []
 
@@ -391,7 +401,7 @@ class AdvancedDataViewerWidget(QWidget):
                 where_clause = "WHERE " + " AND ".join(conditions)
 
             if DB_MANAGER_AVAILABLE:
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+                manager = get_db_manager(db_path)
 
                 # 显示所有匹配结果（去掉限制，确保显示所有股票）
                 limit_clause = ""
@@ -413,7 +423,7 @@ class AdvancedDataViewerWidget(QWidget):
                 df = manager.execute_read_query(query)
             else:
                 import duckdb
-                con = duckdb.connect(r'D:/StockData/stock_data.ddb', read_only=True)
+                con = duckdb.connect(db_path, read_only=True)
                 df = con.execute(query).fetchdf()
                 con.close()
 
@@ -426,7 +436,17 @@ class AdvancedDataViewerWidget(QWidget):
                 self.data_stats_label.setText(f"共 {len(df)} 只股票")
 
         except Exception as e:
-            QMessageBox.warning(self, "错误", f"加载股票列表失败: {e}")
+            # 只在调试时显示详细错误，给用户显示友好提示
+            import traceback
+            print(f"加载股票列表失败: {e}")
+            print(traceback.format_exc())
+
+            # 检查是否是数据库不存在的问题
+            if "Cannot open file" in str(e) or "系统找不到指定的路径" in str(e):
+                self.data_stats_label.setText("⚠️ 未找到DuckDB数据库，请先下载数据")
+                self.stock_table.setRowCount(0)
+            else:
+                self.data_stats_label.setText(f"⚠️ 加载数据失败: {str(e)}")
 
     def populate_stock_table(self, df: pd.DataFrame):
         """填充股票表格"""
