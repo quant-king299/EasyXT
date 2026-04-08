@@ -243,10 +243,13 @@ class BacktestWidget(QWidget):
         self.backtest_worker = None
         self.current_results = None
         self.data_manager = DataManager()  # 初始化数据管理器
-        
+
         self.init_ui()
         self.setup_connections()
-        self.update_connection_status()  # 更新连接状态显示
+        # 不再自动检查连接状态，避免在数据服务初始化前调用API
+        # 用户可以手动点击"刷新状态"按钮来检查连接
+        self.data_source_label.setText("ℹ️ 点击刷新查看状态")
+        self.data_source_label.setStyleSheet("color: gray; font-weight: bold;")
         
     def init_ui(self):
         """初始化用户界面"""

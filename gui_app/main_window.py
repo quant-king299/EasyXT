@@ -232,60 +232,48 @@ class MainWindow(QMainWindow):
 
             print("✓ API有data属性")
 
-            # 尝试初始化数据服务
-            print("\n尝试初始化数据服务...")
+            # 初始化数据服务
+            print("\n正在初始化数据服务...")
             try:
-                if hasattr(api, 'init_data'):
-                    init_result = api.init_data()
-                    print(f"  init_data() 返回: {init_result}")
-
-                    if init_result:
-                        print("✓ 数据服务初始化成功")
-                    else:
-                        print("⚠ 数据服务初始化返回False，但继续尝试获取数据...")
+                init_result = api.init_data()
+                if init_result:
+                    print("✓ 数据服务初始化成功")
                 else:
-                    print("⚠ API没有init_data方法，直接尝试获取数据")
+                    print("ℹ️  数据服务初始化返回False")
+                    print("ℹ️  GUI功能正常，可使用Tushare下载获取数据")
             except Exception as e:
-                print(f"⚠ 初始化数据服务时出现异常: {str(e)}")
-                print("  继续尝试获取数据...")
+                print(f"ℹ️  数据服务初始化异常: {str(e)}")
+                print("ℹ️  这不影响GUI使用，可以通过Tushare下载数据")
 
-            # 尝试获取行情数据来验证连接
-            test_codes = ['511090.SH', '000001.SZ']
+            # 验证数据连接
+            print("\n尝试验证数据连接...")
+            test_codes = ['000001.SZ']
             connected = False
 
             for code in test_codes:
                 try:
-                    print(f"\n尝试获取 {code} 的行情数据...")
+                    print(f"  测试 {code}...")
                     price_df = api.data.get_current_price([code])
 
-                    print(f"  返回类型: {type(price_df)}")
-                    print(f"  是否为None: {price_df is None}")
-
-                    if price_df is not None:
-                        print(f"  是否为空: {price_df.empty if hasattr(price_df, 'empty') else 'N/A'}")
-                        print(f"  长度: {len(price_df) if hasattr(price_df, '__len__') else 'N/A'}")
-
-                        if hasattr(price_df, 'empty') and not price_df.empty:
-                            connected = True
-                            print(f"✓ 连接验证成功：通过{code}获取到行情数据")
-                            print(f"  数据预览:\n{price_df.head()}")
-                            break
-                        else:
-                            print(f"  返回为空DataFrame")
+                    if price_df is not None and hasattr(price_df, 'empty') and not price_df.empty:
+                        connected = True
+                        print(f"✓ 数据连接验证成功")
+                        break
                     else:
-                        print(f"  返回为None")
+                        print(f"  ℹ️  {code} 数据为空")
 
                 except Exception as e:
-                    print(f"  ❌ 获取{code}行情异常: {str(e)}")
-                    import traceback
-                    print(f"  详细错误: {traceback.format_exc()}")
-                    continue
+                    # 只在有严重错误时才显示
+                    if "数据服务未连接" not in str(e):
+                        print(f"  ℹ️  连接测试失败: {str(e)[:50]}")
+                    break  # 只测试一个代码就够了
 
             print("\n" + "="*60)
             if connected:
-                print("✅ 最终结果: MiniQMT已连接")
+                print("✅ MiniQMT已连接，可使用实时数据功能")
             else:
-                print("❌ 最终结果: MiniQMT未连接")
+                print("ℹ️ MiniQMT未连接，但GUI功能正常可用")
+                print("ℹ️ 可以使用Tushare下载功能获取数据")
             print("="*60 + "\n")
 
             self.update_connection_status(connected)
