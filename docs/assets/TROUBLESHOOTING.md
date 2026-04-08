@@ -491,7 +491,81 @@ pip install pytdx
 
 ## 安装相关
 
-### 8. xtquant安装失败
+### 8. 从GitHub下载代码后运行报错
+
+#### 错误信息
+
+```
+TypeError: 'NoneType' object is not callable
+ModuleNotFoundError: No module named 'duckdb'
+AttributeError: 'DataManager' object has no attribute 'get_connection_status'
+```
+
+#### 快速解决方案
+
+**一键修复脚本（推荐）**
+
+```powershell
+# 1. 更新到最新代码
+git pull origin main
+
+# 2. 重新安装依赖
+python -m pip install -r requirements.txt
+
+# 3. 重新安装 easyxt_backtest
+python -m pip uninstall easyxt_backtest -y
+python -m pip install -e ./easyxt_backtest
+
+# 4. 启动程序
+python run_gui.py
+```
+
+**如果上面不行，试试完整重装：**
+
+```powershell
+# 删除虚拟环境
+Remove-Item -Recurse -Force .venv
+
+# 重新创建虚拟环境
+python -m venv .venv
+& .\.venv\Scripts\Activate.ps1
+
+# 安装所有依赖
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m pip install -e ./easyxt_backtest
+
+# 启动程序
+python run_gui.py
+```
+
+#### 常见问题
+
+**Q: pip 命令报错怎么办？**
+
+A: 使用 `python -m pip` 代替 `pip`：
+```powershell
+# 如果这个报错
+pip install xxx
+
+# 改成这样
+python -m pip install xxx
+```
+
+**Q: 提示 "ModuleNotFoundError: No module named 'duckdb'"？**
+
+A: 安装缺失的包：
+```powershell
+python -m pip install duckdb pyarrow
+```
+
+**Q: 为什么本地能跑，GitHub 下载的代码不能跑？**
+
+A: 可能是版本不同步，运行 `git pull origin main` 更新到最新代码即可。
+
+---
+
+### 9. xtquant安装失败
 
 #### 错误信息
 ```
@@ -517,7 +591,7 @@ python check_xtquant.py
 
 ---
 
-### 9. 依赖安装失败
+### 10. 依赖安装失败
 
 #### 常见错误
 
@@ -543,7 +617,7 @@ pip install -e ./easy_xt
 
 ## 运行相关
 
-### 10. GUI启动失败
+### 11. GUI启动失败
 
 #### 错误信息
 ```
@@ -557,7 +631,91 @@ pip install PyQt5
 
 ---
 
-### 11. 回测报错
+### 12. matplotlib中文字体错误
+
+#### 错误信息
+
+```
+File "matplotlib\artist.py", line 72, in draw_wrapper
+  return draw(artist)
+  ...
+  ymax = corners_rotated[:, 1].max()
+  File "numpy\_core\_methods.py", line 44, in amax
+    return umr_maximum(a, axis, None, out, keepdims, initial, where)
+```
+
+#### 问题原因
+
+matplotlib找不到中文字体SimHei（黑体），导致绘制图表时出错。
+
+#### 快速解决方案
+
+**使用项目提供的字体安装工具（推荐）：**
+
+```powershell
+# 进入tools目录
+cd tools
+
+# 运行字体安装工具
+python install_simhei_font.py
+
+# 或者双击运行
+.\install_simhei_font.bat
+```
+
+安装工具会自动完成：
+1. ✓ 从Windows系统复制SimHei字体
+2. ✓ 安装到matplotlib字体目录
+3. ✓ 清除matplotlib缓存
+4. ✓ 验证字体安装
+
+#### 手动安装（如果工具失败）
+
+**步骤1：复制字体文件**
+
+```powershell
+# 查找matplotlib字体目录
+python -c "import matplotlib,os;print(os.path.join(os.path.dirname(matplotlib.__file__),'mpl-data','fonts','ttf'))"
+
+# 复制字体（替换上面的路径）
+$font_dir = "matplotlib字体目录路径"
+Copy-Item "C:\Windows\Fonts\simhei.ttf" -Destination "$font_dir\simhei.ttf"
+```
+
+**步骤2：清除matplotlib缓存**
+
+```powershell
+python -c "import matplotlib,shutil;cache_dir=matplotlib.get_cachedir();shutil.rmtree(cache_dir,ignore_errors=True);print('缓存已清除')"
+```
+
+**步骤3：验证安装**
+
+```powershell
+python -c "import matplotlib.pyplot as plt;plt.rcParams['font.sans-serif']=['SimHei'];print('字体配置成功')"
+```
+
+#### 常见问题
+
+**Q: 为什么会出现这个问题？**
+
+A: Windows系统自带SimHei字体，但matplotlib默认不会使用系统字体，需要手动配置。
+
+**Q: 安装工具提示找不到SimHei字体？**
+
+A: 检查Windows字体目录是否存在该字体：
+```powershell
+Test-Path "C:\Windows\Fonts\simhei.ttf"
+```
+
+如果返回False，说明系统缺少该字体，需要先安装SimHei字体。
+
+**Q: 安装后还是报错？**
+
+A: 重启Python程序或IDE，确保matplotlib重新加载字体配置。
+
+---
+
+### 14. 回测报错
 
 #### 错误1：数据为空
 ```
@@ -586,7 +744,7 @@ con.close()
 
 ---
 
-### 12. 策略运行失败
+### 15. 策略运行失败
 
 #### 错误信息
 ```
@@ -603,7 +761,7 @@ ConnectionError: 无法连接到交易账户
 
 ## 性能相关
 
-### 13. 回测速度慢
+### 16. 回测速度慢
 
 #### 性能对比
 
@@ -638,7 +796,7 @@ df['ma5'] = df['close'].rolling(5).mean()
 
 ---
 
-### 14. 内存占用过高
+### 17. 内存占用过高
 
 #### 问题
 ```
@@ -736,4 +894,4 @@ print('=' * 50)
 
 ---
 
-**最后更新**: 2026-04-07
+**最后更新**: 2026-04-08
