@@ -1244,19 +1244,19 @@ class TushareDataWidget(QWidget):
 
         self.chk_financial = QCheckBox("📊 财务数据")
         self.chk_financial.setChecked(True)
-        type_layout.addWidget(self.chk_financial, 0, 1)
+        type_layout.addWidget(self.chk_financial, 1, 0)
 
         self.chk_dividend = QCheckBox("💸 分红数据")
         self.chk_dividend.setChecked(False)
-        type_layout.addWidget(self.chk_dividend, 1, 0)
+        type_layout.addWidget(self.chk_dividend, 1, 1)
 
         self.chk_moneyflow = QCheckBox("💱 资金流向")
         self.chk_moneyflow.setChecked(False)
-        type_layout.addWidget(self.chk_moneyflow, 1, 1)
+        type_layout.addWidget(self.chk_moneyflow, 2, 0)
 
-        self.chk_holders = QCheckBox("👥 股东数据")
+        self.chk_holders = QCheckBox("👥 股东数据（小市值策略必需）")
         self.chk_holders.setChecked(False)
-        type_layout.addWidget(self.chk_holders, 2, 0, 1, 2)
+        type_layout.addWidget(self.chk_holders, 2, 1)
 
         layout.addWidget(type_group)
 
