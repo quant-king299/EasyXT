@@ -2015,9 +2015,23 @@ class LocalDataManagerWidget(QWidget):
         """从DuckDB加载统计数据"""
         try:
             import duckdb
+            from pathlib import Path
 
-            db_path = r'D:/StockData/stock_data.ddb'
-            con = duckdb.connect(db_path, read_only=True)
+            db_path = Path(r'D:/StockData/stock_data.ddb')
+
+            # 检查数据库文件是否存在
+            if not db_path.exists():
+                # 首次使用，数据库文件不存在是正常的
+                self.log("ℹ️  DuckDB数据库尚未创建，请先下载股票数据")
+                self.total_symbols_label.setText("标的总数: 0")
+                self.total_stocks_label.setText("股票数量: 0")
+                self.total_bonds_label.setText("可转债数量: 0")
+                self.total_records_label.setText("总记录数: 0")
+                self.total_size_label.setText("存储大小: 0.00 MB")
+                self.latest_date_label.setText("最新日期: N/A")
+                return
+
+            con = duckdb.connect(str(db_path), read_only=True)
 
             # 统计stock_daily表
             stats_daily = con.execute("""
