@@ -418,10 +418,3 @@ PROJECT_ISSUES.md
 factor_analysis_report.txt
 101因子/101因子分析平台/OPTIMIZATION_SUMMARY.md
 101因子/101因子分析平台/run_gui.py.original
-gui_app/main_window.py
-start_gui.ps1
-tools/demo_direct_run.py
-tools/demo_python_version.py
-tools/diagnose_qmt_connection.bat
-start_qmt_gui.bat
-tools/demo_run_problem.py

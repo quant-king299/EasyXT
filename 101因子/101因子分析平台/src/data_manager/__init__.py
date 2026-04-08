@@ -3,13 +3,23 @@
 轻量级数据存储方案，支持增量更新
 
 支持多种存储后端：
-- SQLite (ParquetStorage)
+- CSV (CSVStorage) - 默认，无额外依赖
 - DuckDB (DuckDBStorage) - 推荐，性能更优
+- Parquet (ParquetStorage) - 需要pyarrow，可选
 """
 
 from .local_data_manager import LocalDataManager
 from .metadata_db import MetadataDB
-from .parquet_storage import ParquetStorage
+from .csv_storage import CSVStorage  # 默认存储，无额外依赖
+
+# Parquet支持（需要安装 pyarrow）- 可选依赖
+try:
+    from .parquet_storage import ParquetStorage
+    PARQUET_AVAILABLE = True
+except ImportError:
+    PARQUET_AVAILABLE = False
+    ParquetStorage = None
+    print("ℹ️  pyarrow未安装，将使用CSV存储（pip install pyarrow可启用高性能存储）")
 
 # DuckDB支持（需要安装 duckdb）
 try:
@@ -26,10 +36,12 @@ except ImportError:
 __all__ = [
     'LocalDataManager',
     'MetadataDB',
+    'CSVStorage',
     'ParquetStorage',
     'DuckDBStorage',
     'DuckDBDataManager',
     'HybridDataManager',
+    'PARQUET_AVAILABLE',
     'DUCKDB_AVAILABLE'
 ]
 

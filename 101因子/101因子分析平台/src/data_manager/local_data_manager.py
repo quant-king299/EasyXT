@@ -11,8 +11,16 @@ from datetime import datetime, timedelta
 import time
 import warnings
 
-from .parquet_storage import ParquetStorage
+from .csv_storage import CSVStorage  # 默认使用CSV存储
 from .metadata_db import MetadataDB
+
+# 尝试导入ParquetStorage作为可选的高性能存储
+try:
+    from .parquet_storage import ParquetStorage
+    PARQUET_AVAILABLE = True
+except ImportError:
+    PARQUET_AVAILABLE = False
+    ParquetStorage = None
 
 
 class LocalDataManager:
@@ -72,11 +80,20 @@ class LocalDataManager:
         # 创建目录
         self.raw_data_dir.mkdir(parents=True, exist_ok=True)
 
-        # 初始化组件
-        self.storage = ParquetStorage(
-            str(self.raw_data_dir),
-            compression=self.config['storage']['compression']
-        )
+        # 初始化存储组件：优先使用Parquet，不可用时使用CSV
+        if PARQUET_AVAILABLE:
+            print("✅ 使用Parquet存储（高性能）")
+            self.storage = ParquetStorage(
+                str(self.raw_data_dir),
+                compression=self.config['storage']['compression']
+            )
+        else:
+            print("ℹ️  使用CSV存储（无需额外依赖）")
+            self.storage = CSVStorage(
+                str(self.raw_data_dir),
+                compression=self.config['storage']['compression']
+            )
+
         self.metadata = MetadataDB(str(self.metadata_path))
 
         # 数据源（延迟导入）
