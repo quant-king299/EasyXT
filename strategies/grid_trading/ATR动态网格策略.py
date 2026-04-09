@@ -85,6 +85,7 @@ class ATR动态网格策略:
         self.grid_spacing = {}         # 各标的网格间距（%）{stock_code: spacing}
         self.price_history = {}        # 各标的价格历史（用于计算ATR和MA）{stock_code: deque}
         self.last_action_time = {}     # 上次交易时间
+        self.last_trigger_price = {}   # 上次触发交易的价格 {stock_code: price}
 
         # 统计信息
         self.trade_count = 0
@@ -296,22 +297,32 @@ class ATR动态网格策略:
 
     def check_trade_signal(self, stock_code, current_price):
         """
-        检查交易信号
+        检查交易信号（基于上次触发价格的涨跌幅，防止重复触发）
+
+        核心逻辑：
+        - 首次运行：基于基准价判断，价格偏离超过一个网格间距则触发
+        - 后续运行：基于上次触发价判断，价格相对上次触发价再变化一个网格间距才触发
+        - 触发后更新 last_trigger_price，避免同一网格反复触发
 
         返回: 'buy', 'sell', 或 None
         """
-        grids = self.get_grid_prices(stock_code)
-        buy_grids = grids['买入网格']
-        sell_grids = grids['卖出网格']
+        spacing = self.grid_spacing.get(stock_code, 0.2)
+        last_price = self.last_trigger_price.get(stock_code)
+        base_price = self.base_prices.get(stock_code, current_price)
 
-        # 检查买入信号：价格跌破买入网格
-        for grid_price in reversed(buy_grids):  # 从最接近基准价的网格开始检查
-            if current_price <= grid_price:
+        if last_price is None:
+            # 首次运行：基于基准价判断
+            change_pct = ((current_price - base_price) / base_price) * 100
+            if change_pct <= -spacing:
                 return 'buy'
-
-        # 检查卖出信号：价格突破卖出网格
-        for grid_price in reversed(sell_grids):  # 从最接近基准价的网格开始检查
-            if current_price >= grid_price:
+            elif change_pct >= spacing:
+                return 'sell'
+        else:
+            # 后续运行：基于上次触发价判断
+            change_pct = ((current_price - last_price) / last_price) * 100
+            if change_pct <= -spacing:
+                return 'buy'
+            elif change_pct >= spacing:
                 return 'sell'
 
         return None
@@ -340,6 +351,11 @@ class ATR动态网格策略:
     def place_order(self, stock_code, order_type, price):
         """下单"""
         try:
+            # 检查交易API是否可用
+            if self.api is None or not hasattr(self.api, 'trade') or self.api.trade is None:
+                print(f"  ✗ 交易服务未连接，请检查：1) QMT客户端是否启动  2) 是否调用了init_trade()")
+                return False
+
             # 检查持仓和资金
             position = self.get_position(stock_code)
             cash = self.get_available_cash()
@@ -368,6 +384,7 @@ class ATR动态网格策略:
                     print(f"  ✓ 买入成功: {stock_code} @ {price:.3f} x{self.position_size} (委托号: {order_id})")
                     self.trade_count += 1
                     self.last_action_time[stock_code] = datetime.now()
+                    self.last_trigger_price[stock_code] = price
                     return True
                 else:
                     print(f"  ✗ 买入失败")
@@ -392,6 +409,7 @@ class ATR动态网格策略:
                     print(f"  ✓ 卖出成功: {stock_code} @ {price:.3f} x{min(position, self.position_size)} (委托号: {order_id})")
                     self.trade_count += 1
                     self.last_action_time[stock_code] = datetime.now()
+                    self.last_trigger_price[stock_code] = price
                     return True
                 else:
                     print(f"  ✗ 卖出失败")
@@ -431,7 +449,8 @@ class ATR动态网格策略:
                 with open(state_file, 'r', encoding='utf-8') as f:
                     state = json.load(f)
                     self.base_prices = state.get('基准价格', {})
-                    print(f"✓ 已加载策略状态 (基准价格: {self.base_prices})")
+                    self.last_trigger_price = state.get('上次触发价格', {})
+                    print(f"✓ 已加载策略状态 (基准价格: {self.base_prices}, 上次触发价格: {self.last_trigger_price})")
             else:
                 print(f"ℹ 首次运行，将自动初始化基准价格")
         except Exception as e:
@@ -448,6 +467,7 @@ class ATR动态网格策略:
 
             state = {
                 '基准价格': self.base_prices,
+                '上次触发价格': self.last_trigger_price,
                 '最后更新': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
 
