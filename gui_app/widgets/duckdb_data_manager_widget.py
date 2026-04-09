@@ -78,6 +78,52 @@ class DataQueryThread(QThread):
             self.error_occurred.emit(str(e))
 
 
+class UnifiedQueryThread(QThread):
+    """统一数据接口查询线程 - 支持通过QMT API按需获取复权数据"""
+
+    data_ready = pyqtSignal(pd.DataFrame)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, duckdb_path, stock_code, start_date, end_date, adjust_type='none'):
+        super().__init__()
+        self.duckdb_path = duckdb_path
+        self.stock_code = stock_code
+        self.start_date = start_date
+        self.end_date = end_date
+        self.adjust_type = adjust_type
+
+    def run(self):
+        try:
+            from data_manager.unified_data_interface import UnifiedDataInterface
+            interface = UnifiedDataInterface(duckdb_path=self.duckdb_path)
+            interface.connect()
+
+            try:
+                df = interface.get_stock_data(
+                    stock_code=self.stock_code,
+                    start_date=self.start_date,
+                    end_date=self.end_date,
+                    period='1d',
+                    adjust=self.adjust_type,
+                    auto_save=False,
+                    local_only=True
+                )
+            finally:
+                interface.close()
+
+            if not df.empty:
+                # 确保有date列
+                if df.index.name == 'date' or 'date' in df.index.names:
+                    df = df.reset_index()
+                elif 'date' not in df.columns and 'datetime' in df.columns:
+                    df = df.rename(columns={'datetime': 'date'})
+
+            self.data_ready.emit(df)
+        except Exception as e:
+            import traceback
+            self.error_occurred.emit(f"{str(e)}\n\n{traceback.format_exc()}")
+
+
 class DataUpdateThread(QThread):
     """数据更新工作线程"""
 
@@ -397,56 +443,50 @@ class DuckDBDataManagerWidget(QWidget):
         end_date = self.end_date_edit.date().toString('yyyy-MM-dd')
 
         # 获取复权类型
-        adjust_index = self.adjust_combo.currentIndex()
-        adjust_types = ['', 'front', 'back', 'geometric_front', 'geometric_back']
-        adjust_type = adjust_types[adjust_index]
-
-        # 构建查询
-        if adjust_type == '' or adjust_type == 'none':
-            price_cols = ['open', 'high', 'low', 'close']
-        else:
-            col_mapping = {
-                'front': ['open_front', 'high_front', 'low_front', 'close_front'],
-                'back': ['open_back', 'high_back', 'low_back', 'close_back'],
-                'geometric_front': ['open_geometric_front', 'high_geometric_front',
-                                   'low_geometric_front', 'close_geometric_front'],
-                'geometric_back': ['open_geometric_back', 'high_geometric_back',
-                                  'low_geometric_back', 'close_geometric_back'],
-            }
-            price_cols = col_mapping.get(adjust_type, ['open', 'high', 'low', 'close'])
-
-        query = f"""
-            SELECT
-                date::{DATE} as date,
-                {price_cols[0]}::{DOUBLE} as open,
-                {price_cols[1]}::{DOUBLE} as high,
-                {price_cols[2]}::{DOUBLE} as low,
-                {price_cols[3]}::{DOUBLE} as close,
-                volume::{BIGINT} as volume,
-                amount::{DOUBLE} as amount
-            FROM stock_daily
-            WHERE stock_code = '{stock_code}'
-              AND date >= '{start_date}'
-              AND date <= '{end_date}'
-            ORDER BY date
-        """
+        adjust_map = {
+            "不复权": "none",
+            "前复权": "front",
+            "后复权": "back",
+            "等比前复权": "geometric_front",
+            "等比后复权": "geometric_back"
+        }
+        adjust_type = adjust_map.get(self.adjust_combo.currentText(), "none")
 
         # 显示等待状态
         self.status_label.setText("正在查询数据...")
         self.result_table.setRowCount(0)
 
-        # 在线程中执行查询
-        self.query_thread = DataQueryThread(self.duckdb_path, query)
+        # 使用统一数据接口查询（通过QMT API按需获取复权，不依赖预存列）
+        self.query_thread = UnifiedQueryThread(
+            self.duckdb_path, stock_code, start_date, end_date, adjust_type
+        )
         self.query_thread.data_ready.connect(self.on_query_result)
         self.query_thread.error_occurred.connect(self.on_query_error)
         self.query_thread.start()
 
     def on_query_result(self, df: pd.DataFrame):
         """查询结果回调"""
+        if df.empty:
+            self.status_label.setText("查询完成，无数据")
+            self.result_table.setRowCount(0)
+            return
+
+        # 确保date是列而非索引
+        if 'date' not in df.columns:
+            df = df.reset_index()
+        if 'index' in df.columns and 'date' not in df.columns:
+            df = df.rename(columns={'index': 'date'})
+
         self.result_table.setRowCount(len(df))
 
         for i, (_, row) in enumerate(df.iterrows()):
-            self.result_table.setItem(i, 0, QTableWidgetItem(str(row['date'])))
+            # 格式化日期
+            date_val = row['date']
+            if hasattr(date_val, 'strftime'):
+                date_str = date_val.strftime('%Y-%m-%d')
+            else:
+                date_str = str(date_val)
+            self.result_table.setItem(i, 0, QTableWidgetItem(date_str))
             self.result_table.setItem(i, 1, QTableWidgetItem(f"{row['open']:.2f}"))
             self.result_table.setItem(i, 2, QTableWidgetItem(f"{row['high']:.2f}"))
             self.result_table.setItem(i, 3, QTableWidgetItem(f"{row['low']:.2f}"))

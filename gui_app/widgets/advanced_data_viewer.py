@@ -359,7 +359,7 @@ class AdvancedDataViewer(QWidget):
 
         control_layout.addWidget(QLabel("复权类型:"), 0, 0)
         self.adjust_combo = QComboBox()
-        self.adjust_combo.addItems(["不复权", "前复权", "后复权"])
+        self.adjust_combo.addItems(["不复权", "前复权", "后复权", "等比前复权", "等比后复权"])
         self.adjust_combo.setMinimumWidth(100)
         self.adjust_combo.currentTextChanged.connect(self.on_adjust_changed)
         control_layout.addWidget(self.adjust_combo, 0, 1)
@@ -631,7 +631,7 @@ class AdvancedDataViewer(QWidget):
         start_date = self.start_date_edit.date().toString('yyyy-MM-dd')
         end_date = self.end_date_edit.date().toString('yyyy-MM-dd')
 
-        adjust_map = {"不复权": "none", "前复权": "front", "后复权": "back"}
+        adjust_map = {"不复权": "none", "前复权": "front", "后复权": "back", "等比前复权": "geometric_front", "等比后复权": "geometric_back"}
         adjust_type = adjust_map.get(self.adjust_combo.currentText(), "none")
 
         self.status_label.setText(f"🔄 正在加载 {self.current_stock} 数据...")

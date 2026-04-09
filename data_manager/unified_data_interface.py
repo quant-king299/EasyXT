@@ -15,20 +15,16 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
-# 导入五维复权管理器
-from data_manager.duckdb_fivefold_adjust import FiveFoldAdjustmentManager
-
-
 class UnifiedDataInterface:
     """
     统一数据接口
 
     功能：
-    1. 优先从DuckDB读取（包含五维复权，速度快）
+    1. 优先从DuckDB读取原始数据
     2. 如无数据或数据不全，使用QMT在线获取
     3. 获取后自动保存到DuckDB
     4. 智能检测缺失数据
-    5. 支持多种复权类型
+    5. 支持5种复权类型（通过QMT API按需获取，不预存复权列）
     """
 
     def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
@@ -43,9 +39,6 @@ class UnifiedDataInterface:
         self.qmt_available = False
         self._tables_initialized = False  # 记录表是否已初始化
         self.db_manager = None  # 使用连接池管理器
-
-        # 初始化五维复权管理器
-        self.adjustment_manager = FiveFoldAdjustmentManager(duckdb_path)
 
         # 尝试导入DuckDB
         try:

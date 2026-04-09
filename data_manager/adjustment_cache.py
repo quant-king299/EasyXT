@@ -35,11 +35,11 @@ ADJUST_TYPE_NAMES = {
 
 # 复权类型映射到QMT的dividend_type参数
 ADJUST_TO_QMT_DIVIDEND_TYPE = {
-    'none': 'none',           # 不复权
-    'front': 'front',          # 前复权
-    'back': 'back',           # 后复权
-    'geometric_front': 'front', # 等比前复权（QMT可能不支持，降级到前复权）
-    'geometric_back': 'back'   # 等比后复权（QMT可能不支持，降级到后复权）
+    'none': 'none',               # 不复权
+    'front': 'front',             # 前复权
+    'back': 'back',               # 后复权
+    'geometric_front': 'front_ratio',  # 等比前复权
+    'geometric_back': 'back_ratio'     # 等比后复权
 }
 
 
