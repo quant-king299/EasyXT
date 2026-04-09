@@ -16,6 +16,10 @@
   - [QMT历史数据补充](#7-qmt历史数据补充)
   - [用download_all_stocks.py下载了.DAT文件，如何导入DuckDB并复权？](#8-用download_all_stocks.py下载了dat文件如何导入duckdb并复权)
   - [复权系统架构说明：为什么只存不复权数据？](#9-复权系统架构说明为什么只存不复权数据)
+- [代码转换相关](#代码转换相关)
+  - [聚宽转PTrade：需要安装miniQMT吗？可以独立运行吗？](#10-聚宽转ptrade需要安装miniqmt吗可以独立运行吗)
+  - [聚宽转PTrade：如何使用？](#11-聚宽转ptrade如何使用)
+  - [聚宽转PTrade：转换结果只有几行注释，没有代码](#12-聚宽转ptrade转换结果只有几行注释没有代码)
 - [安装相关](#安装相关)
 - [运行相关](#运行相关)
 - [性能相关](#性能相关)
@@ -550,6 +554,91 @@ pip install pytdx
 
 ---
 
+## 代码转换相关
+
+### 10. 聚宽转PTrade：需要安装miniQMT吗？可以独立运行吗？
+
+**完全可以独立运行，不需要安装 miniQMT！**
+
+聚宽转PTrade 模块（`code_converter/`）是一个纯代码转换工具，把聚宽的 API 语法翻译成 PTrade 的语法。它与 QMT/easy_xt 完全没有依赖关系。
+
+| 问题 | 回答 |
+|------|------|
+| 需要 miniQMT 吗？ | 不需要 |
+| 需要 easy_xt 吗？ | 不需要 |
+| 需要 xtquant 吗？ | 不需要 |
+| 需要启动 QMT 客户端吗？ | 不需要 |
+| 转换后的代码在哪里运行？ | 复制到 PTrade 平台运行 |
+
+项目中的 QMT 相关模块（easy_xt、xtquant 等）是给 QMT 用户用的，和 PTrade 没有关系，可以忽略。
+
+---
+
+### 11. 聚宽转PTrade：如何使用？
+
+#### 方式一：图形界面（推荐）
+
+1. 从 GitHub 下载项目代码
+2. 进入 `code_converter` 文件夹
+3. 双击 `run_converter.bat`，弹出图形界面
+4. 选择你的聚宽策略 .py 文件，点击"开始转换"
+5. 点击"保存结果"，将转换后的代码复制到 PTrade 平台运行
+
+#### 方式二：命令行
+
+```bash
+cd code_converter
+python cli.py 你的聚宽策略.py -o ptrade策略.py
+```
+
+#### 方式三：学习参考
+
+`code_converter/代码转换学习-demo/` 目录提供了学习资料：
+
+| 文件 | 说明 |
+|------|------|
+| `jq_code_demo.py` | 聚宽策略示例代码 |
+| `trans_PTrade.txt` | 转换后的 PTrade 代码 |
+| `check_before.txt` | 转换前后的对比说明 |
+| `聚宽一键迁移ptrade代码转换使用手册.docx` | 完整的使用手册 |
+
+> **注意**：部分复杂的聚宽 API（如 get_fundamentals 的复杂 query）转换后可能需要手动微调，转换器会给出提示。
+
+---
+
+### 12. 聚宽转PTrade：转换结果只有几行注释，没有代码
+
+#### 症状
+
+转换后的文件只有头部注释：
+```
+# 聚宽策略转Ptrade - BACKTEST版本
+# 转换时间: 2026-04-09 22:19:28
+# 转换器版本: v3.4
+```
+
+#### 原因
+
+输入的聚宽策略文件内容为空。转换器读入空文件，自然只能输出头部信息。
+
+#### 解决方案
+
+确保输入文件包含有效的聚宽策略代码。一个有效的聚宽策略通常包含：
+
+```python
+# 至少要有 initialize 和策略函数
+def initialize(context):
+    set_benchmark('000300.XSHG')
+    run_daily(my_trade, time='9:30')
+
+def my_trade(context):
+    stocks = get_all_securities().index.tolist()
+    for stock in stocks[:10]:
+        order_value(stock, 10000)
+```
+
+---
+
 ## 安装相关
 
 ### 8. 从GitHub下载代码后运行报错
@@ -1042,4 +1131,4 @@ print('=' * 50)
 
 ---
 
-**最后更新**: 2026-04-09
+**最后更新**: 2026-04-10

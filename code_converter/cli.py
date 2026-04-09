@@ -9,7 +9,7 @@ import os
 # 添加项目根目录到Python路径
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from converters.jq_to_ptrade_unified_v2 import JQToPtradeUnifiedConverter, StrategyType
+from converters.jq_to_ptrade_unified_v3 import JQToPtradeUnifiedConverter, StrategyType
 
 def main():
     """主函数"""
