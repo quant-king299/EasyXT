@@ -79,6 +79,12 @@ class TushareDownloadThread(QThread):
                 self._download_index_data()
             elif self.task_type == 'stock_basic':
                 self._download_stock_basic()
+            elif self.task_type == 'financial_indicator':
+                self._download_financial_indicator()
+            elif self.task_type == 'balancesheet':
+                self._download_balancesheet()
+            elif self.task_type == 'cashflow_data':
+                self._download_cashflow_data()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -749,6 +755,12 @@ class TushareDownloadThread(QThread):
                     self._download_market_cap()
                 elif task_type == 'daily':
                     self._download_daily()
+                elif task_type == 'financial_indicator':
+                    self._download_financial_indicator()
+                elif task_type == 'balancesheet':
+                    self._download_balancesheet()
+                elif task_type == 'cashflow_data':
+                    self._download_cashflow_data()
 
                 self.progress_signal.emit(i + 1, total_tasks)
 
@@ -1080,6 +1092,300 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"股票基本信息下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    def _download_financial_indicator(self):
+        """下载财务指标数据（fina_indicator）- ROE/ROA/毛利率等"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            symbols = self.kwargs.get('symbols', [])
+            start_date = self.kwargs.get('start_date', '')
+            end_date = self.kwargs.get('end_date', '')
+
+            if not start_date:
+                years = self.kwargs.get('years', 5)
+                start_date = f'{datetime.now().year - years}0101'
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载财务指标数据（fina_indicator）")
+            self.log_signal.emit(f"  股票数: {len(symbols)}")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS financial_indicator (
+                    ts_code VARCHAR,
+                    ann_date DATE,
+                    end_date DATE,
+                    roe DOUBLE,
+                    roa DOUBLE,
+                    grossprofit_margin DOUBLE,
+                    netprofit_margin DOUBLE,
+                    or_yoy DOUBLE,
+                    netprofit_yoy DOUBLE,
+                    debt_to_assets DOUBLE,
+                    current_ratio DOUBLE,
+                    quick_ratio DOUBLE,
+                    eps DOUBLE,
+                    bps DOUBLE,
+                    undist_profit_ps DOUBLE,
+                    equity_yoy DOUBLE,
+                    rd_exp DOUBLE,
+                    PRIMARY KEY (ts_code, end_date)
+                )
+            """)
+
+            fields = 'ts_code,ann_date,end_date,roe,roa,grossprofit_margin,netprofit_margin,or_yoy,netprofit_yoy,debt_to_assets,current_ratio,quick_ratio,eps,bps,undist_profit_ps,equity_yoy,rd_exp'
+
+            total_inserted = 0
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(symbols, 1):
+                if not self._is_running:
+                    break
+                try:
+                    df = pro.fina_indicator(
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        fields=fields
+                    )
+                    if df is not None and not df.empty:
+                        for col in ['ann_date', 'end_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                        conn.executemany(
+                            "INSERT OR REPLACE INTO financial_indicator VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                            insert_data
+                        )
+                        total_inserted += len(df)
+                        success_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    if failed_count <= 5:
+                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+
+                if i % 50 == 0 or i == len(symbols):
+                    self.progress_signal.emit(i, len(symbols))
+                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+
+                time.sleep(0.15)
+
+            conn.close()
+            self.log_signal.emit(f"\n✅ 财务指标下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.finished_signal.emit({
+                'success': True,
+                'total_inserted': total_inserted,
+                'success_count': success_count
+            })
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"财务指标下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_balancesheet(self):
+        """下载资产负债表数据（balancesheet）"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            symbols = self.kwargs.get('symbols', [])
+            start_date = self.kwargs.get('start_date', '')
+            end_date = self.kwargs.get('end_date', '')
+
+            if not start_date:
+                years = self.kwargs.get('years', 5)
+                start_date = f'{datetime.now().year - years}0101'
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载资产负债表数据（balancesheet）")
+            self.log_signal.emit(f"  股票数: {len(symbols)}")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS financial_balance (
+                    ts_code VARCHAR,
+                    ann_date DATE,
+                    end_date DATE,
+                    total_assets DOUBLE,
+                    total_liab DOUBLE,
+                    total_hld_eqy_exc_min DOUBLE,
+                    total_equity DOUBLE,
+                    total_cur_assets DOUBLE,
+                    total_cur_liab DOUBLE,
+                    money_cap DOUBLE,
+                    accounts_rece DOUBLE,
+                    inventory DOUBLE,
+                    total_nca DOUBLE,
+                    total_ncl DOUBLE,
+                    PRIMARY KEY (ts_code, end_date)
+                )
+            """)
+
+            fields = 'ts_code,ann_date,end_date,total_assets,total_liab,total_hld_eqy_exc_min,total_equity,total_cur_assets,total_cur_liab,money_cap,accounts_rece,inventory,total_nca,total_ncl'
+
+            total_inserted = 0
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(symbols, 1):
+                if not self._is_running:
+                    break
+                try:
+                    df = pro.balancesheet(
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        fields=fields
+                    )
+                    if df is not None and not df.empty:
+                        for col in ['ann_date', 'end_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                        conn.executemany(
+                            "INSERT OR REPLACE INTO financial_balance VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                            insert_data
+                        )
+                        total_inserted += len(df)
+                        success_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    if failed_count <= 5:
+                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+
+                if i % 50 == 0 or i == len(symbols):
+                    self.progress_signal.emit(i, len(symbols))
+                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+
+                time.sleep(0.15)
+
+            conn.close()
+            self.log_signal.emit(f"\n✅ 资产负债表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.finished_signal.emit({
+                'success': True,
+                'total_inserted': total_inserted,
+                'success_count': success_count
+            })
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"资产负债表下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_cashflow_data(self):
+        """下载现金流量表数据（cashflow）"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            symbols = self.kwargs.get('symbols', [])
+            start_date = self.kwargs.get('start_date', '')
+            end_date = self.kwargs.get('end_date', '')
+
+            if not start_date:
+                years = self.kwargs.get('years', 5)
+                start_date = f'{datetime.now().year - years}0101'
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载现金流量表数据（cashflow）")
+            self.log_signal.emit(f"  股票数: {len(symbols)}")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS financial_cashflow (
+                    ts_code VARCHAR,
+                    ann_date DATE,
+                    end_date DATE,
+                    c_pay_goods DOUBLE,
+                    c_pay_for_sv DOUBLE,
+                    c_paid_to_for_empl DOUBLE,
+                    n_cashflow_act DOUBLE,
+                    n_cashflow_inv_act DOUBLE,
+                    n_cashflow_fnc_act DOUBLE,
+                    c_fr_sale_sg DOUBLE,
+                    n_incr_cash_cash_equ DOUBLE,
+                    PRIMARY KEY (ts_code, end_date)
+                )
+            """)
+
+            fields = 'ts_code,ann_date,end_date,c_pay_goods,c_pay_for_sv,c_paid_to_for_empl,n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,c_fr_sale_sg,n_incr_cash_cash_equ'
+
+            total_inserted = 0
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(symbols, 1):
+                if not self._is_running:
+                    break
+                try:
+                    df = pro.cashflow(
+                        ts_code=ts_code,
+                        start_date=start_date,
+                        end_date=end_date,
+                        fields=fields
+                    )
+                    if df is not None and not df.empty:
+                        for col in ['ann_date', 'end_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                        conn.executemany(
+                            "INSERT OR REPLACE INTO financial_cashflow VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                            insert_data
+                        )
+                        total_inserted += len(df)
+                        success_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    failed_count += 1
+                    if failed_count <= 5:
+                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+
+                if i % 50 == 0 or i == len(symbols):
+                    self.progress_signal.emit(i, len(symbols))
+                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+
+                time.sleep(0.15)
+
+            conn.close()
+            self.log_signal.emit(f"\n✅ 现金流量表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.finished_signal.emit({
+                'success': True,
+                'total_inserted': total_inserted,
+                'success_count': success_count
+            })
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"现金流量表下载失败: {str(e)}\n{traceback.format_exc()}")
+
 class TushareDataWidget(QWidget):
     """Tushare数据下载组件（整合版）"""
 
@@ -1152,6 +1458,18 @@ class TushareDataWidget(QWidget):
         # 股票基本信息标签页
         stock_basic_tab = self._create_stock_basic_tab()
         tab_widget.addTab(stock_basic_tab, "📝 股票信息")
+
+        # 财务指标标签页
+        financial_indicator_tab = self._create_financial_indicator_tab()
+        tab_widget.addTab(financial_indicator_tab, "📈 财务指标")
+
+        # 资产负债表标签页
+        balancesheet_tab = self._create_balancesheet_tab()
+        tab_widget.addTab(balancesheet_tab, "📋 资产负债表")
+
+        # 现金流量表标签页
+        cashflow_tab = self._create_cashflow_tab()
+        tab_widget.addTab(cashflow_tab, "💹 现金流量表")
 
         layout.addWidget(tab_widget)
 
@@ -1257,6 +1575,18 @@ class TushareDataWidget(QWidget):
         self.chk_holders = QCheckBox("👥 股东数据（小市值策略必需）")
         self.chk_holders.setChecked(False)
         type_layout.addWidget(self.chk_holders, 2, 1)
+
+        self.chk_financial_indicator = QCheckBox("📈 财务指标（ROE/ROA等，基本面因子必需）")
+        self.chk_financial_indicator.setChecked(True)
+        type_layout.addWidget(self.chk_financial_indicator, 3, 0)
+
+        self.chk_balancesheet = QCheckBox("📋 资产负债表")
+        self.chk_balancesheet.setChecked(True)
+        type_layout.addWidget(self.chk_balancesheet, 3, 1)
+
+        self.chk_cashflow = QCheckBox("💹 现金流量表")
+        self.chk_cashflow.setChecked(False)
+        type_layout.addWidget(self.chk_cashflow, 4, 0)
 
         layout.addWidget(type_group)
 
@@ -1563,6 +1893,259 @@ class TushareDataWidget(QWidget):
         layout.addStretch()
         return tab
 
+    def _create_financial_indicator_tab(self):
+        """创建财务指标数据标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        config_group = QGroupBox("下载配置")
+        config_layout = QFormLayout(config_group)
+
+        self.fi_years_spin = QSpinBox()
+        self.fi_years_spin.setRange(1, 20)
+        self.fi_years_spin.setValue(5)
+        self.fi_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.fi_years_spin)
+
+        layout.addWidget(config_group)
+
+        info_label = QLabel(
+            "📌 <b>说明：</b>财务指标数据（fina_indicator）包含以下关键指标：<br><br>"
+            "• <b>ROE</b> - 净资产收益率（基本面因子必需）<br>"
+            "• <b>ROA</b> - 总资产收益率（基本面因子必需）<br>"
+            "• <b>毛利率</b> - grossprofit_margin<br>"
+            "• <b>净利润率</b> - netprofit_margin<br>"
+            "• <b>营收增长率</b> - or_yoy<br>"
+            "• <b>净利润增长率</b> - netprofit_yoy<br>"
+            "• <b>资产负债率</b> - debt_to_assets<br>"
+            "• EPS、BPS、流动比率等<br><br>"
+            "⚠️ 这是101因子平台基本面因子的<b>核心数据源</b>，建议优先下载。"
+        )
+        info_label.setStyleSheet("color: #333; padding: 10px; background: #fff3e0; border-radius: 5px;")
+        layout.addWidget(info_label)
+
+        download_btn = QPushButton("🚀 开始下载财务指标数据")
+        download_btn.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
+        download_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #F57C00;
+            }
+        """)
+        download_btn.clicked.connect(self.start_download_financial_indicator)
+        layout.addWidget(download_btn)
+
+        layout.addStretch()
+        return tab
+
+    def _create_balancesheet_tab(self):
+        """创建资产负债表标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        config_group = QGroupBox("下载配置")
+        config_layout = QFormLayout(config_group)
+
+        self.bs_years_spin = QSpinBox()
+        self.bs_years_spin.setRange(1, 20)
+        self.bs_years_spin.setValue(5)
+        self.bs_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.bs_years_spin)
+
+        layout.addWidget(config_group)
+
+        info_label = QLabel(
+            "📌 <b>说明：</b>资产负债表数据（balancesheet）包含：<br><br>"
+            "• <b>总资产</b> - total_assets<br>"
+            "• <b>总负债</b> - total_liab<br>"
+            "• <b>所有者权益</b> - total_equity<br>"
+            "• <b>流动资产/负债</b> - current assets/liabilities<br>"
+            "• <b>货币资金、应收账款、存货</b>等<br><br>"
+            "用于计算资产负债率、流动性指标等基本面因子。"
+        )
+        info_label.setStyleSheet("color: #666; padding: 10px; background: #f5f5f5; border-radius: 5px;")
+        layout.addWidget(info_label)
+
+        download_btn = QPushButton("🚀 开始下载资产负债表数据")
+        download_btn.setFont(QFont("Microsoft YaHei", 10))
+        download_btn.clicked.connect(self.start_download_balancesheet)
+        layout.addWidget(download_btn)
+
+        layout.addStretch()
+        return tab
+
+    def _create_cashflow_tab(self):
+        """创建现金流量表标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        config_group = QGroupBox("下载配置")
+        config_layout = QFormLayout(config_group)
+
+        self.cf_years_spin = QSpinBox()
+        self.cf_years_spin.setRange(1, 20)
+        self.cf_years_spin.setValue(5)
+        self.cf_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.cf_years_spin)
+
+        layout.addWidget(config_group)
+
+        info_label = QLabel(
+            "📌 <b>说明：</b>现金流量表数据（cashflow）包含：<br><br>"
+            "• <b>经营活动现金流</b> - n_cashflow_act<br>"
+            "• <b>投资活动现金流</b> - n_cashflow_inv_act<br>"
+            "• <b>筹资活动现金流</b> - n_cashflow_fnc_act<br>"
+            "• <b>销售收到的现金</b>等<br><br>"
+            "用于分析企业现金流健康状况，进阶分析用。"
+        )
+        info_label.setStyleSheet("color: #666; padding: 10px; background: #f5f5f5; border-radius: 5px;")
+        layout.addWidget(info_label)
+
+        download_btn = QPushButton("🚀 开始下载现金流量表数据")
+        download_btn.setFont(QFont("Microsoft YaHei", 10))
+        download_btn.clicked.connect(self.start_download_cashflow)
+        layout.addWidget(download_btn)
+
+        layout.addStretch()
+        return tab
+
+    def start_download_financial_indicator(self):
+        """开始下载财务指标数据"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        try:
+            import tushare as ts
+            ts.set_token(token)
+            pro = ts.pro_api()
+            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+            symbols = stock_list['ts_code'].tolist()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
+            return
+
+        years = self.fi_years_spin.value()
+        start_date = f"{datetime.now().year - years}0101"
+        end_date = datetime.now().strftime('%Y%m%d')
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载财务指标数据...")
+        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        self.download_thread = TushareDownloadThread(
+            'financial_indicator',
+            token=token,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date
+        )
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.start()
+
+    def start_download_balancesheet(self):
+        """开始下载资产负债表数据"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        try:
+            import tushare as ts
+            ts.set_token(token)
+            pro = ts.pro_api()
+            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+            symbols = stock_list['ts_code'].tolist()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
+            return
+
+        years = self.bs_years_spin.value()
+        start_date = f"{datetime.now().year - years}0101"
+        end_date = datetime.now().strftime('%Y%m%d')
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载资产负债表数据...")
+        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        self.download_thread = TushareDownloadThread(
+            'balancesheet',
+            token=token,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date
+        )
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.start()
+
+    def start_download_cashflow(self):
+        """开始下载现金流量表数据"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        try:
+            import tushare as ts
+            ts.set_token(token)
+            pro = ts.pro_api()
+            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+            symbols = stock_list['ts_code'].tolist()
+        except Exception as e:
+            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
+            return
+
+        years = self.cf_years_spin.value()
+        start_date = f"{datetime.now().year - years}0101"
+        end_date = datetime.now().strftime('%Y%m%d')
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载现金流量表数据...")
+        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        self.download_thread = TushareDownloadThread(
+            'cashflow_data',
+            token=token,
+            symbols=symbols,
+            start_date=start_date,
+            end_date=end_date
+        )
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.start()
+
     def test_connection(self):
         """测试连接"""
         token = self.token_edit.text().strip()
@@ -1604,7 +2187,7 @@ class TushareDataWidget(QWidget):
             return
 
         if self.chk_daily.isChecked():
-            # 计算日期范围
+            # 计算日期范围（也供后续任务使用）
             years_back = self.quick_years_spin.value()
             end_date = datetime.now().strftime('%Y%m%d')
             start_year = datetime.now().year - years_back
@@ -1666,6 +2249,45 @@ class TushareDataWidget(QWidget):
                 'params': {
                     'symbols': symbols,
                     'years': self.quick_years_spin.value()
+                }
+            })
+
+        # 确保日期范围可用（即使日线未勾选）
+        if 'start_date' not in dir():
+            years_back = self.quick_years_spin.value()
+            start_date = f"{datetime.now().year - years_back}0101"
+            end_date = datetime.now().strftime('%Y%m%d')
+
+        if self.chk_financial_indicator.isChecked():
+            task_list.append({
+                'name': '财务指标（ROE/ROA等）',
+                'type': 'financial_indicator',
+                'params': {
+                    'symbols': symbols,
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            })
+
+        if self.chk_balancesheet.isChecked():
+            task_list.append({
+                'name': '资产负债表',
+                'type': 'balancesheet',
+                'params': {
+                    'symbols': symbols,
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            })
+
+        if self.chk_cashflow.isChecked():
+            task_list.append({
+                'name': '现金流量表',
+                'type': 'cashflow_data',
+                'params': {
+                    'symbols': symbols,
+                    'start_date': start_date,
+                    'end_date': end_date
                 }
             })
 
