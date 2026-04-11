@@ -1147,39 +1147,54 @@ class TushareDownloadThread(QThread):
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
                     break
-                try:
-                    df = pro.fina_indicator(
-                        ts_code=ts_code,
-                        start_date=start_date,
-                        end_date=end_date,
-                        fields=fields
-                    )
-                    if df is not None and not df.empty:
-                        for col in ['ann_date', 'end_date']:
-                            if col in df.columns:
-                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
-                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
-                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
-
-                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
-                        conn.executemany(
-                            "INSERT OR REPLACE INTO financial_indicator VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
-                            insert_data
+                # 限流重试：最多重试3次
+                api_success = False
+                for retry in range(3):
+                    try:
+                        df = pro.fina_indicator(
+                            ts_code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                            fields=fields
                         )
-                        total_inserted += len(df)
-                        success_count += 1
-                    else:
-                        failed_count += 1
-                except Exception as e:
-                    failed_count += 1
-                    if failed_count <= 5:
-                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                        if df is not None and not df.empty:
+                            for col in ['ann_date', 'end_date']:
+                                if col in df.columns:
+                                    df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                            numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                            df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            conn.executemany(
+                                "INSERT OR REPLACE INTO financial_indicator VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                insert_data
+                            )
+                            total_inserted += len(df)
+                            success_count += 1
+                        else:
+                            failed_count += 1
+                        api_success = True
+                        break
+                    except Exception as e:
+                        if '每分钟最多访问' in str(e) or '200次' in str(e):
+                            # 限流：等待60秒后重试
+                            if retry < 2:
+                                self.log_signal.emit(f"  ⏳ 限流，等待60秒后重试 {ts_code} ({retry+1}/3)")
+                                time.sleep(60)
+                            else:
+                                failed_count += 1
+                                self.log_signal.emit(f"  ❌ {ts_code} 限流重试3次仍失败")
+                        else:
+                            failed_count += 1
+                            if failed_count <= 5:
+                                self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                            break
 
                 if i % 50 == 0 or i == len(symbols):
                     self.progress_signal.emit(i, len(symbols))
                     self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
-                time.sleep(0.15)
+                time.sleep(0.35)
 
             conn.close()
             self.log_signal.emit(f"\n✅ 财务指标下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
@@ -1245,39 +1260,52 @@ class TushareDownloadThread(QThread):
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
                     break
-                try:
-                    df = pro.balancesheet(
-                        ts_code=ts_code,
-                        start_date=start_date,
-                        end_date=end_date,
-                        fields=fields
-                    )
-                    if df is not None and not df.empty:
-                        for col in ['ann_date', 'end_date']:
-                            if col in df.columns:
-                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
-                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
-                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
-
-                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
-                        conn.executemany(
-                            "INSERT OR REPLACE INTO financial_balance VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
-                            insert_data
+                api_success = False
+                for retry in range(3):
+                    try:
+                        df = pro.balancesheet(
+                            ts_code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                            fields=fields
                         )
-                        total_inserted += len(df)
-                        success_count += 1
-                    else:
-                        failed_count += 1
-                except Exception as e:
-                    failed_count += 1
-                    if failed_count <= 5:
-                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                        if df is not None and not df.empty:
+                            for col in ['ann_date', 'end_date']:
+                                if col in df.columns:
+                                    df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                            numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                            df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            conn.executemany(
+                                "INSERT OR REPLACE INTO financial_balance VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                insert_data
+                            )
+                            total_inserted += len(df)
+                            success_count += 1
+                        else:
+                            failed_count += 1
+                        api_success = True
+                        break
+                    except Exception as e:
+                        if '每分钟最多访问' in str(e) or '200次' in str(e):
+                            if retry < 2:
+                                self.log_signal.emit(f"  ⏳ 限流，等待60秒后重试 {ts_code} ({retry+1}/3)")
+                                time.sleep(60)
+                            else:
+                                failed_count += 1
+                                self.log_signal.emit(f"  ❌ {ts_code} 限流重试3次仍失败")
+                        else:
+                            failed_count += 1
+                            if failed_count <= 5:
+                                self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                            break
 
                 if i % 50 == 0 or i == len(symbols):
                     self.progress_signal.emit(i, len(symbols))
                     self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
-                time.sleep(0.15)
+                time.sleep(0.35)
 
             conn.close()
             self.log_signal.emit(f"\n✅ 资产负债表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
@@ -1340,39 +1368,52 @@ class TushareDownloadThread(QThread):
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
                     break
-                try:
-                    df = pro.cashflow(
-                        ts_code=ts_code,
-                        start_date=start_date,
-                        end_date=end_date,
-                        fields=fields
-                    )
-                    if df is not None and not df.empty:
-                        for col in ['ann_date', 'end_date']:
-                            if col in df.columns:
-                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
-                        numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
-                        df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
-
-                        insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
-                        conn.executemany(
-                            "INSERT OR REPLACE INTO financial_cashflow VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
-                            insert_data
+                api_success = False
+                for retry in range(3):
+                    try:
+                        df = pro.cashflow(
+                            ts_code=ts_code,
+                            start_date=start_date,
+                            end_date=end_date,
+                            fields=fields
                         )
-                        total_inserted += len(df)
-                        success_count += 1
-                    else:
-                        failed_count += 1
-                except Exception as e:
-                    failed_count += 1
-                    if failed_count <= 5:
-                        self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                        if df is not None and not df.empty:
+                            for col in ['ann_date', 'end_date']:
+                                if col in df.columns:
+                                    df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+                            numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
+                            df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
+
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            conn.executemany(
+                                "INSERT OR REPLACE INTO financial_cashflow VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                insert_data
+                            )
+                            total_inserted += len(df)
+                            success_count += 1
+                        else:
+                            failed_count += 1
+                        api_success = True
+                        break
+                    except Exception as e:
+                        if '每分钟最多访问' in str(e) or '200次' in str(e):
+                            if retry < 2:
+                                self.log_signal.emit(f"  ⏳ 限流，等待60秒后重试 {ts_code} ({retry+1}/3)")
+                                time.sleep(60)
+                            else:
+                                failed_count += 1
+                                self.log_signal.emit(f"  ❌ {ts_code} 限流重试3次仍失败")
+                        else:
+                            failed_count += 1
+                            if failed_count <= 5:
+                                self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
+                            break
 
                 if i % 50 == 0 or i == len(symbols):
                     self.progress_signal.emit(i, len(symbols))
                     self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
-                time.sleep(0.15)
+                time.sleep(0.35)
 
             conn.close()
             self.log_signal.emit(f"\n✅ 现金流量表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")

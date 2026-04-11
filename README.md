@@ -447,13 +447,17 @@ gui_app/main_window.py
 
 ## ⚙️ 安装指南
 
-> 📖 **详细安装文档**: 查看 [INSTALL.md](INSTALL.md) 获取完整的安装指南、故障排查和常见问题解答
+> 📖 **安装文档**：
+> - **[INSTALL.md](INSTALL.md)** - 快速安装指南
+> - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - 🆕 增强版配置指南（包含详细的 xtquant、数据源、IDE 配置说明）
+>
+> ⚠️ **遇到 `cannot import name 'datacenter' from 'xtquant'` 错误？** 查看 [SETUP_GUIDE.md - xtquant 配置](SETUP_GUIDE.md#1-xtquant-配置)
 
 ### 环境要求
 
 - Python 3.9+
-- Windows系统（QMT限制）
-- 已安装QMT客户端（标准版或miniQMT）
+- Windows系统（QMT限制，但 Mac/Linux 可通过 xqshare 使用）
+- 已安装QMT客户端（标准版或miniQMT，如需交易功能）
 
 ### 快速安装
 
@@ -660,7 +664,7 @@ A: 两种方式（详见 [DuckDB使用指南](docs/assets/DUCKDB_GUIDE.md)）：
 运行以下命令验证所有组件：
 
 ```bash
-# 1. 验证 xtquant
+# 1. 验证 xtquant（如果报错，查看 SETUP_GUIDE.md）
 python -c "from xtquant import datacenter; print('✓ xtquant OK')"
 
 # 2. 验证 easy_xt
@@ -672,6 +676,8 @@ python -c "import easyxt_backtest; print('✓ easyxt_backtest OK')"
 # 4. 验证 Tushare Token（如果已配置）
 python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('✓ Tushare Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...') if os.getenv('TUSHARE_TOKEN') else print('✗ Token未配置')"
 ```
+
+**如果第 1 步报错**（`cannot import name 'datacenter' from 'xtquant'`），请查看 **[SETUP_GUIDE.md - xtquant 配置](SETUP_GUIDE.md#1-xtquant-配置)** 获取详细解决方案。
 
 ---
 

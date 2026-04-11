@@ -2,14 +2,17 @@
 
 本文档提供 EasyXT 项目的完整安装说明，包括环境准备、安装步骤、常见问题排查等内容。
 
+> 🆕 **新手推荐**：如果你遇到配置问题（如 `cannot import name 'datacenter' from 'xtquant'`），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)**，包含针对不同场景的详细配置说明。
+
 ## 📋 目录
 
-- [快速安装（推荐）](#快速安装推荐)
-- [详细安装步骤](#详细安装步骤)
-- [常见错误与解决方案](#常见错误与解决方案)
-- [验证安装](#验证安装)
-- [卸载说明](#卸载说明)
-- [需要帮助？](#需要帮助)
+- [🚀 快速安装（推荐）](#快速安装推荐)
+- [📖 详细安装步骤](#详细安装步骤)
+- [⚠️ xtquant 配置（重要！）](#xtquant-配置重要)
+- [❓ 常见错误与解决方案](#常见错误与解决方案)
+- [✅ 验证安装](#验证安装)
+- [🔧 卸载说明](#卸载说明)
+- [📞 需要帮助？](#需要帮助)
 
 ---
 
@@ -63,6 +66,70 @@ python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK
 easy_xt OK
 easyxt_backtest OK
 ```
+
+---
+
+## ⚠️ xtquant 配置（重要！）
+
+> 🔴 **如果你遇到 `cannot import name 'datacenter' from 'xtquant'` 错误，请仔细阅读本节！**
+
+### 为什么需要特殊版本的 xtquant？
+
+本项目需要**特殊版本**的 xtquant，不能使用 `pip install xtquant` 安装的官方版本！
+
+**原因**：不同券商的 QMT 版本发布节奏不一致，xtquant 接口和行为存在差异。为避免连接失败、字段缺失、接口不兼容等问题，本项目仅支持特定版本。
+
+### 快速安装 xtquant
+
+**方法 1：从 GitHub Releases 下载（推荐）**
+
+1. 访问下载页面：
+   ```
+   https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
+   ```
+
+2. 下载附件：`xtquant.rar`
+
+3. 解压到项目根目录（`miniqmt扩展/`）
+
+4. 验证安装：
+   ```bash
+   python -c "from xtquant import datacenter; print('✓ xtquant 安装正确')"
+   ```
+
+**方法 2：一键下载并解压（PowerShell）**
+
+```powershell
+cd C:\Users\Administrator\Desktop\miniqmt扩展
+$url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
+$dest = "$PWD\xtquant.rar"
+Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+if (Test-Path "$env:ProgramFiles\7-Zip\7z.exe") {
+  & "$env:ProgramFiles\7-Zip\7z.exe" x -y "$dest" -o"$PWD"
+}
+Remove-Item $dest -ErrorAction SilentlyContinue
+```
+
+**如果解压到自定义目录**，需要设置环境变量：
+
+```powershell
+setx XTQUANT_PATH "C:\xtquant_special"
+```
+
+**⚠️ 重要**：设置环境变量后必须**重启终端/IDE**才能生效！
+
+### 验证安装
+
+运行诊断脚本：
+```bash
+python easy_xt/check_xtquant.py
+```
+
+该脚本会自动检测问题并给出详细指引。
+
+### 详细配置说明
+
+如果需要更详细的配置说明（包括 IDE 配置、数据源配置等），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)**。
 
 ---
 

@@ -6,23 +6,115 @@
 
 ## 目录
 
+- [xtquant 相关](#xtquant-相关) ← 🆕 常见问题
 - [数据相关](#数据相关)
-  - [DuckDB是什么？我需要它吗？如何启用？](#1-duckdb是什么我需要它吗如何启用)
-  - [DuckDB数据库下载完整步骤](#2-duckdb数据库下载完整步骤)
-  - [下载了DuckDB数据但回测/代码里还是报错](#3-下载了duckdb数据但回测代码里还是报错)
-  - [DuckDB数据库文件找不到](#4-duckdb数据库文件找不到)
-  - [数据下载失败](#5-数据下载失败)
-  - [Tushare配置问题](#6-tushare配置问题)
-  - [QMT历史数据补充](#7-qmt历史数据补充)
-  - [用download_all_stocks.py下载了.DAT文件，如何导入DuckDB并复权？](#8-用download_all_stocks.py下载了dat文件如何导入duckdb并复权)
-  - [复权系统架构说明：为什么只存不复权数据？](#9-复权系统架构说明为什么只存不复权数据)
+- [配置相关](#配置相关) ← 🆕 新增章节
 - [代码转换相关](#代码转换相关)
-  - [聚宽转PTrade：需要安装miniQMT吗？可以独立运行吗？](#10-聚宽转ptrade需要安装miniqmt吗可以独立运行吗)
-  - [聚宽转PTrade：如何使用？](#11-聚宽转ptrade如何使用)
-  - [聚宽转PTrade：转换结果只有几行注释，没有代码](#12-聚宽转ptrade转换结果只有几行注释没有代码)
 - [安装相关](#安装相关)
 - [运行相关](#运行相关)
 - [性能相关](#性能相关)
+
+---
+
+## xtquant 相关
+
+### ❌ 错误：`cannot import name 'datacenter' from 'xtquant'`
+
+这是最常见的错误！说明 xtquant **未正确安装**或**版本不兼容**。
+
+#### 原因
+
+本项目需要**特殊版本**的 xtquant，不能使用 `pip install xtquant` 安装的官方版本！
+
+**为什么？** 不同券商的 QMT 版本发布节奏不一致，xtquant 接口和行为存在差异。使用官方版本会导致：连接失败、字段缺失、接口不兼容。
+
+#### 解决方案
+
+**方法 1：从 GitHub Releases 下载（推荐）**
+
+1. 访问：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
+2. 下载：`xtquant.rar`
+3. 解压到项目根目录（`miniqmt扩展/`）
+4. 验证安装：
+   ```bash
+   python -c "from xtquant import datacenter; print('✓ OK')"
+   ```
+
+**方法 2：一键下载并解压（PowerShell）**
+
+```powershell
+cd C:\Users\Administrator\Desktop\miniqmt扩展
+$url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
+$dest = "$PWD\xtquant.rar"
+Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
+
+# 解压（需要 7-Zip）
+if (Test-Path "$env:ProgramFiles\7-Zip\7z.exe") {
+  & "$env:ProgramFiles\7-Zip\7z.exe" x -y "$dest" -o"$PWD"
+}
+
+Remove-Item $dest -ErrorAction SilentlyContinue
+python easy_xt/check_xtquant.py
+```
+
+**方法 3：从 QMT 软件目录复制**
+
+如果已安装 QMT 客户端：
+1. 找到 QMT 安装目录，如：`D:\国金证券QMT交易端\userdata_mini\Python\`
+2. 复制 `xtquant` 文件夹到项目根目录（`miniqmt扩展/`）
+
+#### 验证安装
+
+运行诊断脚本：
+```bash
+python easy_xt/check_xtquant.py
+```
+
+该脚本会自动检查：
+- ✅ xtquant 模块能否导入
+- ✅ xtquant.datacenter 能否导入（关键组件）
+- ✅ xtquant.xtdata 能否导入
+
+---
+
+### ⚠️ Python 版本不兼容
+
+**问题**：XtQuant **不支持 Python 3.13**！
+
+**支持版本**：Python 3.6 - 3.12（推荐 3.11）
+
+**检查版本**：
+```bash
+python --version
+# 正确: Python 3.11.x
+# 错误: Python 3.13.x
+```
+
+**解决方案**：
+
+如果系统默认是 Python 3.13，需要将 Python 3.11 设为默认：
+
+1. 按 `Win + S` 搜索 **"编辑系统环境变量"**
+2. 点击 **"环境变量"**
+3. 在 **"用户变量"** 的 `Path` 中，将 Python 3.11 的路径移到最顶部：
+   ```
+   C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\Scripts\
+   C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\
+   ```
+4. **删除** Python 3.13 的路径
+5. 重启终端，验证：`python --version`
+
+---
+
+### 自定义 xtquant 安装位置
+
+如果将 xtquant 解压到自定义目录（如 `C:\xtquant_special`），需设置环境变量：
+
+```powershell
+setx XTQUANT_PATH "C:\xtquant_special"
+```
+
+**⚠️ 设置后必须重启终端/IDE才能生效！**
 
 ---
 
@@ -554,6 +646,109 @@ pip install pytdx
 
 ---
 
+## 配置相关
+
+### ❓ 配置文件在哪里？
+
+本项目主要有两个配置文件：
+
+| 配置文件 | 路径 | 用途 |
+|---------|------|------|
+| **unified_config.json** | `config/unified_config.json` | 主配置（QMT路径、交易参数等） |
+| **.env** | 项目根目录 `/.env` | 环境变量（Token、Cookie等） |
+
+### ❓ 如何编辑配置文件？
+
+**Windows 最简单方法**：
+1. 按 `Win + R`，输入 `notepad`
+2. 文件 → 打开
+3. 选择配置文件（`.env` 或 `config/unified_config.json`）
+4. 编辑并保存
+
+**如果 .env 不存在**：
+```bash
+# Windows PowerShell
+Copy-Item .env.example .env
+
+# Windows CMD
+copy .env.example .env
+```
+
+### ⚠️ QMT 路径配置错误
+
+**错误**：QMT 连接失败
+
+**解决方案**：
+
+编辑 `config/unified_config.json`，修改路径：
+
+```json
+{
+  "settings": {
+    "account": {
+      "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini"
+    }
+  }
+}
+```
+
+**⚠️ 注意**：Windows 路径在 JSON 中需要用 `\\\\` 或 `/`：
+- ✅ `"D:\\\\国金QMT交易端模拟\\\\userdata_mini"`
+- ✅ `"D:/国金QMT交易端模拟/userdata_mini"`
+- ❌ `"D:\国金QMT交易端模拟\userdata_mini"`
+
+**验证配置**：
+```python
+from easy_xt.config import config
+config.print_qmt_status()
+```
+
+### ❓ Tushare Token 如何配置？
+
+**步骤 1**：获取 Token
+- 访问 https://tushare.pro 注册
+- 登录后进入「用户中心」→「接口Token」
+
+**步骤 2**：配置 Token
+
+编辑项目根目录的 `.env` 文件：
+```env
+TUSHARE_TOKEN=你的Token粘贴在这里
+```
+
+**验证**：
+```bash
+python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('✓ Token OK' if os.getenv('TUSHARE_TOKEN') else '✗ Token 未配置')"
+```
+
+### ❓ IDE（VSCode/PyCharm/Trae）中无法导入模块
+
+**原因**：PYTHONPATH 配置错误
+
+**VSCode 解决方案**：
+
+创建 `.vscode/settings.json`：
+```json
+{
+  "python.envFile": "${workspaceFolder}/.env",
+  "python.analysis.extraPaths": ["${workspaceFolder}"]
+}
+```
+
+**PyCharm 解决方案**：
+
+1. Run → Edit Configurations
+2. 添加环境变量：`PYTHONPATH=项目根目录路径`
+
+**Trae 解决方案**：
+
+在 Trae 终端中设置：
+```bash
+export PYTHONPATH="项目根目录路径:$PYTHONPATH"
+```
+
+---
+
 ## 代码转换相关
 
 ### 10. 聚宽转PTrade：需要安装miniQMT吗？可以独立运行吗？
@@ -712,119 +907,6 @@ python -m pip install duckdb pyarrow
 **Q: 为什么本地能跑，GitHub 下载的代码不能跑？**
 
 A: 可能是版本不同步，运行 `git pull origin main` 更新到最新代码即可。
-
----
-
-### 9. xtquant安装失败
-
-#### 错误信息
-```
-ImportError: cannot import name 'datacenter' from 'xtquant'
-```
-
-#### 解决方案
-
-**必须使用项目提供的特殊版本！**
-
-1. 下载：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0 → `xtquant.rar`
-2. 解压到项目根目录（与 `easy_xt/` 同级）
-3. 验证：`python -c "from xtquant import datacenter; print('OK')"`
-
-> 不要使用 `pip install xtquant` 安装官方版本！
-
-#### 一键检查工具
-
-```bash
-cd easy_xt
-python check_xtquant.py
-```
-
----
-
-### 9.1 Python 版本不正确导致 xtquant 导入失败
-
-#### 错误信息
-```
-ImportError: cannot import name 'datacenter' from 'xtquant'
-[INFO] xtquant.xttrader 未安装或不可用
-ERROR: All data sources failed to connect
-```
-
-#### 问题原因
-
-**XtQuant 不支持 Python 3.13！**
-
-XtQuant 目前提供的库支持 64 位 Python 3.6、3.7、3.8、3.9、3.10、3.11、3.12 版本，**不支持 Python 3.13**。如果系统默认 Python 是 3.13，xtquant 的 C 扩展模块（datacenter.dll）将无法加载。
-
-此外，如果系统安装了多个 Python 版本（如 3.13），系统 PATH 中高版本的路径可能排在前面，导致即使安装了 Python 3.11，默认仍然使用 3.13。
-
-#### 检查当前 Python 版本
-
-```powershell
-python --version
-# 正确: Python 3.11.x
-# 错误: Python 3.13.x
-```
-
-查看所有已安装的 Python：
-
-```powershell
-where python
-```
-
-#### 解决方案
-
-**步骤 1：确认已安装 Python 3.11**
-
-如果还没安装，从 https://www.python.org/downloads/ 下载安装（勾选 "Add Python to PATH"）。
-
-**步骤 2：修改环境变量，将 Python 3.11 设为默认**
-
-1. 按 `Win + S` 搜索 **"编辑系统环境变量"**，点击打开
-2. 点击 **"环境变量"** 按钮
-3. 在 **上方"用户变量"** 中找到 `Path`，双击编辑
-4. 确保这两行在最顶部：
-   ```
-   C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\Scripts\
-   C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\
-   ```
-5. 在 **下方"系统变量"** 中找到 `Path`，双击编辑
-6. **删除** Python 3.13 等高版本的路径
-7. 确定保存
-
-**步骤 3：重新打开终端验证**
-
-```powershell
-# 必须新开终端，旧终端不会刷新环境变量
-python --version
-# 应显示: Python 3.11.x
-```
-
-**步骤 4：验证 xtquant**
-
-```powershell
-python -c "from xtquant import xtdata, xttrader; print('OK')"
-# 应显示: OK
-```
-
-#### 常见问题
-
-**Q: 改了环境变量但 python --version 还是旧版本？**
-
-A: 必须关掉所有终端窗口，重新打开一个新的。环境变量只在新进程启动时读取。
-
-**Q: 系统变量里有其他高版本 Python 的路径，但找不到删不掉？**
-
-A: 需要管理员权限。右键"以管理员身份运行"CMD，把高版本 Python 的路径从系统 PATH 中去掉即可。
-
-**Q: 我不想改默认 Python，能用指定版本运行吗？**
-
-A: 可以，使用完整路径启动：
-```powershell
-C:\Users\你的用户名\AppData\Local\Programs\Python\Python311\python.exe run_gui.py
-```
-
-> 重要提醒：运行使用 XtQuant 的程序前，需要先启动 MiniQMT 客户端。
 
 ---
 
