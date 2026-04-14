@@ -23,7 +23,7 @@
 ### 前提条件
 
 - Windows 10/11 用户
-- Python 3.8+ 已安装
+- Python 3.8+ 已安装（推荐 Python 3.11）
 - 有 Git（可选，用于克隆项目）
 
 ### 一键安装步骤
@@ -145,12 +145,37 @@ python --version
 
 **要求**：Python 3.8 或更高版本
 
+**推荐版本**：Python 3.11 ⭐
+- 兼容性最好，性能优秀
+- 与 XtQuant 库完全兼容
+- 社区支持广泛
+
 **如果未安装或版本过低**：
 - 访问 [python.org](https://www.python.org/downloads/)
-- 下载 Python 3.9 或更高版本
+- 下载 Python 3.11 或更高版本（推荐 3.11.x）
 - 安装时勾选 "Add Python to PATH"
 
-#### 1.2 检查 Git（可选）
+#### 1.2 XtQuant 运行依赖环境 ⭐ 重要
+
+**XtQuant Python 版本支持**：
+- XtQuant 目前提供 **64 位 Python 3.6、3.7、3.8、3.9、3.10、3.11、3.12** 版本
+- 不同版本的 Python 导入时会自动切换对应的库
+- 建议使用 Python 3.11 以获得最佳兼容性
+
+**运行前准备**：
+> 🔴 **重要**：在运行使用 XtQuant 的程序前，**必须先启动 MiniQMT 客户端**！
+
+1. 确保 MiniQMT 客户端已安装并配置好
+2. 启动 MiniQMT 客户端并登录
+3. 保持 MiniQMT 客户端运行状态
+4. 然后再运行你的 Python 程序
+
+**为什么需要先启动 MiniQMT？**
+- XtQuant 库需要与 MiniQMT 客户端建立通信
+- 客户端负责与券商服务器连接
+- 未启动客户端会导致连接失败或数据获取错误
+
+#### 1.3 检查 Git（可选）
 
 ```powershell
 git --version
@@ -730,7 +755,7 @@ code .
 1. **检查 Python 版本**
    ```powershell
    python --version
-   # 必须 >= 3.8
+   # 必须 >= 3.8，推荐 3.11
    ```
 
 2. **检查 pip 版本**
