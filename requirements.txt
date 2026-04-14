@@ -24,6 +24,7 @@ pillow>=8.0.0
 
 # 回测（可选）
 backtrader>=1.9.78
+PyYAML>=6.0
 
 # 开发依赖（可选）
 pytest>=6.0.0
