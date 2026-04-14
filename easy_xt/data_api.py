@@ -378,39 +378,62 @@ class DataAPI:
             if self._connect_qmt():
                 self._active_source = 'qmt'
                 print("[OK] Using QMT (xtquant) as data source")
-                return True
-            print("  [WARN] QMT connection failed")
+                # ✓ 不要直接返回，继续初始化备用数据源
+            else:
+                print("  [WARN] QMT connection failed")
 
         # 优先级2: 降级到 xqshare (远程)
-        if XQSHARE_AVAILABLE:
+        if self._active_source is None and XQSHARE_AVAILABLE:
             print("  Trying xqshare (远程xtquant)...")
             if self._connect_xqshare():
                 self._active_source = 'xqshare'
                 print("[OK] Using xqshare (远程xtquant) as data source")
-                return True
-            print("  [WARN] xqshare connection failed")
+            else:
+                print("  [WARN] xqshare connection failed")
 
         # 优先级3: 降级到 TDX
-        if TDX_AVAILABLE:
+        if self._active_source is None and TDX_AVAILABLE:
             print("  Trying TDX (通达信)...")
             if self._connect_tdx():
                 self._active_source = 'tdx'
                 print("[OK] Using TDX (通达信) as data source")
-                return True
-            print("  [WARN] TDX connection failed")
+            else:
+                print("  [WARN] TDX connection failed")
 
         # 优先级4: 降级到 Eastmoney
-        if EASTMONEY_AVAILABLE:
+        if self._active_source is None and EASTMONEY_AVAILABLE:
             print("  Trying Eastmoney (东方财富)...")
             if self._connect_eastmoney():
                 self._active_source = 'eastmoney'
                 print("[OK] Using Eastmoney (东方财富) as data source")
-                return True
-            print("  [WARN] Eastmoney connection failed")
+            else:
+                print("  [WARN] Eastmoney connection failed")
 
-        # 所有数据源都失败
-        print("[ERROR] All data sources failed to connect")
-        return False
+        # ✓ 重要：即使主数据源已连接，也要初始化备用数据源（用于运行时降级）
+        if self._active_source in ('qmt', 'xqshare'):
+            print("\n[Initializing fallback data sources...]")
+            if TDX_AVAILABLE and self._tdx_provider is None:
+                print("  Initializing TDX provider (for fallback)...")
+                try:
+                    self._connect_tdx()
+                    print("  ✓ TDX provider ready")
+                except Exception as e:
+                    print(f"  ✗ TDX provider failed: {e}")
+
+            if EASTMONEY_AVAILABLE and self._eastmoney_provider is None:
+                print("  Initializing Eastmoney provider (for fallback)...")
+                try:
+                    self._connect_eastmoney()
+                    print("  ✓ Eastmoney provider ready")
+                except Exception as e:
+                    print(f"  ✗ Eastmoney provider failed: {e}")
+
+        # 检查是否至少有一个数据源连接成功
+        if self._active_source is None:
+            print("[ERROR] All data sources failed to connect")
+            return False
+
+        return True
 
     def _connect_qmt(self) -> bool:
         """连接QMT数据源"""
