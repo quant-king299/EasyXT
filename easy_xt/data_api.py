@@ -505,13 +505,55 @@ class DataAPI:
             supported_list = ', '.join(SUPPORTED_PERIODS.keys())
             raise ValueError(f"不支持的数据周期 '{period}'。支持的周期: {supported_list}")
 
-        # 根据当前使用的数据源调用相应方法
-        if self._active_source in ('qmt', 'xqshare'):
-            return self._get_price_qmt(codes, start, end, period, count, fields, adjust)
+        # 运行时数据源降级机制
+        # 先尝试使用当前激活的数据源，如果失败则尝试其他可用数据源
+        sources_to_try = []
+
+        # 优先使用当前激活的数据源
+        if self._active_source == 'qmt' or self._active_source == 'xqshare':
+            sources_to_try.append(('qmt', self._get_price_qmt))
         elif self._active_source == 'tdx':
-            return self._get_price_tdx(codes, start, end, period, count, fields, adjust)
+            sources_to_try.append(('tdx', self._get_price_tdx))
         elif self._active_source == 'eastmoney':
-            return self._get_price_eastmoney(codes, start, end, period, count, fields, adjust)
+            sources_to_try.append(('eastmoney', self._get_price_eastmoney))
+
+        # 添加备用数据源（运行时降级）
+        if self._active_source in ('qmt', 'xqshare'):
+            # QMT失败时，尝试TDX
+            if TDX_AVAILABLE and self._tdx_provider:
+                sources_to_try.append(('tdx', self._get_price_tdx))
+            # TDX失败时，尝试Eastmoney
+            if EASTMONEY_AVAILABLE and self._eastmoney_provider:
+                sources_to_try.append(('eastmoney', self._get_price_eastmoney))
+
+        # 尝试每个数据源，直到成功或全部失败
+        last_error = None
+        for source_name, source_method in sources_to_try:
+            try:
+                if source_name != self._active_source:
+                    print(f"[降级] 尝试使用 {source_name.upper()} 数据源...")
+
+                result = source_method(codes, start, end, period, count, fields, adjust)
+
+                if source_name != self._active_source:
+                    print(f"[OK] {source_name.upper()} 数据源获取成功")
+
+                return result
+
+            except (ConnectionError, DataError) as e:
+                last_error = e
+                if source_name != self._active_source:
+                    print(f"[WARN] {source_name.upper()} 数据源失败: {e}")
+                continue
+            except Exception as e:
+                last_error = e
+                if source_name != self._active_source:
+                    print(f"[WARN] {source_name.upper()} 数据源异常: {e}")
+                continue
+
+        # 所有数据源都失败
+        if last_error:
+            raise last_error
         else:
             raise ConnectionError("数据服务未连接，请先调用init_data()")
 
