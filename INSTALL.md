@@ -41,15 +41,23 @@ pip install -e ./easy_xt
 # 方式2：完整安装（包含GUI、回测等所有功能）⭐ 推荐
 pip install -e .
 
-# 3. 安装回测框架（如果使用了方式2可跳过）
-cd easyxt_backtest
-install.bat
+# 方式3：实时数据推送功能（可选）
+pip install -r requirements_realtime.txt
 ```
 
 **💡 说明**：
 - **方式1**：只安装核心数据API，适合命令行使用，不包含GUI界面
 - **方式2**：完整安装，包含GUI界面、回测框架等所有功能
+- **方式3**：实时数据推送功能，包括：
+  - ✅ **pytdx** - 通达信数据接口，支持实时行情和历史数据
+  - ✅ **aiohttp/websockets** - 异步HTTP和WebSocket支持
+  - ✅ **实时数据推送** - 支持实时行情订阅和推送
+  - ✅ **自动降级** - 当QMT数据不可用时自动切换到通达信数据源
+
+**安装建议**：
 - 如果需要使用GUI界面（run_gui.py），请使用**方式2**
+- 如果需要**实时数据推送**或**通达信数据源**（推荐），额外安装**方式3**
+- 完整安装：方式2 + 方式3
 
 ### 验证安装
 
@@ -276,7 +284,75 @@ install.bat
 
 ---
 
-### 第四步：重启终端（如果需要）
+### 第四步：安装实时数据推送功能（可选）
+
+**什么是实时数据推送功能？**
+- 基于通达信数据接口的实时行情推送
+- 支持实时数据订阅和历史数据获取
+- **可选的**，如果你只需要基础数据查询功能
+
+#### 主要功能
+
+1. **实时行情推送**
+   - 支持实时订阅股票行情
+   - 异步数据推送，性能优秀
+   - WebSocket 支持
+
+2. **通达信数据源**
+   - **pytdx** - 通达信数据接口
+   - 不依赖 QMT 客户端
+   - 自动降级：当 QMT 数据不可用时自动切换
+
+3. **历史数据获取**
+   - 支持分钟级、日级等多种周期
+   - 数据覆盖面广
+   - 无需手动下载
+
+#### 安装步骤
+
+```powershell
+# 安装实时数据推送功能及依赖
+pip install -r requirements_realtime.txt
+```
+
+**安装内容包括**：
+- `pytdx>=1.72` - 通达信数据接口
+- `aiohttp>=3.8.0` - 异步HTTP支持
+- `websockets>=10.0` - WebSocket支持
+- `asyncio-mqtt>=0.11.0` - 异步MQTT支持
+- 其他相关依赖
+
+**验证安装**：
+```powershell
+# 测试 pytdx
+python -c "import pytdx; print('✓ pytdx 安装成功')"
+
+# 测试实时数据模块
+python -c "from easy_xt.realtime_data.providers.tdx_provider import TdxDataProvider; print('✓ 实时数据推送模块 OK')"
+```
+
+**成功输出**：
+```
+✓ pytdx 安装成功
+✓ 实时数据推送模块 OK
+```
+
+#### 使用场景
+
+**推荐安装实时数据推送功能的情况**：
+- ✅ 需要实时行情推送
+- ✅ 需要分钟级历史数据（1分钟、5分钟等）
+- ✅ 不想频繁使用 QMT 客户端下载数据
+- ✅ 需要稳定的数据源（QMT + 通达信双数据源）
+
+**可以不安装的情况**：
+- ❌ 只使用日级数据
+- ❌ 经常使用 QMT 客户端手动下载
+- ❌ 只做回测不需要实时数据
+
+---
+
+### 第五步：重启终端（如果需要）
 
 **注意**：
 - 使用 `pip install -e` 安装后，**不需要**重启终端
@@ -609,6 +685,10 @@ python -c "from easy_xt import get_api; print('easy_xt OK')"
 
 # 2. 验证 easyxt_backtest
 python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK')"
+
+# 3. 验证实时数据推送功能（如果安装了）
+python -c "import pytdx; print('pytdx OK')"
+python -c "from easy_xt.realtime_data.providers.tdx_provider import TdxDataProvider; print('实时数据推送 OK')"
 ```
 
 ### 完整验证
@@ -673,15 +753,17 @@ rmdir venv
 
 ## 📊 安装方式对比
 
-| 方式 | easy_xt | easyxt_backtest |
-|------|---------|-----------------|
-| **安装方式** | `pip install -e ./easy_xt` | `pip install -e ./easyxt_backtest` |
-| **是否设置 PYTHONPATH** | 否 | **否** |
-| **pip list 可见** | 是 | 是 |
-| **重启终端** | 不需要 | 不需要 |
-| **更新代码** | `git pull` | `git pull` |
-| **卸载方式** | `pip uninstall easy-xt` | `pip uninstall easyxt-backtest` |
-| **IDE 识别** | ✅ 完美 | ✅ 完美 |
+| 方式 | easy_xt | easyxt_backtest | 实时数据推送 |
+|------|---------|-----------------|-------------|
+| **安装方式** | `pip install -e ./easy_xt` | `pip install -e ./easyxt_backtest` | `pip install -r requirements_realtime.txt` |
+| **是否必需** | 是 | 可选 | 可选 |
+| **主要功能** | QMT数据API | 回测框架 | pytdx+实时推送 |
+| **是否设置 PYTHONPATH** | 否 | **否** | 否 |
+| **pip list 可见** | 是 | 是 | 是 |
+| **重启终端** | 不需要 | 不需要 | 不需要 |
+| **更新代码** | `git pull` | `git pull` | `git pull` |
+| **卸载方式** | `pip uninstall easy-xt` | `pip uninstall easyxt-backtest` | 手动删除 |
+| **IDE 识别** | ✅ 完美 | ✅ 完美 | ✅ 完美 |
 
 ---
 
@@ -700,7 +782,10 @@ pip install -e ./easy_xt
 # 3. 安装回测框架
 pip install -e ./easyxt_backtest
 
-# 4. 验证安装
+# 4. 安装实时数据推送功能（可选，推荐）⭐
+pip install -r requirements_realtime.txt
+
+# 5. 验证安装
 python -c "from easyxt_backtest import BacktestEngine; print('安装成功！')"
 ```
 
@@ -714,6 +799,7 @@ python -m venv venv
 # 2. 安装所有依赖
 pip install -e ./easy_xt
 pip install -e ./easyxt_backtest
+pip install -r requirements_realtime.txt  # 实时数据推送功能
 
 # 3. 配置开发环境
 code .
