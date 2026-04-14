@@ -111,24 +111,59 @@ class BoardStocksLoader:
             # 获取所有板块
             all_stocks = []
 
-            # 上海市场
-            sh_stocks = self.xtdata.get_stock_list_in_sector('SH')
-            if sh_stocks:
-                all_stocks.extend(sh_stocks)
+            # 方法1：直接获取沪深A股（推荐方式）
+            # '沪深A股' 只包含A股，不包含债券、ETF等
+            cn_stocks = self.xtdata.get_stock_list_in_sector('沪深A股')
+            if cn_stocks:
+                all_stocks.extend(cn_stocks)
+                print(f"[板块加载] 获取沪深A股: {len(cn_stocks)} 只")
+            else:
+                # 备选方案：分别获取上证A股和深证A股
+                print("[板块加载] '沪深A股' 获取失败，尝试分别获取...")
+                sh_stocks = self.xtdata.get_stock_list_in_sector('上证A股')
+                sz_stocks = self.xtdata.get_stock_list_in_sector('深证A股')
+                if sh_stocks:
+                    all_stocks.extend(sh_stocks)
+                    print(f"[板块加载] 获取上证A股: {len(sh_stocks)} 只")
+                if sz_stocks:
+                    all_stocks.extend(sz_stocks)
+                    print(f"[板块加载] 获取深证A股: {len(sz_stocks)} 只")
 
-            # 深圳市场
-            sz_stocks = self.xtdata.get_stock_list_in_sector('SZ')
-            if sz_stocks:
-                all_stocks.extend(sz_stocks)
+            # 方法2：尝试获取北交所（尝试多种可能的板块名称）
+            # 注意：不同版本的QMT可能使用不同的板块名称
+            bj_board_names = ['北证A股', '北京A股', '北交所', '京市A股', 'BJ']
+            bj_stocks = []
+            for board_name in bj_board_names:
+                try:
+                    stocks = self.xtdata.get_stock_list_in_sector(board_name)
+                    if stocks:
+                        bj_stocks.extend(stocks)
+                        print(f"[板块加载] 使用 '{board_name}' 获取北交所: {len(stocks)} 只")
+                        break
+                except:
+                    continue
 
-            # 北京市场
-            bj_stocks = self.xtdata.get_stock_list_in_sector('BJ')
             if bj_stocks:
                 all_stocks.extend(bj_stocks)
+            else:
+                print("[WARNING] 未获取到北交所股票，可能需要手动指定板块名称")
 
-            # 去重
-            all_stocks = list(set(all_stocks))
-            return all_stocks
+            # 过滤：确保只保留A股格式（排除债券、ETF等）
+            # A股代码格式：6xxxxx.SH, 0xxxxx.SZ, 3xxxxx.SZ, 4xxxxx.BJ, 8xxxxx.BJ
+            filtered_stocks = []
+            for stock in all_stocks:
+                # 确保股票代码格式正确
+                if isinstance(stock, str) and '.' in stock:
+                    code, market = stock.split('.')
+                    # 检查是否为A股代码（6位数字）
+                    if len(code) == 6 and code.isdigit():
+                        # 进一步过滤：排除债券、ETF等
+                        # 债券通常以12、13开头，ETF通常以15、51、56、58开头
+                        if not code.startswith(('12', '13', '15', '51', '56', '58')):
+                            filtered_stocks.append(stock)
+
+            print(f"[板块加载] 过滤后A股总数: {len(filtered_stocks)} 只")
+            return filtered_stocks
 
         except Exception as e:
             print(f"[ERROR] 获取全A股失败: {e}")
