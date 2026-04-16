@@ -383,24 +383,10 @@ class LocalDataManager:
                 print(f"[OK] 成功获取 {symbol} 数据: {len(df)}条记录")
                 return df
         except Exception as e:
+            # easy_xt获取数据失败，返回空DataFrame
+            # 不再尝试其他数据源，因为easy_xt已经内置了降级机制（QMT->TDX->Eastmoney）
+            # 如果所有数据源都失败，说明该股票确实无法获取数据
             warnings.warn(f"easy_xt获取数据失败: {symbol}, 错误: {e}")
-
-        # 备用方案：尝试使用DataManager
-        if self.data_source is not None:
-            try:
-                df = self.data_source.get_stock_data(
-                    stock_code=symbol,
-                    start_date=start_date,
-                    end_date=end_date,
-                    period='1d'
-                )
-
-                if not df.empty:
-                    # 标准化列名
-                    df.columns = df.columns.str.lower()
-                    return df
-            except Exception as e:
-                warnings.warn(f"DataManager获取数据失败: {symbol}, 错误: {e}")
 
         return pd.DataFrame()
 

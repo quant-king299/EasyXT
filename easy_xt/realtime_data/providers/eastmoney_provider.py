@@ -853,7 +853,7 @@ class EastmoneyDataProvider(BaseDataProvider):
                     return []
 
             except Exception as e:
-                self.logger.error(f"获取K线数据请求失败: {e}")
+                self.logger.warning(f"获取K线数据请求失败: {e}")
                 return []
 
             if data.get('rc') == 0 and 'data' in data:
