@@ -2011,7 +2011,23 @@ class LocalDataManagerWidget(QWidget):
 
         # 初始日志
         self.log("本地数据管理组件已加载")
-        self.log("提示：首次使用请先下载数据")
+        self.log("=" * 80)
+        self.log("🎯 首次使用指南：请根据情况选择合适的下载选项")
+        self.log("")
+        self.log("📥 【下载A股数据】- 首次使用必选！")
+        self.log("   用途：从零开始建立数据库，自动获取全部A股列表")
+        self.log("   说明：下载指定日期范围内的所有A股日线数据")
+        self.log("   建议：首次可先下载2024年数据测试，确认无误后再下载更早年份")
+        self.log("")
+        self.log("📜 【补全历史数据】- 发现历史数据缺失时使用")
+        self.log("   用途：补充指定日期之前的历史空白")
+        self.log("   说明：需要数据库中已有股票列表，只补充缺失的部分")
+        self.log("")
+        self.log("🔄 【更新缺失数据】- 日常更新推荐使用")
+        self.log("   用途：智能检测并补充最近缺失的数据")
+        self.log("   说明：自动补充每只股票从最新日期之后到今天的所有缺失数据")
+        self.log("=" * 80)
+        self.log("💡 建议：首次使用请点击「下载A股数据」按钮开始")
 
         # 加载DuckDB统计数据
         QTimer.singleShot(100, self.load_duckdb_statistics)
@@ -2037,6 +2053,14 @@ class LocalDataManagerWidget(QWidget):
             if not db_path.exists():
                 # 首次使用，数据库文件不存在是正常的
                 self.log("ℹ️  DuckDB数据库尚未创建，请先下载股票数据")
+                self.log("")
+                self.log("🚀 推荐操作流程：")
+                self.log("   1. 设置日期范围（建议首次：2024-01-01 ~ 今天）")
+                self.log("   2. 点击「📥 下载A股数据」按钮")
+                self.log("   3. 等待下载完成（首次可能需要几小时）")
+                self.log("")
+                self.log("💡 提示：下载过程可以最小化窗口，不影响使用")
+                self.log("💡 数据存储位置：D:/StockData/stock_data.ddb")
                 self.total_symbols_label.setText("标的总数: 0")
                 self.total_stocks_label.setText("股票数量: 0")
                 self.total_bonds_label.setText("可转债数量: 0")
