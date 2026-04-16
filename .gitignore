@@ -216,6 +216,7 @@ comprehensive_*.py
 !tools/诊断tick字段.py
 !tools/检查qstock状态.py
 !tools/check_env.py
+!tools/test_data_sources.py
 
 # 文档和总结文件
 *总结.md
