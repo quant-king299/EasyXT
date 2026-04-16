@@ -272,11 +272,17 @@ class EastmoneyDataProvider(BaseDataProvider):
                 else:
                     self.logger.warning(f"请求失败，状态码: {response.status_code}")
 
+            except requests.exceptions.ConnectionError as e:
+                # 可能是session已关闭，尝试重新创建
+                if 'closed' in str(e).lower() or attempt == 0:
+                    self.logger.debug("检测到session可能已关闭，重新创建...")
+                    self.session = self._create_session()
+                    # 立即重试
+                    continue
+                self.logger.warning(f"连接错误 (尝试 {attempt + 1}/{self.max_retries}): {e}")
+
             except requests.exceptions.Timeout as e:
                 self.logger.warning(f"请求超时 (尝试 {attempt + 1}/{self.max_retries}): {e}")
-
-            except requests.exceptions.ConnectionError as e:
-                self.logger.warning(f"连接错误 (尝试 {attempt + 1}/{self.max_retries}): {e}")
 
             except requests.exceptions.RequestException as e:
                 self.logger.warning(f"请求异常 (尝试 {attempt + 1}/{self.max_retries}): {e}")
@@ -762,6 +768,12 @@ class EastmoneyDataProvider(BaseDataProvider):
                 ...
             ]
         """
+        # 确保已连接
+        if not self.is_connected():
+            if not self.connect():
+                self.logger.error("无法连接到Eastmoney数据源")
+                return []
+
         try:
             # 标准化股票代码
             std_code = code.replace('.SZ', '').replace('.SH', '').replace('.BJ', '')
@@ -793,6 +805,16 @@ class EastmoneyDataProvider(BaseDataProvider):
             # 构建请求参数
             url = 'https://push2his.eastmoney.com/api/qt/stock/kline/get'
 
+            # 确定请求策略
+            # 1. 如果指定了start_date（开始日期），使用日期范围模式，设置较大的limit
+            # 2. 否则使用count模式（获取最近的count条数据）
+            if start_date and start_date != '0':
+                # 日期范围模式：获取指定日期范围内的数据
+                limit = 1000
+            else:
+                # count模式：获取最近的数据
+                limit = count
+
             params = {
                 'secid': secid,
                 'fields1': 'f1,f2,f3,f4,f5,f6',
@@ -801,14 +823,38 @@ class EastmoneyDataProvider(BaseDataProvider):
                 'fqt': '1',  # 前复权
                 'beg': start_date if start_date else '0',
                 'end': end_date if end_date else '20500101',
-                'lmt': str(count)
+                'lmt': str(limit)
             }
 
-            response = self._make_request(url, params)
-            if not response:
-                return []
+            # 对于K线数据，直接使用requests而不是session，更可靠
+            try:
+                response = req_direct.get(
+                    url,
+                    params=params,
+                    headers=self._get_headers(),
+                    timeout=15,
+                    allow_redirects=True
+                )
 
-            data = response.json()
+                if response.status_code != 200:
+                    self.logger.warning(f"获取K线数据失败，状态码: {response.status_code}")
+                    return []
+
+                # 检查响应内容
+                if not response.text or response.text.strip() == '':
+                    self.logger.warning(f"获取K线数据失败: 响应为空")
+                    return []
+
+                # requests会自动处理gzip和br压缩，直接解析JSON
+                try:
+                    data = response.json()
+                except (json.JSONDecodeError, ValueError) as e:
+                    self.logger.error(f"获取K线数据失败: JSON解析错误 - {e}")
+                    return []
+
+            except Exception as e:
+                self.logger.error(f"获取K线数据请求失败: {e}")
+                return []
 
             if data.get('rc') == 0 and 'data' in data:
                 kline_info = data['data']

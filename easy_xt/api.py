@@ -79,29 +79,33 @@ class EasyXT:
     
     # ==================== 数据接口 ====================
     
-    def get_price(self, 
-                  codes: Union[str, List[str]], 
-                  start: Optional[str] = None, 
-                  end: Optional[str] = None, 
+    def get_price(self,
+                  codes: Union[str, List[str]],
+                  start: Optional[str] = None,
+                  end: Optional[str] = None,
                   period: str = '1d',
                   count: Optional[int] = None,
                   fields: Optional[List[str]] = None,
                   adjust: str = 'front') -> pd.DataFrame:
         """
         获取股票价格数据
-        
+
         Args:
             codes: 股票代码，支持单个或多个
             start: 开始日期，支持多种格式
-            end: 结束日期，支持多种格式  
+            end: 结束日期，支持多种格式
             period: 周期，支持'1d', '1m', '5m', '15m', '30m', '1h'
             count: 数据条数，如果指定则忽略start
             fields: 字段列表，默认['open', 'high', 'low', 'close', 'volume']
             adjust: 复权类型，'front'前复权, 'back'后复权, 'none'不复权
-            
+
         Returns:
             DataFrame: 价格数据
         """
+        # 自动连接（如果尚未连接）
+        if not self._data_connected:
+            self.init_data()
+
         return self.data.get_price(codes, start, end, period, count, fields, adjust)
     
     def get_current_price(self, codes: Union[str, List[str]]) -> pd.DataFrame:

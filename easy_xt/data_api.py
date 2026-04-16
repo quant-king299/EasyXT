@@ -409,24 +409,24 @@ class DataAPI:
             else:
                 print("  [WARN] Eastmoney connection failed")
 
-        # ✓ 重要：即使主数据源已连接，也要初始化备用数据源（用于运行时降级）
+        # 重要：即使主数据源已连接，也要初始化备用数据源（用于运行时降级）
         if self._active_source in ('qmt', 'xqshare'):
             print("\n[Initializing fallback data sources...]")
             if TDX_AVAILABLE and self._tdx_provider is None:
                 print("  Initializing TDX provider (for fallback)...")
                 try:
                     self._connect_tdx()
-                    print("  ✓ TDX provider ready")
+                    print("  [OK] TDX provider ready")
                 except Exception as e:
-                    print(f"  ✗ TDX provider failed: {e}")
+                    print(f"  [FAIL] TDX provider failed: {e}")
 
             if EASTMONEY_AVAILABLE and self._eastmoney_provider is None:
                 print("  Initializing Eastmoney provider (for fallback)...")
                 try:
                     self._connect_eastmoney()
-                    print("  ✓ Eastmoney provider ready")
+                    print("  [OK] Eastmoney provider ready")
                 except Exception as e:
-                    print(f"  ✗ Eastmoney provider failed: {e}")
+                    print(f"  [FAIL] Eastmoney provider failed: {e}")
 
         # 检查是否至少有一个数据源连接成功
         if self._active_source is None:
@@ -560,6 +560,16 @@ class DataAPI:
 
                 if source_name != self._active_source:
                     print(f"[OK] {source_name.upper()} 数据源获取成功")
+
+                # 添加数据来源标记
+                if result is not None and hasattr(result, '__len__') and len(result) > 0:
+                    if isinstance(result, pd.DataFrame):
+                        result['source'] = source_name.upper()
+                    elif isinstance(result, dict) and len(result) > 0:
+                        # 对于dict格式的返回，在每个DataFrame中添加source列
+                        for key, df in result.items():
+                            if isinstance(df, pd.DataFrame):
+                                df['source'] = source_name.upper()
 
                 return result
 
@@ -850,7 +860,7 @@ class DataAPI:
         codes = StockCodeUtils.normalize_codes(codes)
 
         # 处理时间参数
-        from datetime import datetime
+        from datetime import datetime, timedelta
         if count:
             end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
             start_date = None
@@ -858,6 +868,37 @@ class DataAPI:
             start_date = TimeUtils.normalize_date(start) if start else '20200101'
             end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
             count = 1000  # TDX使用count参数
+
+            # 🔧 TDX不支持指定日期范围，自动转换为count
+            # 计算start和end之间的天数，作为count的参考
+            if start_date and end_date:
+                try:
+                    start_dt = datetime.strptime(start_date, '%Y%m%d')
+                    end_dt = datetime.strptime(end_date, '%Y%m%d')
+                    days = (end_dt - start_dt).days + 1
+
+                    # 根据周期调整count
+                    if period == '1d':
+                        count = min(days * 2, 1000)  # 日线：每天约1条，留余量
+                    elif period in ['1m', '5m', '15m', '30m']:
+                        count = min(days * 100, 1000)  # 分钟：假设每天约100条
+                    elif period == '1h':
+                        count = min(days * 4, 1000)  # 小时：每天约4条
+
+                    print(f"[INFO] TDX不支持指定日期范围，已自动转换为获取最近{count}条数据")
+                except:
+                    pass  # 使用默认count=1000
+
+        # 对于分钟数据，调整end_date为明天，避免因数据延迟导致过滤失败
+        if period in ['1m', '5m', '15m', '30m'] and count:
+            try:
+                end_dt = datetime.strptime(end_date, '%Y%m%d')
+                end_dt += timedelta(days=1)  # 加1天
+                end_date_adjusted = end_dt.strftime('%Y%m%d')
+            except:
+                end_date_adjusted = end_date
+        else:
+            end_date_adjusted = end_date
 
         # 处理字段
         if not fields:
@@ -879,6 +920,13 @@ class DataAPI:
             '1M': 'M'
         }
         tdx_period = period_map.get(period, 'D')
+
+        # TDX 1分钟数据的最小count限制
+        original_count = count
+        if period == '1m' and count is not None and count < 2:
+            count = 2
+            if original_count != count:
+                print(f"[INFO] TDX 1分钟数据最小count为2，已自动调整: {original_count} -> {count}")
 
         try:
             # 批量获取K线数据
@@ -937,11 +985,14 @@ class DataAPI:
             # 过滤时间范围
             if start_date:
                 df = df[df['time'] >= pd.to_datetime(start_date)]
-            if end_date:
-                df = df[df['time'] <= pd.to_datetime(end_date)]
+
+            # 使用调整后的end_date（对于分钟数据）
+            actual_end_date = end_date_adjusted if 'end_date_adjusted' in locals() else end_date
+            if actual_end_date:
+                df = df[df['time'] <= pd.to_datetime(actual_end_date)]
 
             if df.empty:
-                raise DataError(f"时间范围内无数据: {start_date} - {end_date}")
+                raise DataError(f"时间范围内无数据: {start_date} - {actual_end_date}")
 
             return df.sort_values(['code', 'time']).reset_index(drop=True)
 
@@ -963,13 +1014,31 @@ class DataAPI:
         codes = StockCodeUtils.normalize_codes(codes)
 
         # 处理时间参数
-        from datetime import datetime
+        from datetime import datetime, timedelta
+        # 处理空字符串的情况
+        start_clean = start if start and start.strip() else None
+        end_clean = end if end and end.strip() else None
+
         if count:
-            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
-            start_date = None
+            # count模式：获取最近的count条数据
+            end_date = TimeUtils.normalize_date(end_clean) if end_clean else datetime.now().strftime('%Y%m%d')
+            # 计算开始日期：确保有足够的数据
+            # 对于日K，往前推count*2天（考虑周末和节假日）
+            # 对于分钟K，往前推更多天数
+            if period in ['1d', '1D', 'D']:
+                days_back = count * 2
+            elif period in ['1m', '5m', '15m', '30m']:
+                days_back = 5  # 分钟数据，5天足够
+            elif period in ['1h', '60m']:
+                days_back = 10  # 小时数据，10天足够
+            else:
+                days_back = count * 2
+
+            start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y%m%d')
         else:
-            start_date = TimeUtils.normalize_date(start) if start else '20200101'
-            end_date = TimeUtils.normalize_date(end) if end else datetime.now().strftime('%Y%m%d')
+            # 日期范围模式
+            start_date = TimeUtils.normalize_date(start_clean) if start_clean else '20200101'
+            end_date = TimeUtils.normalize_date(end_clean) if end_clean else datetime.now().strftime('%Y%m%d')
             count = 1000  # Eastmoney使用count参数
 
         # 处理字段
@@ -1052,11 +1121,14 @@ class DataAPI:
             # 过滤时间范围
             if start_date:
                 df = df[df['time'] >= pd.to_datetime(start_date)]
-            if end_date:
-                df = df[df['time'] <= pd.to_datetime(end_date)]
+
+            # 使用调整后的end_date（对于分钟数据）
+            actual_end_date = end_date_adjusted if 'end_date_adjusted' in locals() else end_date
+            if actual_end_date:
+                df = df[df['time'] <= pd.to_datetime(actual_end_date)]
 
             if df.empty:
-                raise DataError(f"时间范围内无数据: {start_date} - {end_date}")
+                raise DataError(f"时间范围内无数据: {start_date} - {actual_end_date}")
 
             return df.sort_values(['code', 'time']).reset_index(drop=True)
 

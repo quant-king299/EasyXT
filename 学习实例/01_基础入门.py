@@ -108,7 +108,14 @@ def lesson_03_different_periods():
         try:
             data = api.get_price(code, period=period, count=5)
             if not data.empty:
-                print(f"✓ {period} 数据获取成功，共 {len(data)} 条")
+                # 显示数据来源
+                if 'source' in data.columns:
+                    sources = data['source'].unique()
+                    source_info = f" (数据源: {sources[0]})"
+                else:
+                    source_info = ""
+
+                print(f"✓ {period} 数据获取成功，共 {len(data)} 条{source_info}")
                 if 'time' in data.columns:
                     print(f"时间范围: {data['time'].min()} 到 {data['time'].max()}")
                 else:
