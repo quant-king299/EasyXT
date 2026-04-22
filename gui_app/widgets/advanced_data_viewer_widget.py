@@ -1129,9 +1129,15 @@ class FinancialDataSaveThread(QThread):
             self.progress_signal.emit("准备数据...", 50)
 
             # 提取各个表的数据
-            income_df = stock_data.get('Income', pd.DataFrame())
-            balance_df = stock_data.get('Balance', pd.DataFrame())
-            cashflow_df = stock_data.get('CashFlow', pd.DataFrame())
+            income_df = stock_data.get('Income')
+            if not isinstance(income_df, pd.DataFrame):
+                income_df = pd.DataFrame()
+            balance_df = stock_data.get('Balance')
+            if not isinstance(balance_df, pd.DataFrame):
+                balance_df = pd.DataFrame()
+            cashflow_df = stock_data.get('CashFlow')
+            if not isinstance(cashflow_df, pd.DataFrame):
+                cashflow_df = pd.DataFrame()
 
             self.progress_signal.emit("保存到DuckDB...", 70)
 
@@ -1221,9 +1227,25 @@ class BatchFinancialSaveThread(QThread):
                     if isinstance(result, dict) and stock_code in result:
                         stock_data = result[stock_code]
 
-                        income_df = stock_data.get('Income', pd.DataFrame())
-                        balance_df = stock_data.get('Balance', pd.DataFrame())
-                        cashflow_df = stock_data.get('CashFlow', pd.DataFrame())
+                        # 确保stock_data是字典类型
+                        if not isinstance(stock_data, dict):
+                            self.log_signal.emit(
+                                f"[{current}/{total}] {stock_code}: 数据格式错误（预期字典，实际类型：{type(stock_data).__name__}）"
+                            )
+                            failed_count += 1
+                            failed_list.append(stock_code)
+                            continue
+
+                        # 安全获取财务数据，确保返回DataFrame
+                        income_df = stock_data.get('Income')
+                        if not isinstance(income_df, pd.DataFrame):
+                            income_df = pd.DataFrame()
+                        balance_df = stock_data.get('Balance')
+                        if not isinstance(balance_df, pd.DataFrame):
+                            balance_df = pd.DataFrame()
+                        cashflow_df = stock_data.get('CashFlow')
+                        if not isinstance(cashflow_df, pd.DataFrame):
+                            cashflow_df = pd.DataFrame()
 
                         # 保存到DuckDB
                         save_result = saver.save_from_qmt(

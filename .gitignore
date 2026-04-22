@@ -169,6 +169,14 @@ xtquant/
 *test*.py
 *debug*.py
 *fix*.py
+create_*.py
+migrate_*.py
+release_*.py
+import_*.py
+download_*.py
+batch_*.py
+quick_*.py
+simple_*.py
 测试*.py
 调试*.py
 修复*.py
@@ -421,3 +429,5 @@ factor_analysis_report.txt
 101因子/101因子分析平台/run_gui.py.original
 start_qmt_gui.bat
 code_converter/ptrade_strategy.py
+close_and_restart.bat
+tools/qmt_bond_list.txt

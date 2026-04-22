@@ -25,6 +25,29 @@ class FinancialDataSaver:
 
     def _create_tables(self):
         """创建财务数据表"""
+        # 先检查并删除旧版本的表（如果结构不匹配）
+        try:
+            # 检查表是否存在并获取列数
+            check_result = self.db_manager.execute_read_query("""
+                SELECT table_name FROM information_schema.tables
+                WHERE table_name IN ('financial_income', 'financial_balance', 'financial_cashflow')
+            """)
+
+            tables_to_check = ['financial_income', 'financial_balance', 'financial_cashflow']
+            for table in tables_to_check:
+                try:
+                    # 尝试获取表结构
+                    desc_result = self.db_manager.execute_read_query(f"DESCRIBE {table}")
+                    # 如果列数小于预期，删除旧表
+                    if len(desc_result) < 15:  # 至少应该有15列
+                        print(f"[DEBUG] 检测到旧版本的 {table} 表（{len(desc_result)}列），删除重建...")
+                        self.db_manager.execute_write_query(f"DROP TABLE IF EXISTS {table}")
+                except Exception:
+                    # 表不存在或无法访问，忽略
+                    pass
+        except Exception as e:
+            print(f"[DEBUG] 检查表结构时出错: {e}")
+
         # 创建利润表数据表
         self.db_manager.execute_write_query("""
             CREATE TABLE IF NOT EXISTS financial_income (
@@ -126,6 +149,21 @@ class FinancialDataSaver:
         }
 
         try:
+            # 确保传入的是DataFrame类型（防御性编程）
+            print(f"[DEBUG {stock_code}] income_df type: {type(income_df)}, isinstance DataFrame: {isinstance(income_df, pd.DataFrame)}")
+            print(f"[DEBUG {stock_code}] balance_df type: {type(balance_df)}, isinstance DataFrame: {isinstance(balance_df, pd.DataFrame)}")
+            print(f"[DEBUG {stock_code}] cashflow_df type: {type(cashflow_df)}, isinstance DataFrame: {isinstance(cashflow_df, pd.DataFrame)}")
+
+            if income_df is not None and not isinstance(income_df, pd.DataFrame):
+                print(f"[DEBUG {stock_code}] income_df类型错误: {type(income_df)}, 值: {repr(income_df)[:200]}")
+                income_df = pd.DataFrame()
+            if balance_df is not None and not isinstance(balance_df, pd.DataFrame):
+                print(f"[DEBUG {stock_code}] balance_df类型错误: {type(balance_df)}, 值: {repr(balance_df)[:200]}")
+                balance_df = pd.DataFrame()
+            if cashflow_df is not None and not isinstance(cashflow_df, pd.DataFrame):
+                print(f"[DEBUG {stock_code}] cashflow_df类型错误: {type(cashflow_df)}, 值: {repr(cashflow_df)[:200]}")
+                cashflow_df = pd.DataFrame()
+
             # 保存利润表数据
             if income_df is not None and not income_df.empty:
                 income_records = self._prepare_income_data(stock_code, income_df)
@@ -153,6 +191,9 @@ class FinancialDataSaver:
             result['success'] = True
 
         except Exception as e:
+            import traceback
+            error_detail = traceback.format_exc()
+            print(f"[ERROR {stock_code}] 保存财务数据失败: {str(e)}\n{error_detail}")
             result['error'] = str(e)
 
         return result
@@ -312,11 +353,34 @@ class FinancialDataSaver:
         if pd.isna(timetag):
             return None
 
+        # 如果已经是正确的格式（YYYY-MM-DD），直接返回
+        if isinstance(timetag, str) and '-' in timetag:
+            return timetag
+
         if isinstance(timetag, (int, float)):
             timetag_str = str(int(timetag))
             if len(timetag_str) == 8:
                 return f"{timetag_str[0:4]}-{timetag_str[4:6]}-{timetag_str[6:8]}"
-        return str(timetag)[:10]
+
+        # 如果是字符串形式的数字（YYYYMMDD），转换为日期格式
+        if isinstance(timetag, str):
+            timetag = timetag.strip()
+            if len(timetag) == 8 and timetag.isdigit():
+                return f"{timetag[0:4]}-{timetag[4:6]}-{timetag[6:8]}"
+
+        # 尝试转换为数字再格式化
+        try:
+            timetag_int = int(timetag)
+            timetag_str = str(timetag_int)
+            if len(timetag_str) == 8:
+                return f"{timetag_str[0:4]}-{timetag_str[4:6]}-{timetag_str[6:8]}"
+        except (ValueError, TypeError):
+            pass
+
+        # 最后的fallback：取前10个字符
+        result = str(timetag)[:10]
+        print(f"[DEBUG] _format_timetag fallback: timetag={timetag}, result={result}")
+        return result
 
     def _save_to_table(self, table_name: str, df: pd.DataFrame):
         """保存DataFrame到表（使用UPSERT）"""
@@ -328,8 +392,8 @@ class FinancialDataSaver:
                 f"DELETE FROM {table_name} WHERE stock_code = '{stock_code}' AND report_date = '{report_date}'"
             )
 
-        # 插入新数据
-        self.db_manager.insert_dataframe(table_name, df)
+        # 插入新数据（注意参数顺序：先df，后table_name）
+        self.db_manager.insert_dataframe(df, table_name)
 
     def load_financial_data(self, stock_code: str, start_date: str = None,
                            end_date: str = None) -> dict:

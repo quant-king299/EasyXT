@@ -154,6 +154,109 @@ class DuckDBConnectionManager:
         """当前连接数"""
         return self._connection_count
 
+    def insert_dataframe(self, df: 'pd.DataFrame', table_name: str,
+                        conflict_handling: str = 'replace') -> int:
+        """
+        插入DataFrame到指定表
+
+        Args:
+            df: 要插入的DataFrame
+            table_name: 目标表名
+            conflict_handling: 冲突处理方式 ('replace', 'ignore', 'update')
+
+        Returns:
+            int: 插入的记录数
+        """
+        import pandas as pd
+        from datetime import datetime
+
+        # 类型检查：确保df是DataFrame
+        if not isinstance(df, pd.DataFrame):
+            print(f"[DEBUG] insert_dataframe收到非DataFrame类型: {type(df)}, 值: {repr(df)[:100]}")
+            return 0
+
+        if df.empty:
+            return 0
+
+        with self.get_write_connection() as con:
+            # 检查表结构，避免添加不存在的列
+            try:
+                table_info = con.execute(f"DESCRIBE {table_name}").fetchall()
+                table_columns = {col[0] for col in table_info}
+            except Exception:
+                # 如果无法获取表信息，使用默认行为
+                table_columns = {'created_at', 'updated_at'}
+
+            # 添加时间戳列（仅在表中存在该列时）
+            df_copy = df.copy()
+            if 'created_at' in table_columns and 'created_at' not in df_copy.columns:
+                df_copy['created_at'] = datetime.now()
+            if 'updated_at' in table_columns and 'updated_at' not in df_copy.columns:
+                df_copy['updated_at'] = datetime.now()
+
+            # 注册临时表
+            con.register('temp_df', df_copy)
+
+            if conflict_handling == 'replace':
+                # 使用 DELETE + INSERT 来处理重复键（更通用的方法）
+                try:
+                    # 获取表的所有列名
+                    columns_info = con.execute(f"DESCRIBE {table_name}").fetchall()
+                    column_names = [col[0] for col in columns_info]
+
+                    # 获取主键列
+                    try:
+                        pk_info = con.execute(f"""
+                            SELECT cu.column_name
+                            FROM information_schema.table_constraints tc
+                            JOIN information_schema.key_column_usage cu
+                            ON tc.constraint_name = cu.constraint_name
+                            WHERE tc.table_name = '{table_name}'
+                            AND tc.constraint_type = 'PRIMARY KEY'
+                        """).fetchall()
+                        pk_columns = [row[0] for row in pk_info]
+                    except Exception:
+                        # 如果无法获取主键信息，使用默认的主键列
+                        pk_columns = ['stock_code', 'report_date']
+
+                    # 为每一行构建 DELETE 条件
+                    for _, row in df_copy.iterrows():
+                        conditions = []
+                        for pk_col in pk_columns:
+                            if pk_col in row:
+                                val = row[pk_col]
+                                if isinstance(val, str):
+                                    conditions.append(f"{pk_col} = '{val}'")
+                                else:
+                                    conditions.append(f"{pk_col} = {val}")
+
+                        if conditions:
+                            delete_sql = f"DELETE FROM {table_name} WHERE {' AND '.join(conditions)}"
+                            con.execute(delete_sql)
+
+                    # 插入新数据
+                    insert_sql = f"INSERT INTO {table_name} ({', '.join(column_names)}) SELECT {', '.join(column_names)} FROM temp_df"
+                    con.execute(insert_sql)
+
+                except Exception as delete_error:
+                    # 如果 DELETE + INSERT 失败，尝试简单的 INSERT OR REPLACE
+                    print(f"[DEBUG] DELETE + INSERT 失败，使用 INSERT OR REPLACE: {delete_error}")
+                    con.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM temp_df")
+            elif conflict_handling == 'ignore':
+                # 只插入不冲突的数据
+                con.execute(f"INSERT OR IGNORE INTO {table_name} SELECT * FROM temp_df")
+            elif conflict_handling == 'update':
+                # 更新冲突的数据
+                con.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM temp_df")
+            else:
+                # 默认使用OR REPLACE
+                con.execute(f"INSERT OR REPLACE INTO {table_name} SELECT * FROM temp_df")
+
+            # 注销临时表
+            con.unregister('temp_df')
+
+            return len(df)
+
 
 # 全局单例
 _db_manager = None
