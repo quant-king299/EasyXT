@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 import warnings
 
 from .duckdb_storage import DuckDBStorage
-from .metadata_db_extended import MetadataDB as MetadataDBExtended
+from .duckdb_metadata_db import DuckDBMetadataDB
 
 
 class DuckDBDataManager:
@@ -42,9 +42,9 @@ class DuckDBDataManager:
         # 默认配置
         default_config = {
             'data_paths': {
-                'root_dir': '../data',
+                'root_dir': 'D:/StockData',
                 'database': 'stock_data.ddb',  # DuckDB数据库文件
-                'metadata': 'metadata.db'
+                'metadata': 'stock_data.ddb'  # 使用DuckDB统一存储元数据
             },
             'storage': {
                 'format': 'duckdb',
@@ -84,7 +84,7 @@ class DuckDBDataManager:
 
         # 初始化元数据管理器
         try:
-            self.metadata = MetadataDB(str(self.metadata_path))
+            self.metadata = DuckDBMetadataDB(str(self.db_path))
         except Exception as e:
             print(f"[WARN] 元数据库初始化失败: {e}")
             self.metadata = None

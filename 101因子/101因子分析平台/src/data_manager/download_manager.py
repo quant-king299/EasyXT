@@ -42,9 +42,9 @@ class DataDownloadManager:
         # 初始化DuckDB数据管理器
         config = {
             'data_paths': {
-                'root_dir': project_root / 'data',
+                'root_dir': 'D:/StockData',
                 'database': 'stock_data.ddb',
-                'metadata': 'metadata.db'
+                'metadata': 'stock_data.ddb'  # 使用DuckDB统一存储
             }
         }
         self.db_manager = DuckDBDataManager(config)
