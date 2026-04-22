@@ -177,6 +177,8 @@ download_*.py
 batch_*.py
 quick_*.py
 simple_*.py
+*_backup*.py
+*_enhanced*.py
 测试*.py
 调试*.py
 修复*.py
