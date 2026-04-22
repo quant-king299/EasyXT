@@ -314,6 +314,12 @@ archive/
 # 101因子平台的开发文档（项目根docs已有完整版本）
 101因子/101因子分析平台/docs/
 
+# 101因子平台的本地配置文件（不提交）
+101因子/101因子分析平台/config/data_config.yaml
+101因子/101因子分析平台/config/duckdb_config.yaml
+101因子/101因子分析平台/src/data_manager/duckdb_storage.py
+101因子/101因子分析平台/src/data_manager/local_data_manager.py
+
 # 根目录下的特定目录
 scripts/
 markdown/
