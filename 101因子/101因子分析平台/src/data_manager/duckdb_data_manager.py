@@ -12,6 +12,7 @@ import warnings
 
 from .duckdb_storage import DuckDBStorage
 from .duckdb_metadata_db import DuckDBMetadataDB
+from .config_loader import get_stock_data_root, get_duckdb_path
 
 
 class DuckDBDataManager:
@@ -39,12 +40,14 @@ class DuckDBDataManager:
         if config is None:
             config = self._load_config_from_file(config_file)
 
-        # 默认配置
+        # 默认配置（从环境变量读取）
+        stock_data_root = get_stock_data_root()
+
         default_config = {
             'data_paths': {
-                'root_dir': 'D:/StockData',
+                'root_dir': stock_data_root,
                 'database': 'stock_data.ddb',  # DuckDB数据库文件
-                'metadata': 'stock_data.ddb'  # 使用DuckDB统一存储元数据
+                'metadata': get_duckdb_path()  # 使用DuckDB统一存储元数据
             },
             'storage': {
                 'format': 'duckdb',

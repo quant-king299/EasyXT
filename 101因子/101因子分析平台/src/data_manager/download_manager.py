@@ -17,6 +17,7 @@ project_root = Path(__file__).parents[2]
 sys.path.insert(0, str(project_root))
 
 from src.data_manager.duckdb_data_manager import DuckDBDataManager
+from src.data_manager.config_loader import get_stock_data_root, get_duckdb_path
 
 
 class DataDownloadManager:
@@ -42,9 +43,9 @@ class DataDownloadManager:
         # 初始化DuckDB数据管理器
         config = {
             'data_paths': {
-                'root_dir': 'D:/StockData',
+                'root_dir': get_stock_data_root(),
                 'database': 'stock_data.ddb',
-                'metadata': 'stock_data.ddb'  # 使用DuckDB统一存储
+                'metadata': get_duckdb_path()  # 使用DuckDB统一存储
             }
         }
         self.db_manager = DuckDBDataManager(config)
