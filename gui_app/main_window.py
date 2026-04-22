@@ -66,7 +66,8 @@ from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
 from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
-from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
+from gui_app.widgets.local_data_manager_simple import LocalDataManagerWidget
+from gui_app.widgets.duckdb_local_data_manager_widget import DuckDBLocalDataManagerWidget
 from gui_app.widgets.advanced_data_viewer_widget import AdvancedDataViewerWidget
 from gui_app.widgets.tushare_data_widget import TushareDataWidget
 
@@ -142,7 +143,8 @@ class MainWindow(QMainWindow):
         # 本地数据管理标签页
         data_manager_tab = QWidget()
         data_manager_layout = QVBoxLayout(data_manager_tab)
-        self.data_manager_widget = LocalDataManagerWidget()
+        # 选择数据管理器版本（取消注释想要使用的版本）
+        self.data_manager_widget = LocalDataManagerWidget()  # 旧版UI + DuckDB底层（完美方案）
         data_manager_layout.addWidget(self.data_manager_widget)
         self.tab_widget.addTab(data_manager_tab, "📊 数据管理")
 
