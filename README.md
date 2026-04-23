@@ -22,6 +22,7 @@
 - 📊 **数据获取**: 集成qstock、akshare等多种数据源
 - 📈 **技术指标**: 内置常用技术指标计算
 - 🚀 **策略开发**: 提供完整的量化策略开发框架
+- 🔐 **自动登录**: 支持QMT/miniQMT自动登录，包括验证码识别
 - 📚 **学习实例**: 丰富的教学案例，从入门到高级
 - 🌍 **跨平台支持**: 支持Windows、macOS、Linux（通过xqshare远程客户端）
 
@@ -57,6 +58,9 @@
 
 #### 我想做因子分析
 → 📊 **[101因子平台](101因子/101因子分析平台/README.md)** → 独立Web应用
+
+#### 我想自动登录QMT
+→ 🔐 **[QMT自动登录](core/auto_login/README.md)** → 一键启动并登录
 
 ### 🔧 遇到问题了？
 
@@ -557,7 +561,34 @@ $env:PYTHONPATH += ";C:\Users\Administrator\EasyXT"
 # 如果需要因子平台
 cd 101因子/101因子分析平台
 pip install -r requirements.txt
+
+# 如果需要自动登录功能（🆕）
+pip install pywinauto pyautogui
 ```
+
+#### 4️⃣ 配置自动登录（可选）
+
+如果需要使用 QMT 自动登录功能：
+
+1. 复制配置文件：
+   ```bash
+   cp .env.example .env
+   ```
+
+2. 编辑 `.env` 文件，填写QMT登录信息：
+   ```env
+   QMT_EXE_PATH=D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe
+   QMT_USER_ID=8888499999
+   QMT_PASSWORD=your_password
+   QMT_DATA_DIR=D:\国金QMT交易端模拟\userdata_mini
+   ```
+
+3. 运行自动登录：
+   ```bash
+   python start_qmt.py
+   ```
+
+详细说明：[🔐 QMT自动登录指南](core/auto_login/README.md)
 
 ---
 
