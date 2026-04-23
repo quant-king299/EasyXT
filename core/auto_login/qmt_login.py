@@ -289,9 +289,7 @@ class QMTAutoLogin:
             if user_id:
                 self.logger.info(f"检测到用户ID: {user_id}")
 
-            # 获取自动显示的验证码
-            captcha = self._get_captcha_from_window(app)
-
+            # 注意：验证码会自动显示，无需手动输入
             self.logger.info("正在填写密码...")
             # 使用pyautogui模拟键盘操作（更可靠）
             try:

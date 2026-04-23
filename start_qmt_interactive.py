@@ -1,11 +1,16 @@
 """
-miniQMT 自动登录启动器（交互式版本）
+miniQMT 自动登录启动器
 
 使用方法：
 1. 确保已配置 .env 文件中的 QMT 相关参数
 2. 运行此脚本：python start_qmt_interactive.py
-3. 当QMT启动后，查看窗口显示的验证码（如：598hi）
-4. 在命令行输入验证码，程序会自动填写验证码+密码并登录
+3. 程序会自动完成登录（验证码自动显示）
+
+登录流程：
+1. Tab到密码框
+2. 输入密码
+3. 按回车（验证码会自动显示）
+4. 再按回车提交登录
 """
 
 import sys
@@ -22,7 +27,7 @@ from core.auto_login import QMTAutoLogin
 def main():
     """主函数"""
     print("=" * 60)
-    print("miniQMT 自动登录工具（交互式）")
+    print("miniQMT 自动登录工具")
     print("=" * 60)
 
     try:
@@ -42,20 +47,18 @@ def main():
         proc = subprocess.Popen(auto_login.exe_path)
         time.sleep(5)  # 等待QMT启动
 
-        # 询问用户验证码
         print("\n" + "=" * 60)
-        print("请查看QMT登录窗口，找到显示的验证码")
-        print("验证码格式类似：598hi, 123ab 等")
+        print("QMT登录说明")
+        print("=" * 60)
+        print("验证码会自动显示，无需手动输入")
+        print("程序会自动完成以下步骤：")
+        print("1. Tab到密码框")
+        print("2. 输入密码")
+        print("3. 按回车（验证码自动显示）")
+        print("4. 再按回车提交登录")
         print("=" * 60)
 
-        captcha = input("\n请输入验证码: ").strip()
-
-        if not captcha:
-            print("\n未输入验证码，退出")
-            return 1
-
         print("\n正在自动登录...")
-        print("注意：验证码会自动显示，无需手动输入")
 
         # 使用pyautogui模拟键盘操作
         import pyautogui
