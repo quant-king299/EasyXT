@@ -54,28 +54,29 @@ def main():
             print("\n未输入验证码，退出")
             return 1
 
-        print(f"\n输入的验证码: {captcha}")
-        print("正在自动登录...")
+        print("\n正在自动登录...")
+        print("注意：验证码会自动显示，无需手动输入")
 
-        # 使用pyautogui填写验证码+密码
+        # 使用pyautogui模拟键盘操作
         import pyautogui
         import time
 
         time.sleep(2)  # 等待窗口激活
 
-        # Tab到密码框
+        # 正确的登录流程
         print("Step 1: Tab到密码框...")
         pyautogui.press('tab')
         time.sleep(0.8)
 
-        # 输入验证码+密码
-        password_content = f"{captcha}{auto_login.password}"
-        print(f"Step 2: 填写 验证码({captcha}) + 密码")
-        pyautogui.typewrite(password_content, interval=0.05)
-        time.sleep(0.8)
+        print("Step 2: 输入密码...")
+        pyautogui.typewrite(auto_login.password, interval=0.05)
+        time.sleep(0.5)
 
-        # 按回车登录
-        print("Step 3: 按回车键登录...")
+        print("Step 3: 按回车（验证码会自动显示）...")
+        pyautogui.press('enter')
+        time.sleep(1.0)
+
+        print("Step 4: 再按回车提交登录...")
         pyautogui.press('enter')
         print("已按回车键")
 
