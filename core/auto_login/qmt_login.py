@@ -324,35 +324,28 @@ class QMTAutoLogin:
                 self.logger.info("请手动输入密码...")
                 time.sleep(10)  # 给用户10秒时间手动输入
 
-            # 检查是否需要验证码
-            if self._has_captcha(app):
-                self.logger.warning("=" * 60)
-                self.logger.warning("检测到验证码！")
-                self.logger.info("请手动输入验证码（你有30秒时间）")
-                self.logger.warning("=" * 60)
-                time.sleep(30)  # 给用户30秒时间手动输入验证码并登录
-
-                # 检查用户是否手动登录成功
-                if self._check_logged_in(app):
-                    self.logger.info("手动登录成功！")
-                    return True
-                else:
-                    self.logger.warning("超时，尝试继续...")
+            # 点击登录按钮或按回车
+            self.logger.info("正在登录（按回车键）...")
+            try:
+                import pyautogui
+                # 使用回车键登录（最可靠的方法）
+                pyautogui.press('enter')
+                self.logger.info("已按回车键，等待登录...")
+                time.sleep(3)  # 等待登录处理
+            except Exception as e:
+                self.logger.error(f"按回车键失败: {e}")
+                return False
 
             # 点击登录按钮或按回车
-            self.logger.info("正在登录...")
+            self.logger.info("正在登录（按回车键）...")
             try:
-                # 尝试找到登录按钮
-                login_btn = win.Button3 if win.Button3.Exists() else win.Button if len(win.buttons()) > 0 else None
-                if login_btn:
-                    login_btn.click()
-                else:
-                    # 按回车键
-                    import pyautogui
-                    pyautogui.press('enter')
-            except Exception:
                 import pyautogui
+                # 使用回车键登录（最可靠的方法）
                 pyautogui.press('enter')
+                self.logger.info("已按回车键")
+            except Exception as e:
+                self.logger.error(f"按回车键失败: {e}")
+                return False
 
             # 等待登录完成
             start_time = time.time()

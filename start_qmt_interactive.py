@@ -64,21 +64,28 @@ def main():
         time.sleep(2)  # 等待窗口激活
 
         # Tab到密码框
+        print("Step 1: Tab到密码框...")
         pyautogui.press('tab')
-        time.sleep(0.5)
+        time.sleep(0.8)
 
         # 输入验证码+密码
         password_content = f"{captcha}{auto_login.password}"
+        print(f"Step 2: 填写 验证码({captcha}) + 密码")
         pyautogui.typewrite(password_content, interval=0.05)
-        time.sleep(0.5)
+        time.sleep(0.8)
 
         # 按回车登录
+        print("Step 3: 按回车键登录...")
         pyautogui.press('enter')
-        time.sleep(2)
+        print("已按回车键")
+
+        # 等待登录完成
+        print("等待登录完成（5秒）...")
+        time.sleep(5)
 
         print("\n" + "=" * 60)
-        print("[OK] 登录信息已填写！")
-        print("请检查QMT窗口是否登录成功")
+        print("[OK] 登录流程已完成！")
+        print("请检查QMT窗口是否成功登录")
         print("=" * 60)
         return 0
 
