@@ -304,12 +304,6 @@ class QMTAutoLogin:
                 pyautogui.hotkey('ctrl', 'a')  # 全选
                 time.sleep(0.2)
 
-                # 如果有验证码，先输入验证码
-                if captcha:
-                    self.logger.info(f"输入验证码: {captcha}")
-                    pyautogui.typewrite(captcha, interval=0.05)
-                    time.sleep(0.3)
-
                 # 输入密码
                 self.logger.info("输入密码...")
                 pyautogui.typewrite(self.password, interval=0.05)
