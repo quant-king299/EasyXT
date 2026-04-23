@@ -116,14 +116,15 @@ class QMTAutoLogin:
             # 启动QMT
             self.logger.info("正在启动QMT...")
             app = Application(backend="uia").start(self.exe_path, timeout=10)
-            time.sleep(3)
+            time.sleep(5)  # 增加等待时间，确保窗口完全加载
 
             # 检查是否已登录
             if self._check_logged_in(app):
-                self.logger.info("已经登录，跳过")
+                self.logger.info("检测到QMT已登录")
                 return True
 
-            # 执行登录流程
+            # 未登录，执行登录流程
+            self.logger.info("检测到登录界面，准备登录...")
             return self._do_login(app, timeout)
 
         except Exception as e:
@@ -156,6 +157,41 @@ class QMTAutoLogin:
             self.logger.debug(f"获取用户ID失败: {e}")
             return None
 
+    def _get_captcha_from_window(self, app: Application) -> Optional[str]:
+        """从QMT窗口获取自动显示的验证码"""
+        try:
+            win = app.top_window()
+            window_text = str(win.window_text())
+
+            self.logger.debug(f"窗口文本: {window_text[:200]}...")  # 打印前200个字符
+
+            # 尝试从窗口文本中提取验证码
+            # QMT验证码通常是字母数字组合，如：598hi
+            import re
+            # 匹配 3-5位数字 + 2-3位字母 的模式（如：598hi, 123ab）
+            captcha_pattern = re.compile(r'(\d{3,5}[a-zA-Z]{2,3})')
+            captcha = captcha_pattern.search(window_text)
+
+            if captcha:
+                captcha_code = captcha.group(1)
+                self.logger.info(f"从窗口获取到验证码: {captcha_code}")
+                return captcha_code
+
+            # 如果没有找到，尝试其他模式
+            # 可能是纯数字或者纯字母
+            alt_pattern = re.compile(r'(\d{4,6})')
+            alt_captcha = alt_pattern.search(window_text)
+            if alt_captcha:
+                captcha_code = alt_captcha.group(1)
+                self.logger.info(f"从窗口获取到验证码（纯数字）: {captcha_code}")
+                return captcha_code
+
+            self.logger.debug("未找到验证码")
+            return None
+        except Exception as e:
+            self.logger.debug(f"获取验证码失败: {e}")
+            return None
+
     def _is_running(self) -> Optional[Application]:
         """检查QMT是否正在运行"""
         try:
@@ -172,16 +208,52 @@ class QMTAutoLogin:
             top_window = app.top_window()
             window_text = top_window.window_text()
 
+            self.logger.debug(f"窗口标题: {window_text}")
+
             # 检查是否有登录窗口的特征
-            # 登录窗口通常包含"登录"、"密码"等关键词
-            if any(keyword in window_text for keyword in ["登录", "密码", "Login"]):
+            # 登录窗口通常包含"登录"、"密码"、"账号"等关键词
+            login_keywords = ["登录", "密码", "账号", "用户", "Login", "Password", "User"]
+            if any(keyword in window_text for keyword in login_keywords):
+                self.logger.debug("检测到登录窗口特征")
                 return False
 
-            # 如果没有登录窗口，可能已经登录
-            return True
+            # 检查是否有已登录窗口的特征
+            # 已登录窗口通常包含"委托"、"持仓"、"交易"等关键词
+            logged_in_keywords = ["委托", "持仓", "交易", "行情", "资产", "策略"]
+            if any(keyword in window_text for keyword in logged_in_keywords):
+                self.logger.debug("检测到已登录窗口特征")
+                return True
+
+            # 如果窗口标题是"miniQMT"或"QMT"，可能已经登录
+            if "QMT" in window_text or "mini" in window_text.lower():
+                self.logger.debug("检测到QMT主窗口")
+                # 进一步检查：尝试找密码输入框，如果有说明在登录界面
+                if self._has_password_field(top_window):
+                    self.logger.debug("发现密码输入框，判断为登录界面")
+                    return False
+                return True
+
+            # 默认情况下，认为未登录
+            self.logger.debug("无法确定登录状态，默认为未登录")
+            return False
 
         except Exception as e:
             self.logger.debug(f"检查登录状态异常: {e}")
+            return False
+
+    def _has_password_field(self, window) -> bool:
+        """检查窗口是否有密码输入框"""
+        try:
+            # 检查是否有密码相关的Edit控件
+            # 通常密码输入框是Edit2或包含"密码"的控件
+            if hasattr(window, 'Edit2') and window.Edit2.Exists():
+                return True
+            if hasattr(window, 'Edit'):
+                for edit in window.children(class_name='Edit'):
+                    if '密码' in str(edit.window_text()) or 'password' in str(edit.window_text()).lower():
+                        return True
+            return False
+        except Exception:
             return False
 
     def _do_login(self, app: Application, timeout: int) -> bool:
@@ -196,47 +268,76 @@ class QMTAutoLogin:
             bool: 是否登录成功
         """
         try:
-            win = app.top_window()
+            # 重新连接到窗口（防止窗口句柄失效）
+            try:
+                win = app.top_window()
+            except Exception as e:
+                self.logger.warning(f"无法获取窗口，尝试重新连接: {e}")
+                time.sleep(2)
+                try:
+                    app = Application(backend="uia").connect(path=self.exe_path, timeout=10)
+                    win = app.top_window()
+                except Exception as e2:
+                    self.logger.error(f"重新连接失败: {e2}")
+                    return False
+
             win.set_focus()
+            time.sleep(1)  # 等待窗口激活
 
             # 获取自动显示的用户ID（用于验证）
             user_id = self._get_user_id(app)
             if user_id:
                 self.logger.info(f"检测到用户ID: {user_id}")
 
+            # 获取自动显示的验证码
+            captcha = self._get_captcha_from_window(app)
+
             self.logger.info("正在填写密码...")
-            # 直接填写密码（用户ID已自动显示）
+            # 使用pyautogui模拟键盘操作（更可靠）
             try:
-                # 尝试找到密码输入框
-                # 通常是Edit2或者包含"密码"关键词的Edit
-                password_edit = None
-                if hasattr(win, 'Edit2') and win.Edit2.Exists():
-                    password_edit = win.Edit2
-                elif hasattr(win, 'Edit'):
-                    password_edit = win.Edit
+                import pyautogui
 
-                if password_edit:
-                    password_edit.click_input()
-                    time.sleep(0.3)
-                    password_edit.type_keys(self.password)
-                else:
-                    # 备用方案：使用Tab键导航到密码框
-                    import pyautogui
-                    pyautogui.press('tab')
-                    time.sleep(0.3)
-                    pyautogui.typewrite(self.password)
+                # 方法1：尝试使用Tab键导航到密码框
+                self.logger.debug("使用Tab键导航到密码框...")
+                pyautogui.press('tab')  # 从用户ID框跳到密码框
                 time.sleep(0.5)
-            except Exception as e:
-                self.logger.warning(f"填写密码失败（尝试备用方案）: {e}")
 
-            # 处理验证码（如果有）
-            if self._has_captcha(win):
-                self.logger.info("检测到验证码，尝试处理...")
-                if not self._handle_captcha(win):
-                    self.logger.warning("验证码处理失败，请手动输入")
-                    # 给用户30秒时间手动输入
-                    self.logger.info("等待30秒手动输入...")
-                    time.sleep(30)
+                # 清空密码框
+                pyautogui.hotkey('ctrl', 'a')  # 全选
+                time.sleep(0.2)
+
+                # 如果有验证码，先输入验证码
+                if captcha:
+                    self.logger.info(f"输入验证码: {captcha}")
+                    pyautogui.typewrite(captcha, interval=0.05)
+                    time.sleep(0.3)
+
+                # 输入密码
+                self.logger.info("输入密码...")
+                pyautogui.typewrite(self.password, interval=0.05)
+                time.sleep(0.5)
+
+                self.logger.info("密码填写完成")
+            except Exception as e:
+                self.logger.error(f"填写密码失败: {e}")
+                # 给用户手动输入的机会
+                self.logger.info("请手动输入密码...")
+                time.sleep(10)  # 给用户10秒时间手动输入
+
+            # 检查是否需要验证码
+            if self._has_captcha(app):
+                self.logger.warning("=" * 60)
+                self.logger.warning("检测到验证码！")
+                self.logger.info("请手动输入验证码（你有30秒时间）")
+                self.logger.warning("=" * 60)
+                time.sleep(30)  # 给用户30秒时间手动输入验证码并登录
+
+                # 检查用户是否手动登录成功
+                if self._check_logged_in(app):
+                    self.logger.info("手动登录成功！")
+                    return True
+                else:
+                    self.logger.warning("超时，尝试继续...")
 
             # 点击登录按钮或按回车
             self.logger.info("正在登录...")
@@ -268,17 +369,31 @@ class QMTAutoLogin:
             self.logger.error(f"登录流程异常: {e}")
             return False
 
-    def _has_captcha(self, window) -> bool:
+    def _has_captcha(self, app: Application) -> bool:
         """检查是否有验证码"""
         try:
-            # 检查是否有验证码相关的控件
-            # 通常验证码是一个Custom控件或者Edit控件
-            if hasattr(window, 'Custom') and window.Custom.Exists():
+            win = app.top_window()
+
+            # 方法1：检查窗口文本是否包含"验证码"关键词
+            window_text = str(win.window_text())
+            if '验证码' in window_text or 'captcha' in window_text.lower():
+                self.logger.debug("窗口文本包含验证码关键词")
                 return True
-            if hasattr(window, 'Edit3') and window.Edit3.Exists():
+
+            # 方法2：检查是否有多个Edit框（通常登录界面有2个Edit：用户名+密码，有验证码时会有3个）
+            edit_count = 0
+            if hasattr(win, 'children'):
+                for child in win.children():
+                    if 'Edit' in str(child.class_name()):
+                        edit_count += 1
+
+            if edit_count >= 3:
+                self.logger.debug(f"检测到{edit_count}个Edit框，可能需要验证码")
                 return True
+
             return False
-        except Exception:
+        except Exception as e:
+            self.logger.debug(f"检查验证码异常: {e}")
             return False
 
     def _handle_captcha(self, window) -> bool:
