@@ -15,7 +15,7 @@ src_dir = os.path.dirname(current_file_dir)  # src
 project_dir = os.path.dirname(src_dir)  # 101因子分析平台
 # 101因子 (注意：项目名称包含中文"101因子")
 parent_of_project = os.path.dirname(project_dir)  # 101因子
-workspace_dir = os.path.dirname(parent_of_project)  # miniqmt扩展
+workspace_dir = os.path.dirname(parent_of_project)  # EasyXT 项目根目录
 
 # 打印路径以便调试
 print(f"[DEBUG] current_file_dir: {current_file_dir}")

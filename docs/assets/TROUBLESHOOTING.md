@@ -34,7 +34,10 @@
 
 1. 访问：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0
 2. 下载：`xtquant.rar`
-3. 解压到项目根目录（`miniqmt扩展/`）
+3. 解压到项目根目录（即下载的 EasyXT 项目文件夹）
+
+   > **说明**：从 GitHub 下载的文件夹名为 `EasyXT`，项目根目录就是 `EasyXT/`
+
 4. 验证安装：
    ```bash
    python -c "from xtquant import datacenter; print('✓ OK')"
@@ -43,7 +46,9 @@
 **方法 2：一键下载并解压（PowerShell）**
 
 ```powershell
-cd C:\Users\Administrator\Desktop\miniqmt扩展
+# 先进入项目根目录（EasyXT项目文件夹）
+cd <你的项目路径>
+
 $url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
 $dest = "$PWD\xtquant.rar"
 Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing
@@ -61,7 +66,7 @@ python easy_xt/check_xtquant.py
 
 如果已安装 QMT 客户端：
 1. 找到 QMT 安装目录，如：`D:\国金证券QMT交易端\userdata_mini\Python\`
-2. 复制 `xtquant` 文件夹到项目根目录（`miniqmt扩展/`）
+2. 复制 `xtquant` 文件夹到项目根目录（EasyXT项目文件夹）
 
 #### 验证安装
 

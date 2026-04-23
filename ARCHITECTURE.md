@@ -800,7 +800,7 @@ if __name__ == "__main__":
 ### A. 项目目录结构（完整版）
 
 ```
-miniqmt扩展/
+EasyXT/                          # 项目根目录（从 GitHub 下载后的文件夹名）
 ├── core/                          # 核心层
 │   ├── __init__.py
 │   ├── path_manager.py            # 统一路径管理 ✨

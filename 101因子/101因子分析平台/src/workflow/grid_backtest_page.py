@@ -21,7 +21,7 @@ matplotlib.rcParams['axes.unicode_minus'] = False
 
 # 添加项目路径（使用绝对路径避免相对路径问题）
 project_root = Path(__file__).resolve().parent.parent.parent  # 101因子/101因子分析平台/
-main_project_root = project_root.parent.parent.resolve()  # miniqmt扩展/
+main_project_root = project_root.parent.parent.resolve()  # EasyXT 项目根目录
 
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(main_project_root))

@@ -98,7 +98,9 @@ easyxt_backtest OK
 
 2. 下载附件：`xtquant.rar`
 
-3. 解压到项目根目录（`miniqmt扩展/`）
+3. 解压到项目根目录（即克隆/下载 EasyXT 项目后的文件夹）
+
+   > **说明**：如果你从 GitHub 下载的是 `EasyXT-main.zip`，解压后的文件夹名为 `EasyXT-main`，那么项目根目录就是 `EasyXT-main/`
 
 4. 验证安装：
    ```bash
@@ -108,7 +110,9 @@ easyxt_backtest OK
 **方法 2：一键下载并解压（PowerShell）**
 
 ```powershell
-cd C:\Users\Administrator\Desktop\miniqmt扩展
+# 先进入项目根目录（EasyXT项目文件夹）
+cd <你的项目路径>
+
 $url = "https://github.com/quant-king299/EasyXT/releases/download/v1.0.0/xtquant.rar"
 $dest = "$PWD\xtquant.rar"
 Invoke-WebRequest -Uri $url -OutFile $dest -UseBasicParsing

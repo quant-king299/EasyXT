@@ -15,8 +15,8 @@ import plotly.graph_objects as go
 current_dir = Path(__file__).parent.resolve()
 
 # 计算主项目根目录
-# 当前文件在: miniqmt扩展/101因子/101因子分析平台/main_app.py
-# 需要向上2层到达: miniqmt扩展/
+# 当前文件在: EasyXT/101因子/101因子分析平台/main_app.py
+# 需要向上2层到达: EasyXT/
 main_project_root = current_dir.parent.parent.resolve()
 
 # 添加到Python路径

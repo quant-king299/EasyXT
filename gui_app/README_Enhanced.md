@@ -75,7 +75,7 @@ python gui_app/main_window_enhanced.py
 ## 项目结构
 
 ```
-miniqmt扩展/
+EasyXT/                          # 项目根目录（从 GitHub 下载后的文件夹名）
 ├── gui_app/                    # GUI应用程序
 │   ├── main_window_enhanced.py # 增强版主窗口
 │   ├── launch_enhanced.py      # 启动器
