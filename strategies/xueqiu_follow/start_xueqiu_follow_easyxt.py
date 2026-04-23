@@ -42,11 +42,55 @@ from core.path_manager import init_paths, get_project_root
 # 初始化项目路径（幂等性，会自动添加所有需要的路径）
 init_paths()
 
+# ========================================
+# QMT连接检查
+# ========================================
+def ensure_qmt_connection():
+    """确保QMT已连接并登录"""
+    try:
+        from core.qmt_connection import ensure_qmt_logged_in, get_qmt_status
+
+        print("\n" + "=" * 60)
+        print("QMT连接检查")
+        print("=" * 60)
+
+        # 获取QMT状态
+        status = get_qmt_status()
+        print(f"QMT运行状态: {'✓ 已运行' if status['running'] else '✗ 未运行'}")
+        print(f"QMT登录状态: {'✓ 已登录' if status['logged_in'] else '✗ 未登录'}")
+
+        # 确保QMT已登录
+        if not status['running'] or not status['logged_in']:
+            print("\n正在启动并登录QMT...")
+            if ensure_qmt_logged_in(auto_login=True, timeout=60):
+                print("[OK] QMT登录成功！")
+            else:
+                print("[X] QMT登录失败！")
+                print("请检查：")
+                print("  1. .env 文件中是否配置了 QMT_EXE_PATH 和 QMT_PASSWORD")
+                print("  2. QMT可执行文件路径是否正确")
+                print("  3. 密码是否正确")
+                return False
+        else:
+            print("[OK] QMT已就绪")
+
+        print("=" * 60 + "\n")
+        return True
+
+    except ImportError as e:
+        print(f"导入QMT连接模块失败: {e}")
+        print("将跳过QMT连接检查...")
+        return True
+    except Exception as e:
+        print(f"QMT连接检查失败: {e}")
+        print("将跳过QMT连接检查...")
+        return True
+
 # 导入依赖检查
 def check_dependencies():
     """检查依赖模块"""
     missing_deps = []
-    
+
     try:
         import requests
     except ImportError:
