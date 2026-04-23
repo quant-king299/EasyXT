@@ -24,6 +24,11 @@ requests>=2.25.0
 openpyxl>=3.0.0  # Excel导出支持
 streamlit>=1.28.0  # Web界面
 
+# 自动化（QMT自动登录）
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+python-dotenv>=1.0.0
+
 # 数据源（可选，按需安装）
 # akshare>=1.9.0  # AKShare数据源
 # qstock>=1.1.0  # QStock数据源

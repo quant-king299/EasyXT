@@ -25,6 +25,10 @@ cryptography>=41.0.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
 
+# 自动化（QMT自动登录）
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+
 # 时间处理
 python-dateutil>=2.8.0
 

@@ -5,6 +5,11 @@ matplotlib>=3.5.0
 requests>=2.25.0
 psutil>=5.9.0
 
+# 自动化（QMT自动登录）
+pywinauto>=0.6.8
+pyautogui>=0.9.54
+python-dotenv>=1.0.0
+
 # 数据存储（可选依赖，提升性能）
 # pyarrow>=10.0.0  # 可选：安装后可启用高性能Parquet存储
 # fastparquet>=0.8.0  # 可选：Parquet备用引擎
