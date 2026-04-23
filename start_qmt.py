@@ -33,7 +33,6 @@ def main():
 
         # 执行登录
         print(f"\n正在启动 QMT...")
-        print(f"用户ID: {auto_login.user_id}")
         print(f"QMT路径: {auto_login.exe_path}")
         print("-" * 60)
 
@@ -41,36 +40,36 @@ def main():
 
         if success:
             print("\n" + "=" * 60)
-            print("✓ 登录成功！QMT 现在可以正常使用了")
+            print("[OK] 登录成功！QMT 现在可以正常使用了")
             print("=" * 60)
             return 0
         else:
             print("\n" + "=" * 60)
-            print("✗ 登录失败！请检查以下内容：")
+            print("[X] 登录失败！请检查以下内容：")
             print("  1. .env 文件中的配置是否正确")
             print("  2. QMT 可执行文件路径是否正确")
-            print("  3. 用户ID和密码是否正确")
+            print("  3. 密码是否正确")
             print("  4. 网络连接是否正常")
             print("=" * 60)
             return 1
 
     except ValueError as e:
         print("\n" + "=" * 60)
-        print("✗ 配置错误：")
+        print("[X] 配置错误：")
         print(f"  {e}")
         print("\n请按照以下步骤配置：")
         print("  1. 打开 .env 文件（如果没有，从 .env.example 复制）")
         print("  2. 填写以下配置项：")
         print("     - QMT_EXE_PATH: QMT可执行文件完整路径")
-        print("     - QMT_USER_ID: 你的QMT资金账号")
         print("     - QMT_PASSWORD: 你的QMT登录密码")
         print("  3. 保存文件后重新运行此脚本")
+        print("\n注意：用户ID会自动显示，无需配置")
         print("=" * 60)
         return 1
 
     except ImportError as e:
         print("\n" + "=" * 60)
-        print("✗ 缺少依赖库：")
+        print("[X] 缺少依赖库：")
         print(f"  {e}")
         print("\n请安装必要的依赖：")
         print("  pip install pywinauto pyautogui")
@@ -79,7 +78,7 @@ def main():
 
     except Exception as e:
         print("\n" + "=" * 60)
-        print(f"✗ 未知错误：{e}")
+        print(f"[X] 未知错误：{e}")
         print("=" * 60)
         import traceback
         traceback.print_exc()

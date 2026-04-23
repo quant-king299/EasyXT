@@ -11,6 +11,14 @@ from pathlib import Path
 from typing import Optional
 
 try:
+    from dotenv import load_dotenv
+    # 加载 .env 文件
+    env_path = Path(__file__).parent.parent.parent / '.env'
+    load_dotenv(env_path)
+except ImportError:
+    pass
+
+try:
     import pywinauto
     from pywinauto.application import Application, ProcessNotFoundError
 except ImportError:
@@ -19,8 +27,6 @@ except ImportError:
         "或者在安装时使用: pip install -e .[auto_login]"
     )
 
-from core.config.config_manager import ConfigManager
-
 
 class QMTAutoLogin:
     """QMT 自动登录类"""
@@ -28,7 +34,6 @@ class QMTAutoLogin:
     def __init__(
         self,
         exe_path: Optional[str] = None,
-        user_id: Optional[str] = None,
         password: Optional[str] = None,
         data_dir: Optional[str] = None
     ):
@@ -37,27 +42,23 @@ class QMTAutoLogin:
 
         Args:
             exe_path: QMT可执行文件路径，默认从配置读取
-            user_id: QMT用户ID，默认从配置读取
             password: QMT密码，默认从配置读取
             data_dir: QMT数据目录，默认从配置读取
+
+        注意：用户ID会自动显示，无需配置
         """
         self.logger = self._setup_logger()
 
-        # 从配置或参数获取
-        config = ConfigManager.get_config()
-
-        self.exe_path = exe_path or config.get('QMT_EXE_PATH')
-        self.user_id = user_id or config.get('QMT_USER_ID')
-        self.password = password or config.get('QMT_PASSWORD')
-        self.data_dir = data_dir or config.get('QMT_DATA_DIR')
+        # 从环境变量或参数获取
+        self.exe_path = exe_path or os.getenv('QMT_EXE_PATH')
+        self.password = password or os.getenv('QMT_PASSWORD')
+        self.data_dir = data_dir or os.getenv('QMT_DATA_DIR')
 
         # 验证必要参数
-        if not all([self.exe_path, self.user_id, self.password]):
+        if not all([self.exe_path, self.password]):
             missing = []
             if not self.exe_path:
                 missing.append('QMT_EXE_PATH')
-            if not self.user_id:
-                missing.append('QMT_USER_ID')
             if not self.password:
                 missing.append('QMT_PASSWORD')
 
@@ -68,7 +69,6 @@ class QMTAutoLogin:
             )
 
         self.logger.info(f"QMT路径: {self.exe_path}")
-        self.logger.info(f"用户ID: {self.user_id}")
 
     def _setup_logger(self) -> logging.Logger:
         """设置日志"""
@@ -109,7 +109,7 @@ class QMTAutoLogin:
                 else:
                     self.logger.info("QMT已在运行中")
                     if self._check_logged_in(app):
-                        self.logger.info(f"用户 {self.user_id} 已登录")
+                        self.logger.info("用户已登录")
                         return True
                     self.logger.info("未登录，准备登录...")
 
@@ -130,6 +130,32 @@ class QMTAutoLogin:
             self.logger.error(f"登录失败: {e}")
             return False
 
+    def _get_user_id(self, app: Application) -> Optional[str]:
+        """从QMT窗口获取自动显示的用户ID"""
+        try:
+            win = app.top_window()
+            # 尝试从窗口标题或其他控件获取用户ID
+            # 有些QMT版本会在登录窗口显示用户ID
+            window_text = win.window_text()
+
+            # 尝试从窗口文本中提取数字（可能是用户ID）
+            import re
+            numbers = re.findall(r'\d{8,12}', window_text)
+            if numbers:
+                return numbers[0]
+
+            # 如果窗口标题包含用户ID
+            if any(keyword in window_text for keyword in ["资金账号", "用户名", "UserID"]):
+                # 尝试提取ID
+                for num in numbers:
+                    if 8 <= len(num) <= 12:  # QMT用户ID通常是8-12位数字
+                        return num
+
+            return None
+        except Exception as e:
+            self.logger.debug(f"获取用户ID失败: {e}")
+            return None
+
     def _is_running(self) -> Optional[Application]:
         """检查QMT是否正在运行"""
         try:
@@ -146,13 +172,9 @@ class QMTAutoLogin:
             top_window = app.top_window()
             window_text = top_window.window_text()
 
-            # 如果窗口标题包含用户ID，说明已登录
-            if self.user_id in window_text:
-                return True
-
             # 检查是否有登录窗口的特征
             # 登录窗口通常包含"登录"、"密码"等关键词
-            if any(keyword in window_text for keyword in ["登录", "密码"]):
+            if any(keyword in window_text for keyword in ["登录", "密码", "Login"]):
                 return False
 
             # 如果没有登录窗口，可能已经登录
@@ -177,37 +199,31 @@ class QMTAutoLogin:
             win = app.top_window()
             win.set_focus()
 
-            self.logger.info("正在填写用户名...")
-            # 尝试找到用户名输入框并填写
-            # 常见的定位方式：ComboBox.Edit 或 Edit1
-            try:
-                edit = win.ComboBox.Edit if win.ComboBox.Exists() else win.Edit1
-                edit.click_input()
-                edit.type_keys("^a" + self.user_id)
-                time.sleep(0.5)
-            except Exception as e:
-                self.logger.warning(f"填写用户名失败（尝试备用方案）: {e}")
-                # 备用方案：使用Tab键导航
-                import pyautogui
-                pyautogui.press('tab')
-                time.sleep(0.3)
-                import pyautogui
-                pyautogui.typewrite(self.user_id)
-                time.sleep(0.5)
+            # 获取自动显示的用户ID（用于验证）
+            user_id = self._get_user_id(app)
+            if user_id:
+                self.logger.info(f"检测到用户ID: {user_id}")
 
             self.logger.info("正在填写密码...")
-            # 填写密码
+            # 直接填写密码（用户ID已自动显示）
             try:
-                password_edit = win.Edit2 if win.Edit2.Exists() else win.Edit if len(win.children()) > 1 else None
+                # 尝试找到密码输入框
+                # 通常是Edit2或者包含"密码"关键词的Edit
+                password_edit = None
+                if hasattr(win, 'Edit2') and win.Edit2.Exists():
+                    password_edit = win.Edit2
+                elif hasattr(win, 'Edit'):
+                    password_edit = win.Edit
+
                 if password_edit:
                     password_edit.click_input()
+                    time.sleep(0.3)
                     password_edit.type_keys(self.password)
                 else:
-                    # 备用方案
+                    # 备用方案：使用Tab键导航到密码框
                     import pyautogui
                     pyautogui.press('tab')
                     time.sleep(0.3)
-                    import pyautogui
                     pyautogui.typewrite(self.password)
                 time.sleep(0.5)
             except Exception as e:
