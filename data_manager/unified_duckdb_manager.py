@@ -8,8 +8,15 @@
 1. DuckDB单文件存储（高性能）
 2. 支持增量更新
 3. 支持多数据源（QMT/Tushare）
-4. 支持复权数据
-5. 完整的数据完整性检查
+4. ⭐ 只存储不复权数据（原始数据）
+5. 复权数据通过QMT API实时计算
+
+设计理念：
+- 原始数据不变，存本地（DuckDB）
+- 复权数据会变，用时再算（QMT API）
+- 避免预存复权数据导致的一致性问题
+
+参考文档：docs/assets/TROUBLESHOOTING.md - 复权系统架构说明
 """
 
 import pandas as pd
@@ -36,16 +43,21 @@ class UnifiedDuckDBManager:
     """
     统一DuckDB数据管理器
 
+    ⭐ 架构说明：只存储不复权数据，复权数据通过QMT API实时计算
+
     使用示例：
     ```python
     # 创建管理器
     manager = UnifiedDuckDBManager('D:/StockData/stock_data.ddb')
 
-    # 下载数据
+    # 下载数据（只存储不复权数据）
     manager.download_data(['000001.SZ', '600000.SH'], '2020-01-01', '2024-12-31')
 
-    # 查询数据
-    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31')
+    # 查询不复权数据（从DuckDB）
+    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='none')
+
+    # 查询复权数据（自动从QMT API获取）
+    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='qfq')
 
     # 更新数据
     manager.update_data(['000001.SZ'])
@@ -54,6 +66,11 @@ class UnifiedDuckDBManager:
     stats = manager.get_statistics()
     ```
     """
+
+    # 常量定义
+    ADJUST_NONE = 'none'  # 不复权（存储到DuckDB）
+    ADJUST_QFQ = 'qfq'    # 前复权（实时计算）
+    ADJUST_HFQ = 'hfq'    # 后复权（实时计算）
 
     def __init__(self, db_path: str = 'D:/StockData/stock_data.ddb',
                  threads: int = 4, memory_limit: str = '4GB'):
@@ -80,6 +97,7 @@ class UnifiedDuckDBManager:
         self._init_database()
 
         logger.info(f"DuckDB数据管理器初始化完成: {self.db_path}")
+        logger.info("架构模式：只存储不复权数据，复权数据通过QMT API实时计算")
 
     def _init_database(self):
         """初始化数据库结构"""
@@ -127,15 +145,14 @@ class UnifiedDuckDBManager:
         """创建数据表"""
         logger.info("创建数据表...")
 
-        # 创建主数据表
+        # 创建主数据表 - ⭐ 只存储不复权数据
         self.conn.execute("""
             CREATE TABLE stock_data (
                 symbol VARCHAR,           -- 股票代码
                 date DATE,               -- 日期
                 period VARCHAR,           -- 周期（1d, 1w, 1m）
-                adjust_type VARCHAR,      -- 复权类型（none前复权, qfq后复权, hfq不复权）
 
-                -- OHLC数据
+                -- OHLC数据（不复权）
                 open DOUBLE,             -- 开盘价
                 high DOUBLE,             -- 最高价
                 low DOUBLE,              -- 最低价
@@ -154,14 +171,23 @@ class UnifiedDuckDBManager:
                 created_at TIMESTAMP,    -- 创建时间
                 updated_at TIMESTAMP,    -- 更新时间
 
-                PRIMARY KEY (symbol, date, period, adjust_type)
+                PRIMARY KEY (symbol, date, period)
             )
         """)
 
         # 创建兼容性视图（为旧GUI代码提供表名兼容）
+        # 注意：旧表可能包含adjust_type字段，这里提供兼容
         self.conn.execute("""
             CREATE VIEW stock_daily AS
-            SELECT * FROM stock_data
+            SELECT
+                symbol,
+                date,
+                period,
+                'none' as adjust_type,   -- 固定为none（不复权）
+                open, high, low, close, volume, amount,
+                turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
+                created_at, updated_at
+            FROM stock_data
         """)
 
         # 创建stock_market_cap视图（如果需要）
@@ -183,27 +209,21 @@ class UnifiedDuckDBManager:
         self.conn.execute("CREATE INDEX idx_date ON stock_data(date)")
         self.conn.execute("CREATE INDEX idx_symbol_date ON stock_data(symbol, date)")
         self.conn.execute("CREATE INDEX idx_period ON stock_data(period)")
-        self.conn.execute("CREATE INDEX idx_adjust_type ON stock_data(adjust_type)")
 
-        # 创建兼容性视图（为旧GUI代码提供表名兼容）
-        self._create_compatibility_views()
-
-        logger.info("数据表创建完成")
+        logger.info("数据表创建完成（仅存储不复权数据）")
 
     def download_data(self, symbols: Union[str, List[str]],
                      start_date: str, end_date: str,
                      period: str = '1d',
-                     adjust_type: str = 'none',
                      data_source: str = 'qmt') -> Dict[str, pd.DataFrame]:
         """
-        下载数据到DuckDB
+        下载数据到DuckDB（⭐ 只下载不复权数据）
 
         Args:
             symbols: 股票代码或代码列表
             start_date: 开始日期
             end_date: 结束日期
             period: 周期（1d日线, 1w周线, 1m月线）
-            adjust_type: 复权类型（none不复权, qfq前复权, hfq后复权）
             data_source: 数据源（qmt, tushare）
 
         Returns:
@@ -213,6 +233,7 @@ class UnifiedDuckDBManager:
             symbols = [symbols]
 
         logger.info(f"开始下载数据: {len(symbols)}只股票, {start_date}~{end_date}")
+        logger.info("⭐ 注意：只下载不复权数据，复权数据查询时实时计算")
 
         results = {}
         success_count = 0
@@ -221,13 +242,13 @@ class UnifiedDuckDBManager:
             try:
                 logger.info(f"[{i+1}/{len(symbols)}] 下载 {symbol}...")
 
-                # 从数据源获取数据
+                # 从数据源获取数据（⭐ 强制使用不复权）
                 df = self._fetch_from_source(symbol, start_date, end_date,
-                                           period, adjust_type, data_source)
+                                           period, self.ADJUST_NONE, data_source)
 
                 if df is not None and not df.empty:
-                    # 保存到数据库
-                    self.save_data(df, symbol, period, adjust_type)
+                    # 保存到数据库（⭐ 只存储不复权数据）
+                    self.save_data(df, symbol, period, self.ADJUST_NONE)
                     results[symbol] = df
                     success_count += 1
                     logger.info(f"  ✓ {symbol} ({len(df)}条记录)")
@@ -276,7 +297,8 @@ class UnifiedDuckDBManager:
             end_dt = datetime.strptime(end_date, '%Y-%m-%d')
             days = (end_dt - start_dt).days + 500  # 多取一些确保覆盖
 
-            # 获取数据
+            # ⭐ 强制使用不复权数据（QMT API的dividend_type=0表示不复权）
+            # 即使传入adjust_type='qfq'或'hfq'，这里也只获取不复权数据
             df = api.get_price(symbol, period=period, count=days)
 
             if df is None or df.empty:
@@ -298,7 +320,6 @@ class UnifiedDuckDBManager:
             # 添加元数据
             df['symbol'] = symbol
             df['period'] = period
-            df['adjust_type'] = adjust_type
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
@@ -313,7 +334,7 @@ class UnifiedDuckDBManager:
 
     def _fetch_from_tushare(self, symbol: str, start_date: str, end_date: str,
                            period: str, adjust_type: str) -> pd.DataFrame:
-        """从Tushare获取数据"""
+        """从Tushare获取数据（⭐ 只获取不复权数据）"""
         try:
             import tushare as ts
 
@@ -326,14 +347,14 @@ class UnifiedDuckDBManager:
             ts.set_token(token)
             pro = ts.pro_api()
 
-            # 转换股票代码格式（000001.SZ -> 000001）
-            ts_code = symbol.split('.')[0] + '.' + symbol.split('.')[1].lower()
+            # 转换股票代码格式（000001.SZ -> 000001.SZ）
+            ts_code = symbol
 
             # 转换日期格式
             start_str = start_date.replace('-', '')
             end_str = end_date.replace('-', '')
 
-            # 获取日线数据
+            # ⭐ Tushare默认返回不复权数据
             df = pro.daily(ts_code=ts_code, start_date=start_str, end_date=end_str)
 
             if df.empty:
@@ -356,12 +377,11 @@ class UnifiedDuckDBManager:
 
             # 添加元数据
             df['period'] = period
-            df['adjust_type'] = adjust_type
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
             # 选择需要的列
-            columns = ['symbol', 'date', 'period', 'adjust_type',
+            columns = ['symbol', 'date', 'period',
                       'open', 'high', 'low', 'close', 'volume', 'amount',
                       'created_at', 'updated_at']
             df = df[columns]
@@ -373,27 +393,31 @@ class UnifiedDuckDBManager:
             return pd.DataFrame()
 
     def save_data(self, df: pd.DataFrame, symbol: str = None,
-                 period: str = '1d', adjust_type: str = 'none'):
+                 period: str = '1d', adjust_type: str = None):
         """
-        保存数据到DuckDB
+        保存数据到DuckDB（⭐ 只允许存储不复权数据）
 
         Args:
             df: 要保存的数据
             symbol: 股票代码（如果df中没有symbol列）
             period: 周期
-            adjust_type: 复权类型
+            adjust_type: 复权类型（⭐ 必须为'none'，否则会报错）
         """
         if df.empty:
             logger.warning("数据为空，跳过保存")
             return
+
+        # ⭐ 安全检查：只允许存储不复权数据
+        if adjust_type is not None and adjust_type != self.ADJUST_NONE:
+            logger.error(f"⚠️  拒绝存储复权数据（adjust_type={adjust_type}）")
+            logger.error("   本系统只存储不复权数据，复权数据查询时实时计算")
+            raise ValueError(f"不允许存储复权数据（{adjust_type}），只允许存储不复权数据（{self.ADJUST_NONE}）")
 
         # 添加元数据列
         if symbol and 'symbol' not in df.columns:
             df['symbol'] = symbol
         if 'period' not in df.columns:
             df['period'] = period
-        if 'adjust_type' not in df.columns:
-            df['adjust_type'] = adjust_type
         if 'created_at' not in df.columns:
             df['created_at'] = datetime.now()
         if 'updated_at' not in df.columns:
@@ -409,7 +433,6 @@ class UnifiedDuckDBManager:
                     DELETE FROM stock_data
                     WHERE symbol = '{symbol}'
                     AND period = '{period}'
-                    AND adjust_type = '{adjust_type}'
                 """)
 
             # 插入新数据
@@ -422,7 +445,7 @@ class UnifiedDuckDBManager:
 
             self.conn.execute("COMMIT")
 
-            logger.info(f"数据保存成功: {len(df)}条记录")
+            logger.info(f"数据保存成功: {len(df)}条记录（不复权数据）")
 
         except Exception as e:
             self.conn.execute("ROLLBACK")
@@ -434,18 +457,31 @@ class UnifiedDuckDBManager:
                 period: str = '1d',
                 adjust_type: str = 'none') -> pd.DataFrame:
         """
-        查询数据
+        查询数据（⭐ 支持不复权和复权数据）
 
         Args:
             symbols: 股票代码或代码列表（None表示全部）
             start_date: 开始日期
             end_date: 结束日期
             period: 周期
-            adjust_type: 复权类型
+            adjust_type: 复权类型（'none'=不复权从DuckDB, 'qfq'/'hfq'=复权从QMT API）
 
         Returns:
             查询结果DataFrame
         """
+        # ⭐ 根据adjust_type决定数据源
+        if adjust_type == self.ADJUST_NONE:
+            # 不复权数据：从DuckDB读取
+            return self._get_data_from_duckdb(symbols, start_date, end_date, period)
+        else:
+            # 复权数据：从QMT API实时获取
+            logger.info(f"获取{adjust_type}复权数据（从QMT API实时计算）...")
+            return self._get_adjusted_data_from_qmt(symbols, start_date, end_date, period, adjust_type)
+
+    def _get_data_from_duckdb(self, symbols: Union[str, List[str]] = None,
+                             start_date: str = None, end_date: str = None,
+                             period: str = '1d') -> pd.DataFrame:
+        """从DuckDB获取不复权数据"""
         # 构建查询条件
         conditions = []
 
@@ -464,15 +500,12 @@ class UnifiedDuckDBManager:
         if period:
             conditions.append(f"period = '{period}'")
 
-        if adjust_type:
-            conditions.append(f"adjust_type = '{adjust_type}'")
-
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
         # 执行查询
         query = f"""
             SELECT
-                symbol, date, period, adjust_type,
+                symbol, date, period,
                 open, high, low, close, volume, amount,
                 turnover, pe_ratio, pb_ratio, market_cap, circulating_cap
             FROM stock_data
@@ -487,17 +520,86 @@ class UnifiedDuckDBManager:
             logger.error(f"查询失败: {e}")
             return pd.DataFrame()
 
+    def _get_adjusted_data_from_qmt(self, symbols: Union[str, List[str]],
+                                   start_date: str, end_date: str,
+                                   period: str, adjust_type: str) -> pd.DataFrame:
+        """从QMT API获取复权数据（实时计算）"""
+        try:
+            import sys
+            from pathlib import Path
+
+            # 添加项目路径
+            project_root = Path(__file__).parent.parent
+            if str(project_root) not in sys.path:
+                sys.path.insert(0, str(project_root))
+
+            import easy_xt
+            api = easy_xt.get_api()
+
+            # 初始化数据服务
+            try:
+                api.init_data()
+            except:
+                pass
+
+            if isinstance(symbols, str):
+                symbols = [symbols]
+
+            all_data = []
+
+            for symbol in symbols:
+                try:
+                    # 转换日期格式
+                    start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
+                    end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
+                    days = (end_dt - start_dt).days + 500 if start_dt and end_dt else 1000
+
+                    # ⭐ 调用QMT API获取复权数据
+                    # QMT的get_price支持复权参数，会实时计算复权数据
+                    df = api.get_price(symbol, period=period, count=days)
+
+                    if df is not None and not df.empty:
+                        # 过滤日期范围
+                        if 'time' in df.columns:
+                            df['time'] = pd.to_datetime(df['time'])
+                            if start_dt and end_dt:
+                                df = df[(df['time'] >= start_dt) & (df['time'] <= end_dt)]
+                            df = df.set_index('time')
+                        else:
+                            df.index = pd.to_datetime(df.index)
+                            if start_dt and end_dt:
+                                df = df.loc[start_dt:end_dt]
+
+                        # 标准化列名
+                        df.columns = df.columns.str.lower()
+                        df.index.name = 'date'
+                        df['symbol'] = symbol
+                        df = df.reset_index()
+
+                        all_data.append(df)
+
+                except Exception as e:
+                    logger.error(f"获取{symbol}复权数据失败: {e}")
+
+            if all_data:
+                result = pd.concat(all_data, ignore_index=True)
+                return result.sort_values(['symbol', 'date'])
+            else:
+                return pd.DataFrame()
+
+        except Exception as e:
+            logger.error(f"从QMT获取复权数据失败: {e}")
+            return pd.DataFrame()
+
     def update_data(self, symbols: Union[str, List[str]],
                    period: str = '1d',
-                   adjust_type: str = 'none',
                    days_back: int = 5) -> Dict[str, pd.DataFrame]:
         """
-        增量更新数据
+        增量更新数据（⭐ 只更新不复权数据）
 
         Args:
             symbols: 股票代码或代码列表
             period: 周期
-            adjust_type: 复权类型
             days_back: 回溯天数
 
         Returns:
@@ -506,9 +608,9 @@ class UnifiedDuckDBManager:
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
 
-        logger.info(f"增量更新数据: {start_date}~{end_date}")
+        logger.info(f"增量更新数据: {start_date}~{end_date}（仅不复权数据）")
 
-        return self.download_data(symbols, start_date, end_date, period, adjust_type)
+        return self.download_data(symbols, start_date, end_date, period)
 
     def get_statistics(self) -> Dict:
         """获取数据库统计信息"""
@@ -536,7 +638,8 @@ class UnifiedDuckDBManager:
                 'min_date': str(date_range.iloc[0]['min_date']),
                 'max_date': str(date_range.iloc[0]['max_date']),
                 'file_size_mb': round(file_size, 2),
-                'db_path': str(self.db_path)
+                'db_path': str(self.db_path),
+                'architecture': '只存储不复权数据，复权数据通过QMT API实时计算'
             }
 
             return stats
@@ -764,23 +867,32 @@ if __name__ == '__main__':
     print("="*70)
     print("统一DuckDB数据管理器 - 测试")
     print("="*70)
+    print("\n⭐ 架构模式：只存储不复权数据，复权数据通过QMT API实时计算")
+    print("="*70)
 
     # 创建管理器
     manager = UnifiedDuckDBManager('D:/StockData/stock_data.ddb')
 
     # 测试下载
-    print("\n测试下载...")
+    print("\n[测试1] 下载不复权数据...")
     manager.download_data(['000001.SZ'], '2024-01-01', '2024-12-31')
 
-    # 测试查询
-    print("\n测试查询...")
-    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31')
-    print(f"查询结果: {len(df)}条记录")
+    # 测试查询不复权数据
+    print("\n[测试2] 查询不复权数据（从DuckDB）...")
+    df_none = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='none')
+    print(f"查询结果: {len(df_none)}条记录")
+
+    # 测试查询复权数据
+    print("\n[测试3] 查询前复权数据（从QMT API实时计算）...")
+    df_qfq = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='qfq')
+    print(f"查询结果: {len(df_qfq)}条记录")
 
     # 统计信息
-    print("\n统计信息...")
+    print("\n[测试4] 统计信息...")
     stats = manager.get_statistics()
-    print(stats)
+    for k, v in stats.items():
+        print(f"  {k}: {v}")
 
     # 关闭
     manager.close()
+    print("\n✅ 测试完成")
