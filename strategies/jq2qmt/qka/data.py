@@ -2,7 +2,7 @@ import time
 from datetime import datetime
 from xtquant import xtdata
 import numpy as np
-from qka.logger import logger
+from qka.utils.logger import logger
 
 class QMTData:
     def __init__(self, stocks=None, sector=None, indicators=None):
