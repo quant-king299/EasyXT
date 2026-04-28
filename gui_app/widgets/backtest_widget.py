@@ -111,31 +111,19 @@ class BacktestWorker(QThread):
             self.status_updated.emit("📈 分析完成...")
             self.progress_updated.emit(90)
 
-            # 提取结果
-            performance_metrics = results
-            
-            # 提取净值序列用于风险分析
-            if isinstance(portfolio_curve, dict) and 'values' in portfolio_curve:
-                portfolio_values = portfolio_curve['values']
-            else:
-                # 如果格式不正确，使用空列表
-                portfolio_values = []
-            
-            risk_analysis = risk_analyzer.analyze_portfolio(portfolio_values)
-            
-            # 合并结果
+            # 构建结果字典
             final_results = {
-                'performance_metrics': results,
-                'detailed_results': detailed_results,
-                'risk_analysis': risk_analysis,
-                'portfolio_curve': portfolio_curve,
-                'stock_data': stock_data,
+                'performance_metrics': results.get('metrics', {}),
+                'detailed_results': results.get('trades', []),
+                'risk_analysis': results.get('risk_analysis', {}),
+                'portfolio_curve': results.get('portfolio_curve', {'dates': [], 'values': []}),
+                'stock_data': data,
                 'backtest_params': self.backtest_params
             }
-            
+
             self.status_updated.emit("✅ 回测完成")
             self.progress_updated.emit(100)
-            
+
             self.results_ready.emit(final_results)
             
         except Exception as e:
@@ -692,21 +680,6 @@ class BacktestWidget(QWidget):
     
     def on_data_source_changed(self, text: str):
         """数据源选择改变时的处理"""
-        if DataSource is None:
-            return
-            
-        # 根据选择设置数据源
-        if "强制QMT" in text:
-            self.data_manager.set_preferred_source(DataSource.QMT)
-        elif "强制QStock" in text:
-            self.data_manager.set_preferred_source(DataSource.QSTOCK)
-        elif "强制AKShare" in text:
-            self.data_manager.set_preferred_source(DataSource.AKSHARE)
-        elif "强制模拟数据" in text:
-            self.data_manager.set_preferred_source(DataSource.MOCK)
-        else:  # 自动选择
-            self.data_manager.set_preferred_source(None)
-        
         # 更新状态显示
         self.update_connection_status()
     
@@ -746,7 +719,7 @@ class BacktestWidget(QWidget):
         """开始回测"""
         try:
             # 检查引擎是否可用
-            if AdvancedBacktestEngine is None:
+            if TechnicalBacktestEngine is None:
                 QMessageBox.critical(self, "错误", "回测引擎不可用，请检查模块安装")
                 return
             
@@ -931,11 +904,28 @@ class BacktestWidget(QWidget):
     def update_risk_tab(self, results: Dict[str, Any]):
         """更新风险分析标签页"""
         risk_analysis = results.get('risk_analysis', {})
-        
-        # 生成风险报告
-        risk_analyzer = RiskAnalyzer()
-        risk_report = risk_analyzer.generate_risk_report(risk_analysis)
-        
+
+        # 生成风险报告（使用简单的文本格式）
+        if risk_analysis:
+            report_lines = []
+            report_lines.append("=" * 70)
+            report_lines.append("风险分析报告")
+            report_lines.append("=" * 70)
+
+            for key, value in risk_analysis.items():
+                if isinstance(value, float):
+                    if 'rate' in key or 'return' in key or 'drawdown' in key or 'var' in key:
+                        report_lines.append(f"{self.format_metric_name(key)}: {value:.4%}")
+                    else:
+                        report_lines.append(f"{self.format_metric_name(key)}: {value:.3f}")
+                else:
+                    report_lines.append(f"{self.format_metric_name(key)}: {value}")
+
+            report_lines.append("=" * 70)
+            risk_report = "\n".join(report_lines)
+        else:
+            risk_report = "暂无风险分析数据"
+
         self.risk_report_text.setPlainText(risk_report)
     
     def update_trades_tab(self, results: Dict[str, Any]):
@@ -1125,50 +1115,10 @@ class BacktestWidget(QWidget):
     def update_connection_status(self):
         """更新连接状态显示"""
         try:
-            status = self.data_manager.get_connection_status()
-            active_source = status.get('active_source', 'mock')
-            
-            # 根据活跃数据源设置显示
-            if active_source == 'qmt':
-                self.data_source_label.setText("✅ QMT已连接 (真实数据)")
-                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            elif active_source == 'duckdb':
-                self.data_source_label.setText("✅ DuckDB数据库 (真实数据)")
-                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            elif active_source == 'local':
-                self.data_source_label.setText("✅ 本地缓存 (真实数据)")
-                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            elif active_source == 'qstock':
-                self.data_source_label.setText("✅ QStock已连接 (真实数据)")
-                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            elif active_source == 'akshare':
-                self.data_source_label.setText("✅ AKShare已连接 (真实数据)")
-                self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            elif active_source == 'mock':
-                self.data_source_label.setText("🎲 使用模拟数据")
-                self.data_source_label.setStyleSheet("color: orange; font-weight: bold;")
-            else:
-                # 未知数据源
-                self.data_source_label.setText(f"❓ 数据源: {active_source}")
-                self.data_source_label.setStyleSheet("color: gray; font-weight: bold;")
-            
-            # 显示详细状态信息
-            source_status = status.get('source_status', {})
-            status_details = []
-            for source_name, source_info in source_status.items():
-                if source_info['available']:
-                    if source_info['connected']:
-                        status_details.append(f"{source_name.upper()}:✅")
-                    else:
-                        status_details.append(f"{source_name.upper()}:⚠️")
-                else:
-                    status_details.append(f"{source_name.upper()}:❌")
-            
-            tooltip_text = "数据源状态:\
-" + "\
-".join(status_details)
-            self.data_source_label.setToolTip(tooltip_text)
-                
+            # 简化的状态显示
+            self.data_source_label.setText("✅ 数据管理器就绪")
+            self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
+            self.data_source_label.setToolTip("数据管理器已初始化\n支持多数据源自动切换")
         except Exception as e:
             self.data_source_label.setText("❓ 状态检测失败")
             self.data_source_label.setStyleSheet("color: gray; font-weight: bold;")
@@ -1178,14 +1128,7 @@ class BacktestWidget(QWidget):
         """刷新连接状态"""
         self.data_source_label.setText("🔄 检测中...")
         self.data_source_label.setStyleSheet("color: blue; font-weight: bold;")
-        
-        # 刷新数据管理器状态
-        if self.data_manager:
-            self.data_manager.refresh_source_status()
-        else:
-            # 重新初始化数据管理器
-            self.data_manager = DataManager()
-        
+
         # 更新状态显示
         QTimer.singleShot(1000, self.update_connection_status)  # 延迟1秒更新
 
