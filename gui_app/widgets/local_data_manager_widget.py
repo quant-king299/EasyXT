@@ -251,13 +251,7 @@ class DataDownloadThread(QThread):
                 try:
                     self.progress_signal.emit(i + 1, total)
 
-                    # 下载数据 - 使用正确的参数调用DuckDB管理器
-                    period = '1d'  # 日线数据
-                    adjust_type = 'none'  # 不复权
-                    data_source = 'qmt'  # 使用QMT数据源
-
-                    df = manager._fetch_from_source(symbol, self.start_date, self.end_date,
-                                                   period, adjust_type, data_source)
+                    df = manager._fetch_from_source(symbol, self.start_date, self.end_date)
 
                     if df.empty:
                         failed_count += 1
