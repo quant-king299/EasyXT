@@ -119,6 +119,31 @@ class TushareDownloadThread(QThread):
         ts.set_token(token)
         return ts.pro_api()
 
+    def _get_existing_stocks(self, conn, table_name, date_col='end_date', code_col='ts_code'):
+        """查询表中每个股票的最新日期，用于增量判断"""
+        try:
+            result = conn.execute(f"""
+                SELECT {code_col}, MAX({date_col}) as max_date
+                FROM {table_name}
+                GROUP BY {code_col}
+            """).fetchall()
+            return dict(result)
+        except Exception:
+            return {}
+
+    def _filter_symbols_for_download(self, symbols, existing_map, target_end_date=None):
+        """将symbols分为需要下载和跳过两组"""
+        need_download = []
+        skipped = 0
+        for symbol in symbols:
+            if symbol in existing_map:
+                max_date = existing_map[symbol]
+                if target_end_date is None or (max_date and str(max_date) >= str(target_end_date)):
+                    skipped += 1
+                    continue
+            need_download.append(symbol)
+        return need_download, skipped
+
     def _get_db_path(self):
         """获取DuckDB数据库路径（自动检测）"""
         import os
@@ -448,14 +473,18 @@ class TushareDownloadThread(QThread):
             self.error_signal.emit(f"市值数据下载失败: {str(e)}\n{traceback.format_exc()}")
 
     def _download_financial(self):
-        """下载财务数据"""
+        """下载财务数据（增量）"""
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
             symbols = self.kwargs.get('symbols', [])
             years = self.kwargs.get('years', 5)
+            target_end_date = f"{datetime.now().year}1231"
 
-            self.log_signal.emit("开始下载财务数据...")
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载财务数据")
+            self.log_signal.emit(f"  股票总数: {len(symbols)}")
+            self.log_signal.emit("=" * 60)
 
             conn = duckdb.connect(db_path)
 
@@ -509,22 +538,30 @@ class TushareDownloadThread(QThread):
                 )
             """)
 
+            # 增量检查
+            existing_map = self._get_existing_stocks(conn, 'profit_statement')
+            need_download, skipped = self._filter_symbols_for_download(symbols, existing_map, target_end_date)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有财务数据已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
             success_count = 0
-            for i, symbol in enumerate(symbols):
+            for i, symbol in enumerate(need_download):
                 if not self._is_running:
                     self._is_stopped = True
                     break
 
                 try:
-                    # 下载利润表
                     df = pro.income(ts_code=symbol, start_date=f'{datetime.now().year - years}0101')
                     if df is not None and not df.empty:
-                        # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
                         for col in ['ann_date', 'f_ann_date', 'end_date']:
                             if col in df.columns:
                                 df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
 
-                        # 填充NaN值为None（SQL NULL）
                         df = df.replace({np.nan: None})
 
                         for _, row in df.iterrows():
@@ -555,7 +592,7 @@ class TushareDownloadThread(QThread):
                             ]])
                         success_count += 1
 
-                    self.progress_signal.emit(i + 1, len(symbols))
+                    self.progress_signal.emit(i + 1, len(need_download))
 
                 except Exception as e:
                     self.log_signal.emit(f"  {symbol} 财务数据下载失败: {e}")
@@ -564,7 +601,7 @@ class TushareDownloadThread(QThread):
                 time.sleep(0.1)
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'success_count': success_count, 'stopped': self._is_stopped})
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'skipped': skipped, 'stopped': self._is_stopped})
             self.log_signal.emit(f"✅ 财务数据下载完成！成功: {success_count}")
 
         except Exception as e:
@@ -572,7 +609,7 @@ class TushareDownloadThread(QThread):
             self.error_signal.emit(f"财务数据下载失败: {str(e)}\n{traceback.format_exc()}")
 
     def _download_dividend(self):
-        """下载分红数据"""
+        """下载分红数据（增量）"""
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
@@ -581,13 +618,12 @@ class TushareDownloadThread(QThread):
 
             self.log_signal.emit("=" * 60)
             self.log_signal.emit("开始下载分红数据")
-            self.log_signal.emit(f"  股票数: {len(symbols)}")
+            self.log_signal.emit(f"  股票总数: {len(symbols)}")
             self.log_signal.emit("=" * 60)
 
             conn = duckdb.connect(db_path)
             self.log_signal.emit("✅ 数据库连接成功")
 
-            # 创建分红表
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS dividend_data (
                     ts_code VARCHAR,
@@ -605,9 +641,20 @@ class TushareDownloadThread(QThread):
                 )
             """)
 
+            # 增量检查：分红数据是历史累积的，只要有数据就跳过
+            existing_map = self._get_existing_stocks(conn, 'dividend_data')
+            need_download, skipped = self._filter_symbols_for_download(symbols, existing_map)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有分红数据已存在，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
             success_count = 0
             failed_count = 0
-            for i, symbol in enumerate(symbols):
+            for i, symbol in enumerate(need_download):
                 if not self._is_running:
                     self._is_stopped = True
                     break
@@ -634,10 +681,10 @@ class TushareDownloadThread(QThread):
                     else:
                         failed_count += 1
 
-                    self.progress_signal.emit(i + 1, len(symbols))
+                    self.progress_signal.emit(i + 1, len(need_download))
 
-                    if (i + 1) % 50 == 0 or (i + 1) == len(symbols):
-                        self.log_signal.emit(f"[{i+1}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count}")
+                    if (i + 1) % 50 == 0 or (i + 1) == len(need_download):
+                        self.log_signal.emit(f"[{i+1}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count}")
 
                 except Exception as e:
                     failed_count += 1
@@ -912,22 +959,53 @@ class TushareDownloadThread(QThread):
             self.log_signal.emit(f"股票数量: {len(symbols)}")
             self.log_signal.emit(f"日期范围: {start_date} ~ {end_date}")
 
-            # 获取交易日历
-            trade_cal = pro.trade_cal(exchange='SSE', start_date=start_date, end_date=end_date, is_open=1)
-            trade_dates = sorted(trade_cal['cal_date'].tolist())
-            self.log_signal.emit(f"交易日数: {len(trade_dates)}")
+            # 增量检查：查询每只股票的最新日期
+            existing_map = self._get_existing_stocks(conn, 'stock_daily', date_col='date', code_col='stock_code')
+            self.log_signal.emit(f"🔍 数据库中已有 {len(existing_map)} 只股票的日线数据")
+
+            # 分类：完全跳过 vs 需要增量下载 vs 全新下载
+            skip_list = []
+            incremental_list = []
+            new_list = []
+            for ts_code in symbols:
+                if ts_code in existing_map:
+                    max_date = existing_map[ts_code]
+                    if max_date and str(max_date)[:10] >= end_date[:4] + '-' + end_date[4:6] + '-' + end_date[6:]:
+                        skip_list.append(ts_code)
+                    else:
+                        incremental_list.append(ts_code)
+                else:
+                    new_list.append(ts_code)
+
+            self.log_signal.emit(f"  跳过(已完整): {len(skip_list)} | 增量更新: {len(incremental_list)} | 新下载: {len(new_list)}")
+
+            if not incremental_list and not new_list:
+                self.log_signal.emit("✅ 所有日线数据已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({
+                    'success': True, 'total': len(symbols), 'success_count': 0,
+                    'failed_count': 0, 'total_inserted': 0, 'skipped': len(skip_list), 'stopped': False
+                })
+                return
 
             total_inserted = 0
             success_count = 0
             failed_count = 0
+            need_download = incremental_list + new_list
 
-            for i, ts_code in enumerate(symbols, 1):
+            for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
                     self._is_stopped = True
                     break
 
                 try:
-                    df = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date,
+                    # 增量下载：从已有最新日期+1开始
+                    if ts_code in existing_map and ts_code not in new_list:
+                        stock_start = (existing_map[ts_code] + timedelta(days=1)).strftime('%Y%m%d')
+                    else:
+                        stock_start = start_date
+
+                    df = pro.daily(ts_code=ts_code, start_date=stock_start, end_date=end_date,
                                    fields='ts_code,trade_date,open,high,low,close,vol,amount')
 
                     if df is not None and not df.empty:
@@ -945,8 +1023,6 @@ class TushareDownloadThread(QThread):
                                 'adjust_type', 'factor', 'created_at', 'updated_at']
                         df = df[cols]
 
-                        # 删除可能已存在的数据，重新插入
-                        conn.execute(f"DELETE FROM stock_daily WHERE stock_code = '{ts_code}' AND period = '1d' AND adjust_type = 'none'")
                         df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')
 
                         total_inserted += len(df)
@@ -960,19 +1036,20 @@ class TushareDownloadThread(QThread):
                         self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:40]}")
 
                 # 进度
-                if i % 50 == 0 or i == len(symbols):
-                    self.progress_signal.emit(i, len(symbols))
-                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+                if i % 50 == 0 or i == len(need_download):
+                    self.progress_signal.emit(i, len(need_download))
+                    self.log_signal.emit(f"[{i}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
             conn.close()
 
-            self.log_signal.emit(f"\n日线数据下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.log_signal.emit(f"\n日线数据下载完成！跳过: {len(skip_list)}, 下载成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
             self.finished_signal.emit({
                 'success': True,
                 'total': len(symbols),
                 'success_count': success_count,
                 'failed_count': failed_count,
                 'total_inserted': total_inserted,
+                'skipped': len(skip_list),
                 'stopped': self._is_stopped
             })
 
@@ -1223,11 +1300,22 @@ class TushareDownloadThread(QThread):
 
             fields = 'ts_code,ann_date,end_date,roe,roa,grossprofit_margin,netprofit_margin,or_yoy,netprofit_yoy,debt_to_assets,current_ratio,quick_ratio,eps,bps,undist_profit_ps,equity_yoy,rd_exp'
 
+            # 增量检查
+            existing_map = self._get_existing_stocks(conn, 'financial_indicator')
+            need_download, skipped = self._filter_symbols_for_download(symbols, existing_map, end_date)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有财务指标数据已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'total_inserted': 0, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
             total_inserted = 0
             success_count = 0
             failed_count = 0
 
-            for i, ts_code in enumerate(symbols, 1):
+            for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
                     self._is_stopped = True
                     break
@@ -1274,18 +1362,19 @@ class TushareDownloadThread(QThread):
                                 self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
                             break
 
-                if i % 50 == 0 or i == len(symbols):
-                    self.progress_signal.emit(i, len(symbols))
-                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+                if i % 50 == 0 or i == len(need_download):
+                    self.progress_signal.emit(i, len(need_download))
+                    self.log_signal.emit(f"[{i}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
                 time.sleep(0.35)
 
             conn.close()
-            self.log_signal.emit(f"\n✅ 财务指标下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.log_signal.emit(f"\n✅ 财务指标下载完成！跳过: {skipped}, 下载成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
             self.finished_signal.emit({
                 'success': True,
                 'total_inserted': total_inserted,
                 'success_count': success_count,
+                'skipped': skipped,
                 'stopped': self._is_stopped
             })
 
@@ -1340,11 +1429,22 @@ class TushareDownloadThread(QThread):
 
             fields = 'ts_code,ann_date,end_date,total_assets,total_liab,total_hld_eqy_exc_min,total_equity,total_cur_assets,total_cur_liab,money_cap,accounts_rece,inventory,total_nca,total_ncl'
 
+            # 增量检查
+            existing_map = self._get_existing_stocks(conn, 'balance_sheet_tushare')
+            need_download, skipped = self._filter_symbols_for_download(symbols, existing_map, end_date)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有资产负债表数据已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'total_inserted': 0, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
             total_inserted = 0
             success_count = 0
             failed_count = 0
 
-            for i, ts_code in enumerate(symbols, 1):
+            for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
                     self._is_stopped = True
                     break
@@ -1389,18 +1489,20 @@ class TushareDownloadThread(QThread):
                                 self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
                             break
 
-                if i % 50 == 0 or i == len(symbols):
-                    self.progress_signal.emit(i, len(symbols))
-                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+                if i % 50 == 0 or i == len(need_download):
+                    self.progress_signal.emit(i, len(need_download))
+                    self.log_signal.emit(f"[{i}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
                 time.sleep(0.35)
 
             conn.close()
-            self.log_signal.emit(f"\n✅ 资产负债表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.log_signal.emit(f"\n✅ 资产负债表下载完成！跳过: {skipped}, 下载成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
             self.finished_signal.emit({
                 'success': True,
                 'total_inserted': total_inserted,
-                'success_count': success_count
+                'success_count': success_count,
+                'skipped': skipped,
+                'stopped': self._is_stopped
             })
 
         except Exception as e:
@@ -1451,11 +1553,22 @@ class TushareDownloadThread(QThread):
 
             fields = 'ts_code,ann_date,end_date,c_pay_goods,c_pay_for_sv,c_paid_to_for_empl,n_cashflow_act,n_cashflow_inv_act,n_cashflow_fnc_act,c_fr_sale_sg,n_incr_cash_cash_equ'
 
+            # 增量检查
+            existing_map = self._get_existing_stocks(conn, 'cash_flow_statement_tushare')
+            need_download, skipped = self._filter_symbols_for_download(symbols, existing_map, end_date)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有现金流量表数据已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'total_inserted': 0, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
             total_inserted = 0
             success_count = 0
             failed_count = 0
 
-            for i, ts_code in enumerate(symbols, 1):
+            for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
                     self._is_stopped = True
                     break
@@ -1500,18 +1613,20 @@ class TushareDownloadThread(QThread):
                                 self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:50]}")
                             break
 
-                if i % 50 == 0 or i == len(symbols):
-                    self.progress_signal.emit(i, len(symbols))
-                    self.log_signal.emit(f"[{i}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+                if i % 50 == 0 or i == len(need_download):
+                    self.progress_signal.emit(i, len(need_download))
+                    self.log_signal.emit(f"[{i}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
 
                 time.sleep(0.35)
 
             conn.close()
-            self.log_signal.emit(f"\n✅ 现金流量表下载完成！成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.log_signal.emit(f"\n✅ 现金流量表下载完成！跳过: {skipped}, 下载成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
             self.finished_signal.emit({
                 'success': True,
                 'total_inserted': total_inserted,
-                'success_count': success_count
+                'success_count': success_count,
+                'skipped': skipped,
+                'stopped': self._is_stopped
             })
 
         except Exception as e:
