@@ -111,13 +111,12 @@ class BacktestWorker(QThread):
             self.status_updated.emit("📈 分析完成...")
             self.progress_updated.emit(90)
 
-            # 构建结果字典
+            # results 已包含 metrics, trades, portfolio_curve, risk_analysis
             final_results = {
                 'performance_metrics': results.get('metrics', {}),
                 'detailed_results': results.get('trades', []),
                 'risk_analysis': results.get('risk_analysis', {}),
                 'portfolio_curve': results.get('portfolio_curve', {'dates': [], 'values': []}),
-                'stock_data': data,
                 'backtest_params': self.backtest_params
             }
 
@@ -231,6 +230,7 @@ class BacktestWidget(QWidget):
         self.backtest_worker = None
         self.current_results = None
         self.data_manager = DataManager()  # 初始化数据管理器
+        self._preferred_source = None  # 数据源偏好
 
         self.init_ui()
         self.setup_connections()
@@ -680,6 +680,21 @@ class BacktestWidget(QWidget):
     
     def on_data_source_changed(self, text: str):
         """数据源选择改变时的处理"""
+        if self.data_manager is None:
+            return
+
+        # 根据UI选择映射到数据源字符串标识
+        if "强制QMT" in text:
+            self._preferred_source = 'qmt'
+        elif "强制QStock" in text:
+            self._preferred_source = 'qstock'
+        elif "强制AKShare" in text:
+            self._preferred_source = 'akshare'
+        elif "强制模拟数据" in text:
+            self._preferred_source = 'mock'
+        else:
+            self._preferred_source = None
+
         # 更新状态显示
         self.update_connection_status()
     
@@ -861,7 +876,7 @@ class BacktestWidget(QWidget):
         
         # 更新指标卡片 - 使用更高精度显示
         self.total_return_card.value_label.setText(f"{metrics.get('total_return', 0):.4%}")
-        self.annual_return_card.value_label.setText(f"{metrics.get('annualized_return', 0):.4%}")
+        self.annual_return_card.value_label.setText(f"{metrics.get('annual_return', 0):.4%}")
         self.sharpe_card.value_label.setText(f"{metrics.get('sharpe_ratio', 0):.3f}")
         self.drawdown_card.value_label.setText(f"{metrics.get('max_drawdown', 0):.4%}")
         
@@ -904,9 +919,37 @@ class BacktestWidget(QWidget):
     def update_risk_tab(self, results: Dict[str, Any]):
         """更新风险分析标签页"""
         risk_analysis = results.get('risk_analysis', {})
+        metrics = results.get('performance_metrics', {})
 
-        # 生成风险报告（使用简单的文本格式）
-        if risk_analysis:
+        # 使用 PerformanceAnalyzer 生成专业报告
+        if PerformanceAnalyzer is not None and risk_analysis:
+            try:
+                analyzer = PerformanceAnalyzer()
+                report_lines = []
+                report_lines.append("=" * 70)
+                report_lines.append("风险分析报告")
+                report_lines.append("=" * 70)
+
+                report_lines.append("\n【收益指标】")
+                report_lines.append(f"总收益率:     {risk_analysis.get('total_return', 0):>10.2%}")
+                report_lines.append(f"年化收益率:   {risk_analysis.get('annual_return', 0):>10.2%}")
+                report_lines.append(f"初始资金:     {risk_analysis.get('initial_cash', 100000):>10,.2f} 元")
+                report_lines.append(f"最终资金:     {risk_analysis.get('final_value', 100000):>10,.2f} 元")
+
+                report_lines.append("\n【风险指标】")
+                report_lines.append(f"最大回撤:     {risk_analysis.get('max_drawdown', 0):>10.2%}")
+                report_lines.append(f"波动率:       {risk_analysis.get('volatility', 0):>10.2%}")
+
+                report_lines.append("\n【风险调整收益】")
+                report_lines.append(f"夏普比率:     {risk_analysis.get('sharpe_ratio', 0):>10.2f}")
+                report_lines.append(f"卡尔玛比率:   {risk_analysis.get('calmar_ratio', 0):>10.2f}")
+
+                report_lines.append("\n" + "=" * 70)
+                risk_report = "\n".join(report_lines)
+            except Exception as e:
+                risk_report = f"生成风险报告时出错: {e}"
+        elif risk_analysis:
+            # PerformanceAnalyzer 不可用时使用简单格式
             report_lines = []
             report_lines.append("=" * 70)
             report_lines.append("风险分析报告")
@@ -963,6 +1006,7 @@ class BacktestWidget(QWidget):
         name_mapping = {
             'total_return': '总收益率',
             'annualized_return': '年化收益率',
+            'annual_return': '年化收益率',
             'volatility': '年化波动率',
             'sharpe_ratio': '夏普比率',
             'max_drawdown': '最大回撤',
@@ -1079,7 +1123,7 @@ class BacktestWidget(QWidget):
         <table>
             <tr><th>指标名称</th><th>数值</th></tr>
             <tr><td>总收益率</td><td>{metrics.get('total_return', 0):.4%}</td></tr>
-            <tr><td>年化收益率</td><td>{metrics.get('annualized_return', 0):.4%}</td></tr>
+            <tr><td>年化收益率</td><td>{metrics.get('annual_return', 0):.4%}</td></tr>
             <tr><td>年化波动率</td><td>{metrics.get('volatility', 0):.4%}</td></tr>
             <tr><td>夏普比率</td><td>{metrics.get('sharpe_ratio', 0):.3f}</td></tr>
             <tr><td>最大回撤</td><td>{metrics.get('max_drawdown', 0):.4%}</td></tr>
@@ -1115,10 +1159,41 @@ class BacktestWidget(QWidget):
     def update_connection_status(self):
         """更新连接状态显示"""
         try:
-            # 简化的状态显示
-            self.data_source_label.setText("✅ 数据管理器就绪")
-            self.data_source_label.setStyleSheet("color: green; font-weight: bold;")
-            self.data_source_label.setToolTip("数据管理器已初始化\n支持多数据源自动切换")
+            status = self.data_manager.get_connection_status()
+            active_source = status.get('active_source', 'mock')
+
+            # 根据活跃数据源设置显示
+            source_labels = {
+                'qmt': ("✅ QMT已连接 (真实数据)", "color: green; font-weight: bold;"),
+                'duckdb': ("✅ DuckDB数据库 (真实数据)", "color: green; font-weight: bold;"),
+                'local': ("✅ 本地缓存 (真实数据)", "color: green; font-weight: bold;"),
+                'qstock': ("✅ QStock已连接 (真实数据)", "color: green; font-weight: bold;"),
+                'akshare': ("✅ AKShare已连接 (真实数据)", "color: green; font-weight: bold;"),
+                'mock': ("🎲 使用模拟数据", "color: orange; font-weight: bold;"),
+            }
+
+            label_text, style = source_labels.get(
+                active_source,
+                (f"❓ 数据源: {active_source}", "color: gray; font-weight: bold;")
+            )
+            self.data_source_label.setText(label_text)
+            self.data_source_label.setStyleSheet(style)
+
+            # 显示详细状态信息
+            source_status = status.get('source_status', {})
+            status_details = []
+            for source_name, source_info in source_status.items():
+                if source_info['available']:
+                    if source_info['connected']:
+                        status_details.append(f"{source_name.upper()}:✅")
+                    else:
+                        status_details.append(f"{source_name.upper()}:⚠️")
+                else:
+                    status_details.append(f"{source_name.upper()}:❌")
+
+            tooltip_text = "数据源状态:\n" + "\n".join(status_details)
+            self.data_source_label.setToolTip(tooltip_text)
+
         except Exception as e:
             self.data_source_label.setText("❓ 状态检测失败")
             self.data_source_label.setStyleSheet("color: gray; font-weight: bold;")
@@ -1129,8 +1204,12 @@ class BacktestWidget(QWidget):
         self.data_source_label.setText("🔄 检测中...")
         self.data_source_label.setStyleSheet("color: blue; font-weight: bold;")
 
+        # 刷新数据管理器状态
+        if self.data_manager:
+            self.data_manager.refresh_source_status()
+
         # 更新状态显示
-        QTimer.singleShot(1000, self.update_connection_status)  # 延迟1秒更新
+        QTimer.singleShot(1000, self.update_connection_status)
 
 
 if __name__ == "__main__":

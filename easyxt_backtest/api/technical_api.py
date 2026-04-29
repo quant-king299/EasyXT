@@ -86,15 +86,13 @@ class TechnicalBacktestEngine:
         运行回测
 
         Returns:
-            回测结果字典
+            回测结果字典（含 metrics, trades, portfolio_curve, risk_analysis）
         """
         # 运行回测
         self.core.run()
 
-        # 获取性能指标
-        metrics = self.core.get_performance_metrics()
-
-        return metrics
+        # 获取完整结果
+        return self.core.get_full_results()
 
     def quick_backtest(self,
                       stock_code: str,

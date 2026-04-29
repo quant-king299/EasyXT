@@ -61,6 +61,7 @@ class BacktestCore:
         self.cerebro.addanalyzer(btanalyzers.DrawDown, _name='drawdown')
         self.cerebro.addanalyzer(btanalyzers.Returns, _name='returns')
         self.cerebro.addanalyzer(btanalyzers.TradeAnalyzer, _name='trades')
+        self.cerebro.addanalyzer(btanalyzers.TimeReturn, _name='timereturn')
 
     def add_data(self, data, name: Optional[str] = None):
         """
@@ -150,6 +151,81 @@ class BacktestCore:
             'annual_return': 0,
             'initial_cash': self.initial_cash,
             'final_value': self.initial_cash,
+        }
+
+    def get_full_results(self) -> Dict[str, Any]:
+        """
+        获取完整的回测结果（含交易记录和净值曲线）
+
+        Returns:
+            包含 metrics, trades, portfolio_curve, risk_analysis 的字典
+        """
+        metrics = self.get_performance_metrics()
+
+        trades = []
+        portfolio_curve = {'dates': [], 'values': []}
+        risk_analysis = {}
+
+        if not self.results or len(self.results) == 0:
+            return {
+                'metrics': metrics,
+                'trades': trades,
+                'portfolio_curve': portfolio_curve,
+                'risk_analysis': risk_analysis,
+            }
+
+        strat = self.results[0]
+
+        # 提取交易记录
+        try:
+            trade_analysis = strat.analyzers.trades.get_analysis()
+            total = trade_analysis.get('total', {})
+            won = trade_analysis.get('won', {})
+            lost = trade_analysis.get('lost', {})
+            trades = [
+                ('总交易次数', total.get('total', 0), ''),
+                ('盈利次数', won.get('total', 0), ''),
+                ('亏损次数', lost.get('total', 0), ''),
+                ('胜率', f"{won.get('total', 0) / max(total.get('total', 1), 1) * 100:.1f}%", ''),
+            ]
+        except Exception as e:
+            print(f"[WARNING] 提取交易记录时出错: {e}")
+
+        # 构建净值曲线
+        try:
+            timereturn_analysis = strat.analyzers.timereturn.get_analysis()
+            if timereturn_analysis:
+                cumulative_value = self.initial_cash
+                dates = []
+                values = []
+                for date_key, ret in timereturn_analysis.items():
+                    cumulative_value *= (1 + ret)
+                    dates.append(str(date_key))
+                    values.append(round(cumulative_value, 2))
+                portfolio_curve = {'dates': dates, 'values': values}
+        except Exception as e:
+            print(f"[WARNING] 构建净值曲线时出错: {e}")
+
+        # 计算风险指标
+        try:
+            risk_analysis = {
+                'sharpe_ratio': metrics.get('sharpe_ratio', 0),
+                'max_drawdown': metrics.get('max_drawdown', 0),
+                'total_return': metrics.get('total_return', 0),
+                'annual_return': metrics.get('annual_return', 0),
+                'volatility': metrics.get('volatility', 0),
+                'calmar_ratio': metrics.get('calmar_ratio', 0),
+                'initial_cash': metrics.get('initial_cash', self.initial_cash),
+                'final_value': metrics.get('final_value', self.initial_cash),
+            }
+        except Exception as e:
+            print(f"[WARNING] 计算风险指标时出错: {e}")
+
+        return {
+            'metrics': metrics,
+            'trades': trades,
+            'portfolio_curve': portfolio_curve,
+            'risk_analysis': risk_analysis,
         }
 
 
