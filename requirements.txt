@@ -11,10 +11,12 @@ pyautogui>=0.9.54
 python-dotenv>=1.0.0
 
 # 数据存储（可选依赖，提升性能）
-# pyarrow>=10.0.0  # 可选：安装后可启用高性能Parquet存储
+duckdb>=0.9.0  # 本地数据库，用于存储历史行情数据
+pyarrow>=10.0.0  # 可选：安装后可启用高性能Parquet存储
 # fastparquet>=0.8.0  # 可选：Parquet备用引擎
 
 # 数据源（可选）
+tushare>=1.2.60  # Tushare数据源（用于市值、财务数据）
 qstock>=1.0.0
 akshare>=1.9.0
 
@@ -30,6 +32,9 @@ pillow>=8.0.0
 # 回测（可选）
 backtrader>=1.9.78
 PyYAML>=6.0
+
+# 101因子分析平台（可选）
+streamlit>=1.30.0
 
 # 开发依赖（可选）
 pytest>=6.0.0

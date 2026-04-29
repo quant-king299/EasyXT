@@ -61,7 +61,6 @@ except ImportError:
     print("警告: easy_xt未安装，部分功能将不可用")
 
 # 导入各个功能组件
-from gui_app.widgets.backtest_widget import BacktestWidget
 from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
 from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
@@ -112,13 +111,6 @@ class MainWindow(QMainWindow):
         
     def create_tabs(self):
         """创建各个功能标签页"""
-        # 回测分析标签页
-        backtest_tab = QWidget()
-        backtest_layout = QVBoxLayout(backtest_tab)
-        self.backtest_widget = BacktestWidget()
-        backtest_layout.addWidget(self.backtest_widget)
-        self.tab_widget.addTab(backtest_tab, "回测分析")
-
         # 聚宽到Ptrade转换标签页
         jq_to_ptrade_tab = QWidget()
         jq_to_ptrade_layout = QVBoxLayout(jq_to_ptrade_tab)

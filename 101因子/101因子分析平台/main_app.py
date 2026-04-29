@@ -285,6 +285,7 @@ def main():
                 "📝 配置编辑器",
                 "📁 配置管理",
                 "🎯 策略回测",
+                "🔧 技术指标回测",
                 "📊 结果分析",
                 "💻 实盘代码生成",
                 "🔄 网格回测"
@@ -816,6 +817,15 @@ def main():
             grid_backtest_page()
         except Exception as e:
             st.error(f"加载网格回测失败: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
+    elif page == "🔧 技术指标回测":
+        try:
+            from src.workflow.technical_backtest_page import page as tech_page
+            tech_page()
+        except Exception as e:
+            st.error(f"加载技术指标回测失败: {e}")
             import traceback
             st.code(traceback.format_exc())
 
