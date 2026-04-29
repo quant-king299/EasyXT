@@ -255,6 +255,12 @@ class DataManager:
         """
         # 优先使用项目的LocalDataManager（更可靠）
         try:
+            import sys
+            from pathlib import Path as _Path
+            # 直接指向101因子平台的数据管理模块，不经过项目根桥接
+            _factor_src = _Path(__file__).resolve().parents[2] / "101因子" / "101因子分析平台" / "src"
+            if str(_factor_src) not in sys.path:
+                sys.path.insert(0, str(_factor_src))
             from data_manager import LocalDataManager
             dm = LocalDataManager()
 
