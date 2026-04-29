@@ -55,6 +55,23 @@ class TushareDownloadThread(QThread):
         self.task_type = task_type
         self.kwargs = kwargs
         self._is_running = True
+        self._is_stopped = False
+
+    def stop(self):
+        """停止下载"""
+        self._is_running = False
+        self._is_stopped = True
+        self.log_signal.emit("\n⚠️ 正在停止下载...")
+
+    def is_running(self):
+        """检查是否正在运行"""
+        return self._is_running
+
+    def _check_stop(self):
+        """检查是否需要停止（在循环中调用）"""
+        if not self._is_running:
+            self.log_signal.emit("❌ 下载已被用户停止")
+            raise StopIteration("下载已停止")
 
     def run(self):
         """运行下载任务"""
@@ -280,7 +297,8 @@ class TushareDownloadThread(QThread):
                     'success': True,
                     'total_records': 0,
                     'total_stocks': 0,
-                    'skipped': True
+                    'skipped': True,
+                    'stopped': False
                 })
                 return
 
@@ -295,6 +313,7 @@ class TushareDownloadThread(QThread):
             for date_idx, trade_date in enumerate(trade_dates, 1):
                 if not self._is_running:
                     self.log_signal.emit("\n⚠️  下载已取消")
+                    self._is_stopped = True
                     break
 
                 try:
@@ -410,7 +429,8 @@ class TushareDownloadThread(QThread):
             self.finished_signal.emit({
                 'success': True,
                 'total_records': total_inserted,
-                'total_stocks': len(all_stocks)
+                'total_stocks': len(all_stocks),
+                'stopped': self._is_stopped
             })
 
         except Exception as e:
@@ -439,9 +459,9 @@ class TushareDownloadThread(QThread):
 
             conn = duckdb.connect(db_path)
 
-            # 创建财务数据表
+            # 创建财务数据表（利润表）
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS financial_income (
+                CREATE TABLE IF NOT EXISTS profit_statement (
                     ts_code VARCHAR,
                     ann_date DATE,
                     f_ann_date DATE,
@@ -483,6 +503,8 @@ class TushareDownloadThread(QThread):
                     net_profit_atsopc_org_cut DECIMAL(18,2),
                     net_profit_attr_p_cut DECIMAL(18,2),
                     net_profit_attr_p_org_cut DECIMAL(18,2),
+                    data_source VARCHAR(20) DEFAULT 'Tushare',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ts_code, end_date, report_type)
                 )
             """)
@@ -490,26 +512,47 @@ class TushareDownloadThread(QThread):
             success_count = 0
             for i, symbol in enumerate(symbols):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
                     # 下载利润表
                     df = pro.income(ts_code=symbol, start_date=f'{datetime.now().year - years}0101')
                     if df is not None and not df.empty:
+                        # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
+                        for col in ['ann_date', 'f_ann_date', 'end_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+
+                        # 填充NaN值为None（SQL NULL）
+                        df = df.replace({np.nan: None})
+
                         for _, row in df.iterrows():
                             conn.execute("""
-                                INSERT OR REPLACE INTO financial_income
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, [row.get(k) for k in ['ts_code', 'ann_date', 'f_ann_date', 'end_date', 'report_type',
-                                 'comp_type', 'basic_eps', 'diluted_eps', 'total_revenue', 'revenue', 'int_income',
-                                 'prem_earned', 'comm_expense', 'oper_expense', 'admin_expense', 'fin_expense',
-                                 'assets_impair_loss', 'prem_refund', 'surrend_refund', 'reins_cost', 'oper_tax',
-                                 'commission_expense', 'lir_commission_expense', 'business_tax_surcharges',
-                                 'operate_profit', 'nonoper_income', 'nonoper_expense', 'nca_disploss',
-                                 'total_profit', 'income_tax', 'net_profit', 'net_profit_atsopc',
-                                 'minority_gain', 'oth_compr_income', 't_compr_income', 'compr_inc',
-                                 'compr_inc_attr_p', 'net_profit_atsopc_cut', 'net_profit_atsopc_org_cut',
-                                 'net_profit_attr_p_cut', 'net_profit_attr_p_org_cut']])
+                                INSERT OR REPLACE INTO profit_statement
+                                (ts_code, ann_date, f_ann_date, end_date, report_type, comp_type,
+                                 basic_eps, diluted_eps, total_revenue, revenue, int_income,
+                                 prem_earned, comm_expense, oper_expense, admin_expense, fin_expense,
+                                 assets_impair_loss, prem_refund, surrend_refund, reins_cost, oper_tax,
+                                 commission_expense, lir_commission_expense, business_tax_surcharges,
+                                 operate_profit, nonoper_income, nonoper_expense, nca_disploss,
+                                 total_profit, income_tax, net_profit, net_profit_atsopc,
+                                 minority_gain, oth_compr_income, t_compr_income, compr_inc,
+                                 compr_inc_attr_p, net_profit_atsopc_cut, net_profit_atsopc_org_cut,
+                                 net_profit_attr_p_cut, net_profit_attr_p_org_cut, data_source, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Tushare', CURRENT_TIMESTAMP)
+                            """, [row.get(k, None) for k in [
+                                'ts_code', 'ann_date', 'f_ann_date', 'end_date', 'report_type', 'comp_type',
+                                'basic_eps', 'diluted_eps', 'total_revenue', 'revenue', 'int_income',
+                                'prem_earned', 'comm_expense', 'oper_expense', 'admin_expense', 'fin_expense',
+                                'assets_impair_loss', 'prem_refund', 'surrend_refund', 'reins_cost', 'oper_tax',
+                                'commission_expense', 'lir_commission_expense', 'business_tax_surcharges',
+                                'operate_profit', 'nonoper_income', 'nonoper_expense', 'nca_disploss',
+                                'total_profit', 'income_tax', 'net_profit', 'net_profit_atsopc',
+                                'minority_gain', 'oth_compr_income', 't_compr_income', 'compr_inc',
+                                'compr_inc_attr_p', 'net_profit_atsopc_cut', 'net_profit_atsopc_org_cut',
+                                'net_profit_attr_p_cut', 'net_profit_attr_p_org_cut'
+                            ]])
                         success_count += 1
 
                     self.progress_signal.emit(i + 1, len(symbols))
@@ -521,7 +564,7 @@ class TushareDownloadThread(QThread):
                 time.sleep(0.1)
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'success_count': success_count})
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'stopped': self._is_stopped})
             self.log_signal.emit(f"✅ 财务数据下载完成！成功: {success_count}")
 
         except Exception as e:
@@ -536,9 +579,13 @@ class TushareDownloadThread(QThread):
             symbols = self.kwargs.get('symbols', [])
             years = self.kwargs.get('years', 5)
 
-            self.log_signal.emit("开始下载分红数据...")
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载分红数据")
+            self.log_signal.emit(f"  股票数: {len(symbols)}")
+            self.log_signal.emit("=" * 60)
 
             conn = duckdb.connect(db_path)
+            self.log_signal.emit("✅ 数据库连接成功")
 
             # 创建分红表
             conn.execute("""
@@ -559,35 +606,50 @@ class TushareDownloadThread(QThread):
             """)
 
             success_count = 0
+            failed_count = 0
             for i, symbol in enumerate(symbols):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
                     df = pro.dividend(ts_code=symbol)
                     if df is not None and not df.empty:
+                        for col in ['end_date', 'record_date', 'ex_date', 'pay_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+
+                        df = df.replace({np.nan: None})
+
                         for _, row in df.iterrows():
                             conn.execute("""
                                 INSERT OR REPLACE INTO dividend_data
                                 (ts_code, end_date, div_proc, stk_div, stk_bo_rate, stk_co_rate,
                                  cash_div, cash_div_tax, record_date, ex_date, pay_date)
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, [row.get(k) for k in ['ts_code', 'end_date', 'div_proc', 'stk_div',
+                            """, [row.get(k, None) for k in ['ts_code', 'end_date', 'div_proc', 'stk_div',
                                  'stk_bo_rate', 'stk_co_rate', 'cash_div', 'cash_div_tax',
                                  'record_date', 'ex_date', 'pay_date']])
                         success_count += 1
+                    else:
+                        failed_count += 1
 
                     self.progress_signal.emit(i + 1, len(symbols))
 
+                    if (i + 1) % 50 == 0 or (i + 1) == len(symbols):
+                        self.log_signal.emit(f"[{i+1}/{len(symbols)}] 成功: {success_count} | 失败: {failed_count}")
+
                 except Exception as e:
-                    self.log_signal.emit(f"  {symbol} 分红数据下载失败: {e}")
+                    failed_count += 1
+                    if failed_count <= 5:
+                        self.log_signal.emit(f"  {symbol} 分红数据下载失败: {e}")
                     continue
 
                 time.sleep(0.1)
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'success_count': success_count})
-            self.log_signal.emit(f"✅ 分红数据下载完成！成功: {success_count}")
+            self.log_signal.emit(f"\n✅ 分红数据下载完成！成功: {success_count}, 失败: {failed_count}")
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'stopped': self._is_stopped})
 
         except Exception as e:
             import traceback
@@ -634,16 +696,24 @@ class TushareDownloadThread(QThread):
             success_count = 0
             for i, symbol in enumerate(symbols):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
                     df = pro.moneyflow(ts_code=symbol, start_date=start_date, end_date=end_date)
                     if df is not None and not df.empty:
+                        # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
+                        if 'trade_date' in df.columns:
+                            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+
+                        # 填充NaN值为None（SQL NULL）
+                        df = df.replace({np.nan: None})
+
                         for _, row in df.iterrows():
                             conn.execute("""
                                 INSERT OR REPLACE INTO moneyflow_data
                                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, [row.get(k) for k in ['ts_code', 'trade_date', 'buy_elg_vol', 'buy_elg_amt',
+                            """, [row.get(k, None) for k in ['ts_code', 'trade_date', 'buy_elg_vol', 'buy_elg_amt',
                                  'sell_elg_vol', 'sell_elg_amt', 'buy_lg_vol', 'buy_lg_amt',
                                  'sell_lg_vol', 'sell_lg_amt', 'buy_mdn_vol', 'buy_mdn_amt',
                                  'sell_mdn_vol', 'sell_mdn_amt', 'buy_sm_vol', 'buy_sm_amt',
@@ -659,7 +729,7 @@ class TushareDownloadThread(QThread):
                 time.sleep(0.1)
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'success_count': success_count})
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'stopped': self._is_stopped})
             self.log_signal.emit(f"✅ 资金流向数据下载完成！成功: {success_count}")
 
         except Exception as e:
@@ -694,17 +764,26 @@ class TushareDownloadThread(QThread):
             success_count = 0
             for i, symbol in enumerate(symbols):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
                     df = pro.top10_holders(ts_code=symbol, top10holdrtype='ALL')
                     if df is not None and not df.empty:
+                        # 转换日期格式：YYYYMMDD -> YYYY-MM-DD
+                        for col in ['ann_date', 'end_date']:
+                            if col in df.columns:
+                                df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+
+                        # 填充NaN值为None（SQL NULL）
+                        df = df.replace({np.nan: None})
+
                         for _, row in df.iterrows():
                             conn.execute("""
                                 INSERT OR REPLACE INTO holders_data
                                 (ts_code, ann_date, end_date, holder_name, holder_amount, holder_rank)
                                 VALUES (?, ?, ?, ?, ?, ?)
-                            """, [row.get(k) for k in ['ts_code', 'ann_date', 'end_date',
+                            """, [row.get(k, None) for k in ['ts_code', 'ann_date', 'end_date',
                                  'holder_name', 'holder_amount', 'holder_rank']])
                         success_count += 1
 
@@ -717,7 +796,7 @@ class TushareDownloadThread(QThread):
                 time.sleep(0.1)
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'success_count': success_count})
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'stopped': self._is_stopped})
             self.log_signal.emit(f"✅ 股东数据下载完成！成功: {success_count}")
 
         except Exception as e:
@@ -732,6 +811,7 @@ class TushareDownloadThread(QThread):
 
             for i, task in enumerate(task_list):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 task_name = task.get('name', '')
@@ -764,16 +844,12 @@ class TushareDownloadThread(QThread):
 
                 self.progress_signal.emit(i + 1, total_tasks)
 
-            self.finished_signal.emit({'success': True})
+            self.finished_signal.emit({'success': True, 'stopped': self._is_stopped})
             self.log_signal.emit("\n✅ 批量下载完成！")
 
         except Exception as e:
             import traceback
             self.error_signal.emit(f"批量下载失败: {str(e)}\n{traceback.format_exc()}")
-
-    def stop(self):
-        """停止下载"""
-        self._is_running = False
 
     def _download_daily(self):
         """下载日线行情数据（使用Tushare，无需QMT）"""
@@ -847,6 +923,7 @@ class TushareDownloadThread(QThread):
 
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
@@ -895,7 +972,8 @@ class TushareDownloadThread(QThread):
                 'total': len(symbols),
                 'success_count': success_count,
                 'failed_count': failed_count,
-                'total_inserted': total_inserted
+                'total_inserted': total_inserted,
+                'stopped': self._is_stopped
             })
 
         except Exception as e:
@@ -940,6 +1018,8 @@ class TushareDownloadThread(QThread):
                     pct_chg DECIMAL(10,4),
                     vol DECIMAL(18,2),
                     amount DECIMAL(18,2),
+                    data_source VARCHAR(20) DEFAULT 'Tushare',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ts_code, trade_date)
                 )
             """)
@@ -949,6 +1029,7 @@ class TushareDownloadThread(QThread):
 
             for i, index_code in enumerate(index_codes, 1):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
 
                 try:
@@ -975,13 +1056,13 @@ class TushareDownloadThread(QThread):
                             ).dt.strftime('%Y-%m-%d')
 
                             # 准备数据：将DataFrame转换为元组列表
-                            insert_data = [tuple(row) for row in df_insert.itertuples(index=False, name=None)]
+                            insert_data = [tuple(row) + ('Tushare', pd.Timestamp.now()) for row in df_insert.itertuples(index=False, name=None)]
 
-                            # 执行批量插入（11个字段）
+                            # 执行批量插入（13个字段）
                             conn.executemany("""
                                 INSERT OR REPLACE INTO index_data
-                                (ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                (ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount, data_source, created_at)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                             """, insert_data)
 
                             total_count += len(df)
@@ -1001,7 +1082,7 @@ class TushareDownloadThread(QThread):
                 time.sleep(0.5)  # 避免请求过快
 
             conn.close()
-            self.finished_signal.emit({'success': True, 'total': total_count})
+            self.finished_signal.emit({'success': True, 'total': total_count, 'stopped': self._is_stopped})
             self.log_signal.emit(f"\n✅ 指数数据下载完成！总计: {total_count:,} 条记录")
 
         except Exception as e:
@@ -1083,8 +1164,8 @@ class TushareDownloadThread(QThread):
 
             conn.close()
 
-            self.finished_signal.emit({'success': True, 'total': insert_count})
-            self.log_signal.emit(f"\n✅ 股票基本信息下载完成！")
+            self.finished_signal.emit({'success': True, 'total': insert_count, 'stopped': self._is_stopped})
+            self.log_text.append(f"\n✅ 股票基本信息下载完成！")
             self.log_signal.emit(f"   总计: {insert_count} 只股票")
             self.log_signal.emit(f"   用于：过滤ST股票、新股、停牌股票")
 
@@ -1134,6 +1215,8 @@ class TushareDownloadThread(QThread):
                     undist_profit_ps DOUBLE,
                     equity_yoy DOUBLE,
                     rd_exp DOUBLE,
+                    data_source VARCHAR(20) DEFAULT 'Tushare',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ts_code, end_date)
                 )
             """)
@@ -1146,6 +1229,7 @@ class TushareDownloadThread(QThread):
 
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
                 # 限流重试：最多重试3次
                 api_success = False
@@ -1164,9 +1248,9 @@ class TushareDownloadThread(QThread):
                             numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
                             df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
 
-                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) + ('Tushare', pd.Timestamp.now()) for row in df.itertuples(index=False, name=None)]
                             conn.executemany(
-                                "INSERT OR REPLACE INTO financial_indicator VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                "INSERT OR REPLACE INTO financial_indicator VALUES (" + ",".join(["?"] * (len(df.columns) + 2)) + ")",
                                 insert_data
                             )
                             total_inserted += len(df)
@@ -1201,7 +1285,8 @@ class TushareDownloadThread(QThread):
             self.finished_signal.emit({
                 'success': True,
                 'total_inserted': total_inserted,
-                'success_count': success_count
+                'success_count': success_count,
+                'stopped': self._is_stopped
             })
 
         except Exception as e:
@@ -1232,7 +1317,7 @@ class TushareDownloadThread(QThread):
             conn = duckdb.connect(db_path)
 
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS financial_balance (
+                CREATE TABLE IF NOT EXISTS balance_sheet_tushare (
                     ts_code VARCHAR,
                     ann_date DATE,
                     end_date DATE,
@@ -1247,6 +1332,8 @@ class TushareDownloadThread(QThread):
                     inventory DOUBLE,
                     total_nca DOUBLE,
                     total_ncl DOUBLE,
+                    data_source VARCHAR(20) DEFAULT 'Tushare',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ts_code, end_date)
                 )
             """)
@@ -1259,6 +1346,7 @@ class TushareDownloadThread(QThread):
 
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
                 api_success = False
                 for retry in range(3):
@@ -1276,9 +1364,9 @@ class TushareDownloadThread(QThread):
                             numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
                             df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
 
-                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) + ('Tushare', pd.Timestamp.now()) for row in df.itertuples(index=False, name=None)]
                             conn.executemany(
-                                "INSERT OR REPLACE INTO financial_balance VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                "INSERT OR REPLACE INTO balance_sheet_tushare VALUES (" + ",".join(["?"] * (len(df.columns) + 2)) + ")",
                                 insert_data
                             )
                             total_inserted += len(df)
@@ -1343,7 +1431,7 @@ class TushareDownloadThread(QThread):
             conn = duckdb.connect(db_path)
 
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS financial_cashflow (
+                CREATE TABLE IF NOT EXISTS cash_flow_statement_tushare (
                     ts_code VARCHAR,
                     ann_date DATE,
                     end_date DATE,
@@ -1355,6 +1443,8 @@ class TushareDownloadThread(QThread):
                     n_cashflow_fnc_act DOUBLE,
                     c_fr_sale_sg DOUBLE,
                     n_incr_cash_cash_equ DOUBLE,
+                    data_source VARCHAR(20) DEFAULT 'Tushare',
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     PRIMARY KEY (ts_code, end_date)
                 )
             """)
@@ -1367,6 +1457,7 @@ class TushareDownloadThread(QThread):
 
             for i, ts_code in enumerate(symbols, 1):
                 if not self._is_running:
+                    self._is_stopped = True
                     break
                 api_success = False
                 for retry in range(3):
@@ -1384,9 +1475,9 @@ class TushareDownloadThread(QThread):
                             numeric_cols = [c for c in df.columns if c not in ['ts_code', 'ann_date', 'end_date']]
                             df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce')).fillna(0)
 
-                            insert_data = [tuple(None if pd.isna(v) else v for v in row) for row in df.itertuples(index=False, name=None)]
+                            insert_data = [tuple(None if pd.isna(v) else v for v in row) + ('Tushare', pd.Timestamp.now()) for row in df.itertuples(index=False, name=None)]
                             conn.executemany(
-                                "INSERT OR REPLACE INTO financial_cashflow VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                "INSERT OR REPLACE INTO cash_flow_statement_tushare VALUES (" + ",".join(["?"] * (len(df.columns) + 2)) + ")",
                                 insert_data
                             )
                             total_inserted += len(df)
@@ -1433,6 +1524,7 @@ class TushareDataWidget(QWidget):
     def __init__(self):
         super().__init__()
         self.download_thread = None
+        self.stop_btn = None  # 停止按钮
         self.init_ui()
 
     def init_ui(self):
@@ -1446,6 +1538,35 @@ class TushareDataWidget(QWidget):
         title_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
         title_label.setStyleSheet("color: #2196F3; padding: 10px;")
         layout.addWidget(title_label)
+
+        # 控制按钮区域
+        control_layout = QHBoxLayout()
+
+        # 停止按钮
+        self.stop_btn = QPushButton("🛑 停止下载")
+        self.stop_btn.setFont(QFont("Microsoft YaHei", 10))
+        self.stop_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #f44336;
+                color: white;
+                padding: 8px 15px;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover {
+                background-color: #d32f2f;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+                color: #666666;
+            }
+        """)
+        self.stop_btn.setEnabled(False)  # 初始禁用
+        self.stop_btn.clicked.connect(self.stop_download)
+        control_layout.addWidget(self.stop_btn)
+
+        control_layout.addStretch()
+        layout.addLayout(control_layout)
 
         # Token配置
         config_group = QGroupBox("⚙️ Token配置")
@@ -2086,18 +2207,14 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'financial_indicator',
             token=token,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_balancesheet(self):
         """开始下载资产负债表数据"""
@@ -2130,18 +2247,14 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'balancesheet',
             token=token,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_cashflow(self):
         """开始下载现金流量表数据"""
@@ -2174,18 +2287,14 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'cashflow_data',
             token=token,
             symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def test_connection(self):
         """测试连接"""
@@ -2202,6 +2311,7 @@ class TushareDataWidget(QWidget):
         self.download_thread.log_signal.connect(self._on_log)
         self.download_thread.finished_signal.connect(self._on_test_finished)
         self.download_thread.error_signal.connect(self._on_error)
+        # 测试连接不需要停止按钮
         self.download_thread.start()
 
     def start_batch_download(self):
@@ -2346,16 +2456,12 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'batch_download',
             token=token,
             task_list=task_list
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_market_cap(self):
         """开始下载市值数据"""
@@ -2393,17 +2499,13 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'market_cap',
             token=token,
             start_date=start_date,
             end_date=end_date
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_financial(self):
         """开始下载财务数据"""
@@ -2436,17 +2538,13 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'financial',
             token=token,
             symbols=symbols,
             years=self.financial_years_spin.value()
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_dividend(self):
         """开始下载分红数据"""
@@ -2475,17 +2573,13 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'dividend',
             token=token,
             symbols=symbols,
             years=self.dividend_years_spin.value()
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_moneyflow(self):
         """开始下载资金流向"""
@@ -2514,17 +2608,13 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'moneyflow',
             token=token,
             symbols=symbols,
             days_back=self.moneyflow_days_spin.value()
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_holders(self):
         """开始下载股东数据"""
@@ -2553,17 +2643,13 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'holders',
             token=token,
             symbols=symbols,
             years=self.holders_years_spin.value()
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_index_data(self):
         """开始下载指数数据"""
@@ -2585,17 +2671,13 @@ class TushareDataWidget(QWidget):
         end_date = datetime.now()
         start_date = end_date - timedelta(days=self.index_years_spin.value() * 365)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'index_data',
             token=token,
             start_date=start_date.strftime('%Y%m%d'),
             end_date=end_date.strftime('%Y%m%d')
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def start_download_stock_basic(self):
         """开始下载股票基本信息"""
@@ -2613,15 +2695,11 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
 
-        self.download_thread = TushareDownloadThread(
+        thread = TushareDownloadThread(
             'stock_basic',
             token=token
         )
-        self.download_thread.log_signal.connect(self._on_log)
-        self.download_thread.progress_signal.connect(self._on_progress)
-        self.download_thread.finished_signal.connect(self._on_download_finished)
-        self.download_thread.error_signal.connect(self._on_error)
-        self.download_thread.start()
+        self._start_download_thread(thread)
 
     def _on_log(self, message):
         """处理日志消息"""
@@ -2643,10 +2721,16 @@ class TushareDataWidget(QWidget):
     def _on_download_finished(self, result):
         """下载完成"""
         self.progress_bar.setVisible(False)
+        self.stop_btn.setEnabled(False)
 
         if result.get('success'):
             total_inserted = result.get('total_inserted', 0)
             success_count = result.get('success_count', 0)
+
+            if result.get('stopped'):
+                self.log_text.append("\n⚠️ 下载已被用户停止")
+                QMessageBox.information(self, "已停止", "⚠️ 下载已被停止\n已下载的数据已保存")
+                return
 
             if total_inserted > 0:
                 QMessageBox.information(self, "完成", f"✅ 下载完成！\n\n新增数据: {total_inserted:,} 条")
@@ -2656,7 +2740,41 @@ class TushareDataWidget(QWidget):
     def _on_error(self, error_msg):
         """处理错误"""
         self.progress_bar.setVisible(False)
+        self.stop_btn.setEnabled(False)
         QMessageBox.critical(self, "错误", error_msg)
+
+    def _on_thread_finished(self):
+        """QThread内置finished信号：线程真正结束后清理引用"""
+        self.download_thread = None
+
+    def stop_download(self):
+        """停止下载"""
+        if self.download_thread and self.download_thread.isRunning():
+            reply = QMessageBox.question(
+                self,
+                "确认停止",
+                "确定要停止当前下载吗？\n\n已下载的数据将保存到数据库。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+
+            if reply == QMessageBox.Yes:
+                self.download_thread.stop()
+                self.stop_btn.setEnabled(False)
+                self.log_text.append("\n⚠️ 正在停止下载，请稍候...")
+        else:
+            QMessageBox.information(self, "提示", "当前没有正在进行的下载任务")
+
+    def _start_download_thread(self, thread):
+        """启动下载线程的辅助方法"""
+        self.download_thread = thread
+        self.download_thread.log_signal.connect(self._on_log)
+        self.download_thread.progress_signal.connect(self._on_progress)
+        self.download_thread.finished_signal.connect(self._on_download_finished)
+        self.download_thread.error_signal.connect(self._on_error)
+        self.download_thread.finished.connect(self._on_thread_finished)
+        self.stop_btn.setEnabled(True)
+        self.download_thread.start()
 
 
 if __name__ == "__main__":
