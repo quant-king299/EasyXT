@@ -916,10 +916,9 @@ class DataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def stop(self):
-        """停止下载"""
+        """停止下载（非阻塞）"""
         self._is_running = False
         self.quit()
-        self.wait()
 
 
 class SingleStockDownloadThread(QThread):
@@ -1215,10 +1214,9 @@ class SingleStockDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def stop(self):
-        """停止下载"""
+        """停止下载（非阻塞）"""
         self._is_running = False
         self.quit()
-        self.wait()
 
 
 class VerifyDataThread(QThread):
@@ -1585,10 +1583,9 @@ class FinancialDataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def stop(self):
-        """停止下载"""
+        """停止下载（非阻塞）"""
         self._is_running = False
         self.quit()
-        self.wait()
 
 
 class LocalDataManagerWidget(QWidget):
@@ -2778,6 +2775,9 @@ class LocalDataManagerWidget(QWidget):
         if self.download_thread and self.download_thread.isRunning():
             self.log("⏹️ 正在停止下载...")
             self.download_thread.stop()
+            # 立即恢复UI状态，不阻塞等待线程结束
+            self.stop_btn.setEnabled(False)
+            self.log("⏹️ 已发送停止信号，等待当前任务完成...")
 
     def _set_download_state(self, is_downloading):
         """设置下载状态"""
