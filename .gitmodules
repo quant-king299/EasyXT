@@ -1,0 +1,3 @@
+[submodule "code_converter"]
+	path = code_converter
+	url = https://github.com/quant-king299/JQ2PTrade.git
