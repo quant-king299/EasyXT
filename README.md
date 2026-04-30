@@ -142,23 +142,7 @@ TDX (通达信)
 Eastmoney (东方财富)
 ```
 
-### 常见问题
-
-**Q: xqshare 是什么？**
-
-A: xqshare 是一个远程客户端代理，让你在没有 Windows QMT 环境的情况下，通过远程服务器使用 QMT 的数据接口。
-
-**Q: 需要自己搭建 xqshare 服务器吗？**
-
-A: 不需要。xqshare 支持连接到已有的远程服务器。你也可以自己搭建服务器（需要 Windows + QMT 环境）。
-
-**Q: 交易功能支持吗？**
-
-A: 是的！通过 xqshare，Mac/Linux 用户也可以进行完整的股票交易操作。
-
-**Q: 性能如何？**
-
-A: xqshare 通过网络连接到远程服务器，性能取决于网络延迟。对于大多数量化策略，延迟是可以接受的。
+> 更多跨平台问题见 [FAQ - xqshare 相关](docs/assets/TROUBLESHOOTING.md#xqshare-相关)
 
 ### 感谢贡献者
 
@@ -470,6 +454,18 @@ gui_app/main_window.py
 - Windows系统（QMT限制，但 Mac/Linux 可通过 xqshare 使用）
 - 已安装QMT客户端（标准版或miniQMT，如需交易功能）
 
+### 克隆项目
+
+```bash
+# 克隆时加 --recursive，否则 code_converter/ 目录为空
+git clone --recursive https://github.com/quant-king299/EasyXT.git
+
+# 如果已经克隆过，用这条命令拉取子模块
+git submodule update --init
+```
+
+> `code_converter/` 是独立的子模块 [JQ2PTrade](https://github.com/quant-king299/JQ2PTrade)（聚宽策略转PTrade代码转换器），可按需使用。
+
 ### 快速安装
 
 #### 1️⃣ 安装xtquant（必需且重要）
@@ -592,98 +588,24 @@ pip install pywinauto pyautogui
 
 ---
 
-### ⚙️ 首次使用配置（重要）
+### ⚙️ 首次使用配置
 
-#### 配置 Tushare Token（如果需要使用数据下载功能）
-
-如果你需要使用 **Tushare 数据下载功能**，必须配置Token。
-
-##### 步骤 1：获取 Tushare Token
-
-1. 访问 [Tushare Pro](https://tushare.pro) 注册账号
-2. 登录后进入「用户中心」→「接口Token」
-3. 复制你的 Token（类似：`xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`）
-
-##### 步骤 2：配置环境变量文件
-
-**方法 A：使用 .env 文件（推荐）**
-
-1. 复制配置文件模板：
-   ```bash
-   # Windows PowerShell
-   Copy-Item .env.example .env
-
-   # Windows CMD
-   copy .env.example .env
-
-   # Linux/Mac
-   cp .env.example .env
-   ```
-
-2. 编辑 `.env` 文件，填写你的 Token：
-   ```env
-   TUSHARE_TOKEN=你的Token（替换这一行）
-   ```
-
-3. 保存文件
-
-**方法 B：直接设置环境变量**
-
-```powershell
-# PowerShell
-setx TUSHARE_TOKEN "你的Token"
-
-# CMD
-setx TUSHARE_TOKEN "你的Token"
-```
-
-**方法 C：在代码中设置（不推荐，仅用于测试）**
-
-```python
-import os
-os.environ['TUSHARE_TOKEN'] = '你的Token'
-```
-
-##### 步骤 3：验证配置
+#### 配置 Tushare Token（数据下载功能需要）
 
 ```bash
-python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('✓ Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...')"
+# 1. 复制配置模板
+copy .env.example .env
+
+# 2. 编辑 .env，填入你的 Token
+# TUSHARE_TOKEN=你的Token
+
+# 3. 验证
+python -c "import os; from dotenv import load_dotenv; load_dotenv(); print('OK' if os.getenv('TUSHARE_TOKEN') else '未配置')"
 ```
 
-##### 常见问题
+Token 获取地址：https://tushare.pro → 注册 → 用户中心 → 接口Token
 
-**Q: 不配置 Token 会影响哪些功能？**
-A: 以下功能会受影响：
-- ❌ 无法使用 Tushare 数据源（回测时自动降级到其他数据源）
-- ❌ 无法下载股票列表、财务数据等
-- ✅ QMT本地数据仍可正常使用
-- ✅ 其他不依赖Tushare的功能不受影响
-
-**Q: Token 会被泄露吗？**
-A: `.env` 文件已被加入 `.gitignore`，不会提交到Git。请勿手动提交包含Token的文件。
-
-**Q: 如何获取 Token？需要付费吗？**
-A: Tushare Pro采用积分制：
-- 注册后会获得一些初始积分，可兑换基础权限的Token
-- 基础功能（如股票行情、基础数据）所需积分较少
-- 高级功能（如财务数据、高频数据）需要更多积分，可能需要充值
-- 详细积分规则：https://tushare.pro/document/2
-- 建议先试用基础功能，确认满足需求后再考虑充值
-
-**Q: 不想用Tushare，有其他选择吗？**
-A: 本项目支持多种数据源，可按需选择：
-- **QMT本地数据**：如果有QMT终端，可直接使用本地历史数据
-- **DuckDB本地数据库**：通过Tushare或QMT下载数据到本地，回测速度最快
-- **akshare**：免费数据接口（功能类似Tushare）
-- **qstock**：免费数据接口
-
-配置优先级：DuckDB > QMT > Tushare > akshare > qstock
-
-**Q: 如何下载DuckDB数据库？**
-A: 两种方式（详见 [DuckDB使用指南](docs/assets/DUCKDB_GUIDE.md)）：
-
-1. **GUI方式（推荐）**：运行 `python run_gui.py`，在"Tushare下载"标签页中勾选"日线行情"和"市值数据"，点击下载。只需Tushare Token，无需QMT。
-2. **命令行方式**：运行 `python tools/setup_duckdb.py`，按提示选择下载模式。
+> 不配置 Token 不影响核心功能，QMT 本地数据照常使用。详细说明见 [FAQ - Tushare 配置](docs/assets/TROUBLESHOOTING.md#tushare配置问题)
 
 ---
 
@@ -779,90 +701,13 @@ python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-
 
 ## 🎓 常见问题
 
-> 💡 **遇到更复杂的问题？** 查看 **[🔧 疑难问题解答 (FAQ)](docs/assets/TROUBLESHOOTING.md)** 获取详细的故障排查指南！
+> 完整 FAQ 见 **[疑难问题解答](docs/assets/TROUBLESHOOTING.md)**
 
-### Q1: 我应该安装哪些模块？
+**Q: 我应该安装哪些模块？**
+根据需求选择：只要API → `easy_xt`；做回测 → `easy_xt` + `easyxt_backtest`；因子研究 → `101因子平台`（独立）；用现成策略 → `easy_xt` + `strategies/`
 
-**A**: 根据需求选择：
-- **只要API** → 只安装 `easy_xt`
-- **要做回测** → 安装 `easy_xt` + `easyxt_backtest`
-- **因子研究** → 只使用 `101因子平台`（完全独立）
-- **学习量化** → 安装 `easy_xt` + 看 `学习实例/`
-- **使用现成策略** → 安装 `easy_xt` + 看 `strategies/`
-
-### Q2: 这些模块之间有什么依赖关系？
-
-**A**:
-- `easy_xt`：无依赖，可独立
-- `easyxt_backtest`：可独立，不依赖101因子平台
-- `101因子平台`：完全独立
-- `strategies`、`学习实例`：依赖 `easy_xt`
-
-### Q3: 我可以在自己的项目中只使用easy_xt吗？
-
-**A**: **完全可以！** `easy_xt` 就是设计成可独立使用的库：
-
-```python
-# 在你的项目中
-from easy_xt import get_api
-
-api = get_api()
-data = api.get_price(['000001.SZ'], start='20240101', period='1d')
-```
-
-### Q4: 101因子平台必须配合easy_xt使用吗？
-
-**A**: **不需要**。101因子平台是完全独立的Web应用，可以单独使用。
-
-### Q5: 我是新手，应该从哪里开始？
-
-**A**: 建议路径：
-1. 阅读 `学习实例/01_基础入门.py`
-2. 运行 `学习实例/02_交易基础.py`
-3. 尝试 `学习实例/04_策略回测.py`
-4. 需要时再学习其他模块
-
----
-
-## 📊 与其他项目的对比
-
-| 项目 | 定位 | 关系 |
-|------|------|------|
-| **miniQMT** | QMT官方Python接口 | EasyXT依赖的基础 |
-| **EasyXT** | miniQMT的简化封装 | 本项目的核心库 |
-| **QMT官方** | 迅投QMT交易平台 | 底层交易软件 |
-| **聚宽JoinQuant** | 在线量化平台 | 通过JQ2QMT可集成 |
-| **Backtrader** | 通用回测框架 | `easyxt_backtest`是QMT专用版 |
-
----
-
-## 🤝 贡献指南
-
-欢迎提交Issue和Pull Request！
-
-### 开发流程
-
-1. Fork 项目
-2. 创建特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启 Pull Request
-
-### 代码规范
-
-- 使用 Python PEP 8 编码规范
-- 添加详细的文档字符串
-- 编写单元测试
-
----
-
-## 📈 更新日志
-
-### v1.0.0 (2025-01-11)
-- ✅ 初始版本发布
-- ✅ 完整的EasyXT API封装
-- ✅ 丰富的学习实例
-- ✅ 修复交易服务初始化问题
+**Q: 我是新手，从哪里开始？**
+`学习实例/01_基础入门.py` → `02_交易基础.py` → `04_策略回测.py`
 
 ---
 
@@ -892,19 +737,10 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 
 ## 🙏 致谢
 
-### 核心依赖
-
 - [迅投QMT](https://www.gtja.com/) - 提供量化交易平台
 - [qstock](https://github.com/tkfy920/qstock) - 股票数据获取
 - [akshare](https://github.com/akfamily/akshare) - 金融数据接口
-
-### 贡献者
-
-特别感谢以下贡献者为项目做出的贡献：
-
-- **[@jasonhu](https://github.com/jasonhu)** - 添加 xqshare 跨平台支持，使 EasyXT 可以在 macOS 和 Linux 上运行（[PR #19](https://github.com/quant-king299/EasyXT/pull/19)）
-
-> 💬 **欢迎贡献！** 如果你也想为项目做出贡献，欢迎提交 Issue 或 Pull Request。查看[贡献指南](#-贡献指南)了解更多详情。
+- **[@jasonhu](https://github.com/jasonhu)** - xqshare 跨平台支持
 
 ---
 
