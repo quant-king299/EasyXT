@@ -102,6 +102,10 @@ class TushareDownloadThread(QThread):
                 self._download_balancesheet()
             elif self.task_type == 'cashflow_data':
                 self._download_cashflow_data()
+            elif self.task_type == 'cb_basic':
+                self._download_cb_basic()
+            elif self.task_type == 'cb_daily':
+                self._download_cb_daily()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -1633,6 +1637,269 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"现金流量表下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    def _download_cb_basic(self):
+        """下载可转债基本信息（cb_basic）"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载可转债基本信息（cb_basic）")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cb_basic (
+                    ts_code VARCHAR PRIMARY KEY,
+                    bond_full_name VARCHAR,
+                    bond_short_name VARCHAR,
+                    stk_code VARCHAR,
+                    stk_short_name VARCHAR,
+                    maturity DOUBLE,
+                    par DOUBLE,
+                    issue_price DOUBLE,
+                    issue_size DOUBLE,
+                    remain_size DOUBLE,
+                    value_date DATE,
+                    maturity_date DATE,
+                    coupon_rate DOUBLE,
+                    list_date DATE,
+                    delist_date DATE,
+                    exchange VARCHAR,
+                    conv_start_date DATE,
+                    conv_end_date DATE,
+                    first_conv_price DOUBLE,
+                    conv_price DOUBLE,
+                    maturity_put_price VARCHAR,
+                    update_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            self.log_signal.emit("✅ 数据库连接成功，正在获取可转债列表...")
+
+            df = pro.cb_basic(fields=(
+                'ts_code,bond_full_name,bond_short_name,stk_code,stk_short_name,'
+                'maturity,par,issue_price,issue_size,remain_size,'
+                'value_date,maturity_date,coupon_rate,'
+                'list_date,delist_date,exchange,'
+                'conv_start_date,conv_end_date,first_conv_price,conv_price,'
+                'maturity_put_price'
+            ))
+
+            if df is None or df.empty:
+                self.error_signal.emit("获取可转债列表失败或返回空数据")
+                conn.close()
+                return
+
+            # 过滤只保留在市 + 近期退市的可转债
+            df['delist_date'] = df['delist_date'].replace('', pd.NaT)
+            self.log_signal.emit(f"✅ 获取到 {len(df)} 只可转债")
+
+            conn.execute("DELETE FROM cb_basic")
+
+            insert_count = 0
+            for _, row in df.iterrows():
+                try:
+                    def _to_date(val):
+                        if pd.isna(val) or val == '' or val is None:
+                            return None
+                        return pd.to_datetime(str(val), format='%Y%m%d', errors='coerce')
+
+                    conn.execute("""
+                        INSERT INTO cb_basic
+                        (ts_code,bond_full_name,bond_short_name,stk_code,stk_short_name,
+                         maturity,par,issue_price,issue_size,remain_size,
+                         value_date,maturity_date,coupon_rate,
+                         list_date,delist_date,exchange,
+                         conv_start_date,conv_end_date,first_conv_price,conv_price,
+                         maturity_put_price)
+                        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """, [
+                        row['ts_code'],
+                        row.get('bond_full_name'),
+                        row.get('bond_short_name'),
+                        row.get('stk_code'),
+                        row.get('stk_short_name'),
+                        row.get('maturity'),
+                        row.get('par'),
+                        row.get('issue_price'),
+                        row.get('issue_size'),
+                        row.get('remain_size'),
+                        _to_date(row.get('value_date')),
+                        _to_date(row.get('maturity_date')),
+                        row.get('coupon_rate'),
+                        _to_date(row.get('list_date')),
+                        _to_date(row.get('delist_date')),
+                        row.get('exchange'),
+                        _to_date(row.get('conv_start_date')),
+                        _to_date(row.get('conv_end_date')),
+                        row.get('first_conv_price'),
+                        row.get('conv_price'),
+                        str(row.get('maturity_put_price', '')) if row.get('maturity_put_price') else None,
+                    ])
+                    insert_count += 1
+                except Exception as e:
+                    self.log_signal.emit(f"  ⚠️  {row.get('ts_code', '?')} 插入失败: {e}")
+                    continue
+
+            conn.close()
+            self.finished_signal.emit({'success': True, 'total': insert_count, 'success_count': insert_count, 'stopped': self._is_stopped})
+            self.log_signal.emit(f"\n✅ 可转债基本信息下载完成！共 {insert_count} 只")
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"可转债基本信息下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_cb_daily(self):
+        """下载可转债日行情（cb_daily），含转股价值和转股溢价率"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '')
+            end_date = self.kwargs.get('end_date', '')
+
+            if not start_date:
+                years = self.kwargs.get('years', 3)
+                start_date = f'{datetime.now().year - years}0101'
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载可转债日行情（cb_daily）")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS cb_daily (
+                    ts_code VARCHAR,
+                    trade_date DATE,
+                    pre_close DOUBLE,
+                    open DOUBLE,
+                    high DOUBLE,
+                    low DOUBLE,
+                    close DOUBLE,
+                    change DOUBLE,
+                    pct_chg DOUBLE,
+                    vol DOUBLE,
+                    amount DOUBLE,
+                    bond_value DOUBLE,
+                    bond_over_rate DOUBLE,
+                    cb_value DOUBLE,
+                    cb_over_rate DOUBLE,
+                    PRIMARY KEY (ts_code, trade_date)
+                )
+            """)
+
+            # 获取可转债列表
+            try:
+                cb_list = conn.execute("SELECT ts_code FROM cb_basic").fetchall()
+                cb_codes = [r[0] for r in cb_list]
+            except Exception:
+                cb_codes = []
+
+            if not cb_codes:
+                self.log_signal.emit("⚠️ cb_basic 表为空，先从 API 获取可转债列表...")
+                df_basic = pro.cb_basic(fields='ts_code')
+                if df_basic is not None and not df_basic.empty:
+                    cb_codes = df_basic['ts_code'].tolist()
+                else:
+                    self.error_signal.emit("无法获取可转债列表")
+                    conn.close()
+                    return
+
+            # 增量检查：查每个转债的最新日期
+            existing_map = self._get_existing_stocks(conn, 'cb_daily', date_col='trade_date', code_col='ts_code')
+            need_download, skipped = self._filter_symbols_for_download(cb_codes, existing_map, end_date)
+            self.log_signal.emit(f"🔍 已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("✅ 所有可转债日行情已是最新，无需下载")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'total_inserted': 0, 'success_count': 0, 'skipped': skipped, 'stopped': False})
+                return
+
+            total_inserted = 0
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(need_download, 1):
+                if not self._is_running:
+                    self._is_stopped = True
+                    break
+
+                # 增量：对有部分数据的转债从最新日期+1开始
+                stock_start = start_date
+                if ts_code in existing_map and existing_map[ts_code]:
+                    next_day = pd.to_datetime(str(existing_map[ts_code])) + timedelta(days=1)
+                    stock_start = next_day.strftime('%Y%m%d')
+
+                api_success = False
+                for retry in range(3):
+                    try:
+                        df = pro.cb_daily(
+                            ts_code=ts_code,
+                            start_date=stock_start,
+                            end_date=end_date,
+                            fields='ts_code,trade_date,pre_close,open,high,low,close,change,pct_chg,vol,amount,bond_value,bond_over_rate,cb_value,cb_over_rate'
+                        )
+                        if df is not None and not df.empty:
+                            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+                            numeric_cols = [c for c in df.columns if c not in ['ts_code', 'trade_date']]
+                            df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce'))
+
+                            insert_data = [
+                                tuple(None if pd.isna(v) else v for v in row)
+                                for row in df.itertuples(index=False, name=None)
+                            ]
+                            conn.executemany(
+                                "INSERT OR REPLACE INTO cb_daily VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                insert_data
+                            )
+                            total_inserted += len(df)
+                            success_count += 1
+                        else:
+                            # 空数据不算失败
+                            success_count += 1
+                        api_success = True
+                        break
+                    except Exception as e:
+                        if '每分钟最多访问' in str(e) or '200次' in str(e) or '频率' in str(e):
+                            if retry < 2:
+                                wait = 60 + retry * 30
+                                self.log_signal.emit(f"  ⏳ 限流，等待{wait}秒后重试 {ts_code} ({retry+1}/3)")
+                                time.sleep(wait)
+                            else:
+                                failed_count += 1
+                                self.log_signal.emit(f"  ❌ {ts_code} 限流重试3次仍失败")
+                        else:
+                            failed_count += 1
+                            if failed_count <= 5:
+                                self.log_signal.emit(f"  ❌ {ts_code} 失败: {str(e)[:80]}")
+                            break
+
+                if i % 20 == 0 or i == len(need_download):
+                    self.progress_signal.emit(i, len(need_download))
+                    self.log_signal.emit(f"[{i}/{len(need_download)}] 成功: {success_count} | 失败: {failed_count} | 记录: {total_inserted:,}")
+
+                time.sleep(0.4)
+
+            conn.close()
+            self.log_signal.emit(f"\n✅ 可转债日行情下载完成！跳过: {skipped}, 成功: {success_count}, 失败: {failed_count}, 总记录: {total_inserted:,}")
+            self.finished_signal.emit({
+                'success': True,
+                'total_inserted': total_inserted,
+                'success_count': success_count,
+                'skipped': skipped,
+                'stopped': self._is_stopped
+            })
+
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"可转债日行情下载失败: {str(e)}\n{traceback.format_exc()}")
+
 class TushareDataWidget(QWidget):
     """Tushare数据下载组件（整合版）"""
 
@@ -1747,6 +2014,10 @@ class TushareDataWidget(QWidget):
         # 现金流量表标签页
         cashflow_tab = self._create_cashflow_tab()
         tab_widget.addTab(cashflow_tab, "💹 现金流量表")
+
+        # 可转债数据标签页
+        cb_data_tab = self._create_cb_data_tab()
+        tab_widget.addTab(cb_data_tab, "🔄 可转债数据")
 
         layout.addWidget(tab_widget)
 
@@ -2291,6 +2562,76 @@ class TushareDataWidget(QWidget):
         layout.addStretch()
         return tab
 
+    def _create_cb_data_tab(self):
+        """创建可转债数据标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # CB Basic 下载
+        basic_group = QGroupBox("可转债基本信息（cb_basic）")
+        basic_layout = QVBoxLayout(basic_group)
+
+        basic_info = QLabel(
+            "📋 包含：转债代码、正股代码、转股价格、上市日期、到期日期、票面利率等。\n"
+            "可转债日行情下载的前置依赖，需先下载基本信息。"
+        )
+        basic_info.setStyleSheet("color: #666; padding: 5px;")
+        basic_layout.addWidget(basic_info)
+
+        cb_basic_btn = QPushButton("🚀 下载可转债基本信息")
+        cb_basic_btn.setFont(QFont("Microsoft YaHei", 10))
+        cb_basic_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px;
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #388E3C; }
+        """)
+        cb_basic_btn.clicked.connect(self.start_download_cb_basic)
+        basic_layout.addWidget(cb_basic_btn)
+        layout.addWidget(basic_group)
+
+        # CB Daily 下载
+        daily_group = QGroupBox("可转债日行情（cb_daily）")
+        daily_layout = QVBoxLayout(daily_group)
+
+        config_layout = QFormLayout()
+        self.cb_years_spin = QSpinBox()
+        self.cb_years_spin.setRange(1, 10)
+        self.cb_years_spin.setValue(3)
+        self.cb_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.cb_years_spin)
+        daily_layout.addLayout(config_layout)
+
+        daily_info = QLabel(
+            "📊 包含：OHLCV行情 + <b>转股价值</b>(cb_value) + <b>转股溢价率</b>(cb_over_rate)\n\n"
+            "转股溢价率由 Tushare 直接提供，无需手动计算。\n"
+            "溢价率 = 转债价格/转股价值 - 1\n\n"
+            "⚠️ 需要 2000 积分以上。先下载「可转债基本信息」再下载日行情。"
+        )
+        daily_info.setStyleSheet("color: #333; padding: 10px; background: #fff3e0; border-radius: 5px;")
+        daily_layout.addWidget(daily_info)
+
+        cb_daily_btn = QPushButton("🚀 下载可转债日行情")
+        cb_daily_btn.setFont(QFont("Microsoft YaHei", 10))
+        cb_daily_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800;
+                color: white;
+                padding: 10px;
+                border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #F57C00; }
+        """)
+        cb_daily_btn.clicked.connect(self.start_download_cb_daily)
+        daily_layout.addWidget(cb_daily_btn)
+        layout.addWidget(daily_group)
+
+        layout.addStretch()
+        return tab
+
     def start_download_financial_indicator(self):
         """开始下载财务指标数据"""
         token = self.token_edit.text().strip()
@@ -2813,6 +3154,54 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'stock_basic',
             token=token
+        )
+        self._start_download_thread(thread)
+
+    def start_download_cb_basic(self):
+        """开始下载可转债基本信息"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载可转债基本信息...")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        thread = TushareDownloadThread('cb_basic', token=token)
+        self._start_download_thread(thread)
+
+    def start_download_cb_daily(self):
+        """开始下载可转债日行情"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+        years = self.cb_years_spin.value()
+        start_date = f"{datetime.now().year - years}0101"
+        end_date = datetime.now().strftime('%Y%m%d')
+
+        self.log_text.append("=" * 60)
+        self.log_text.append("🚀 开始下载可转债日行情...")
+        self.log_text.append(f"  日期范围: {start_date} ~ {end_date}")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        thread = TushareDownloadThread(
+            'cb_daily',
+            token=token,
+            start_date=start_date,
+            end_date=end_date,
+            years=years
         )
         self._start_download_thread(thread)
 

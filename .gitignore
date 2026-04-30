@@ -438,5 +438,6 @@ factor_analysis_report.txt
 101因子/101因子分析平台/run_gui.py.original
 start_qmt_gui.bat
 code_converter/ptrade_strategy.py
+code_converter/ptrade代码/
 close_and_restart.bat
 tools/qmt_bond_list.txt

@@ -153,7 +153,7 @@ class MainWindow(QMainWindow):
         self.tushare_data_widget = TushareDataWidget()
         tushare_data_layout.addWidget(self.tushare_data_widget)
         self.tab_widget.addTab(tushare_data_tab, "📥 Tushare下载")
-        
+
     def create_status_bar(self):
         """创建状态栏"""
         self.status_bar = QStatusBar()
