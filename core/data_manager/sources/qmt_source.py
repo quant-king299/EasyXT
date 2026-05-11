@@ -109,8 +109,10 @@ class QMTSource(BaseDataSource):
             # 转换为DataFrame
             df = data[symbol].reset_index()
 
-            # 重命名列
-            df.rename(columns={'time': 'date'}, inplace=True)
+            # QMT返回的时间戳是毫秒，需要转换为日期
+            if 'time' in df.columns:
+                df['date'] = pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y%m%d')
+                df.drop(columns=['time'], inplace=True)
             df['symbol'] = symbol
 
             # 选择需要的列
@@ -152,6 +154,9 @@ class QMTSource(BaseDataSource):
             DataFrame: 基本面数据
         """
         if not self.is_available():
+            return None
+
+        if not symbols:
             return None
 
         try:

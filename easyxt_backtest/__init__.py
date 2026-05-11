@@ -11,7 +11,8 @@ EasyXT 统一回测框架
 """
 
 # 核心模块
-from .core import BacktestCore, DataManager
+from .core import BacktestCore
+from core.data_manager import HybridDataManager as DataManager
 
 # 策略基类
 from .strategy_base import StrategyBase, FactorStrategyBase

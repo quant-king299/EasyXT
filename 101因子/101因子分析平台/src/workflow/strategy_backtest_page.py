@@ -230,7 +230,7 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
         # 使用新框架的 API
         from easyxt_backtest.api import SelectionBacktestEngine
         from easyxt_backtest.strategies.small_cap_strategy import SmallCapStrategy
-        from easyxt_backtest.data_manager import DataManager
+        from core.data_manager import HybridDataManager as DataManager
 
         # 显示进度
         progress_bar = st.progress(0)
@@ -706,7 +706,7 @@ def render_strategy_backtest_page():
                 import sys
                 import os
                 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-                from easyxt_backtest.data_manager import DataManager
+                from core.data_manager import HybridDataManager as DataManager
 
                 with st.spinner("检查数据中..."):
                     dm = DataManager()

@@ -168,7 +168,11 @@ class HybridDataManager:
                 # 批量获取多只股票的数据
                 all_data = []
                 for s in symbols:
-                    df = source.get_price(s, start_date, end_date, period, adjust)
+                    # 不同source的get_price参数不同，按需传参
+                    try:
+                        df = source.get_price(s, start_date, end_date, period=period, adjust=adjust)
+                    except TypeError:
+                        df = source.get_price(s, start_date, end_date)
                     if df is not None and not df.empty:
                         all_data.append(df)
 
@@ -193,10 +197,11 @@ class HybridDataManager:
         return None
 
     def get_fundamentals(self,
-                         symbols: Union[str, List[str]],
-                         date: str,
+                         symbols: Union[str, List[str]] = None,
+                         date: str = None,
                          fields: Optional[List[str]] = None,
-                         preferred_source: Optional[str] = None) -> Optional[pd.DataFrame]:
+                         preferred_source: Optional[str] = None,
+                         codes: Union[str, List[str]] = None) -> Optional[pd.DataFrame]:
         """
         获取基本面数据（自动选择数据源）
 
@@ -209,6 +214,40 @@ class HybridDataManager:
         Returns:
             DataFrame: 基本面数据
         """
+        # 兼容codes参数名
+        if symbols is None and codes is not None:
+            symbols = codes
+
+        # symbols=None 表示全市场，用tushare daily_basic按日期获取
+        if symbols is None:
+            self.stats['total_queries'] += 1
+            try:
+                import tushare as ts
+                token = self.config.get('tushare_token', '')
+                if not token:
+                    return None
+                pro = ts.pro_api(token)
+                ts_date = date.replace('-', '') if '-' in date else date
+                df = pro.daily_basic(trade_date=ts_date, fields='ts_code,circ_mv,total_mv')
+                if df is not None and not df.empty:
+                    import pandas as pd
+                    result = []
+                    for _, row in df.iterrows():
+                        c, s = row['ts_code'].split('.')
+                        # 过滤掉北交所股票（数据源无价格数据）
+                        if s in ('BJ', 'BJE'):
+                            continue
+                        result.append({
+                            'symbol': c + ('.SS' if s == 'SH' else '.' + s),
+                            'circ_mv': row.get('circ_mv'),
+                            'total_mv': row.get('total_mv'),
+                        })
+                    self.stats['successful_queries'] = self.stats.get('successful_queries', 0) + 1
+                    return pd.DataFrame(result).dropna(subset=['circ_mv'])
+            except Exception as e:
+                print(f"[HybridDataManager] 全市场市值查询失败: {e}")
+            return None
+
         self.stats['total_queries'] += 1
 
         # 标准化输入
@@ -435,3 +474,59 @@ class HybridDataManager:
         """字符串表示"""
         available = self.get_available_sources()
         return f"HybridDataManager(available_sources={available}, priority={self.source_priority})"
+
+    def load_stock_data(self, stock_code: str,
+                       start_date: str,
+                       end_date: str,
+                       data_source=None) -> 'pd.DataFrame':
+        """加载股票数据（兼容技术指标回测引擎）"""
+        try:
+            df = self.get_price(stock_code, start_date, end_date)
+            if df is not None and not df.empty:
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index)
+                return df
+        except Exception as e:
+            print(f"  [ERROR] 加载数据失败 {stock_code}: {e}")
+        return pd.DataFrame()
+
+    @staticmethod
+    def prepare_backtrader_data(df):
+        """将 DataFrame 转换为 Backtrader 数据源"""
+        import backtrader as bt
+        if df.empty:
+            raise ValueError("数据为空")
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df = df.copy()
+            df.index = pd.to_datetime(df.index)
+        return bt.feeds.PandasData(
+            dataname=df,
+            datetime=None,
+            open='open', high='high', low='low', close='close',
+            volume='volume', openinterest=-1
+        )
+
+    def get_index_components(self, index_code: str, date: str) -> list:
+        """获取指数成分股列表"""
+        try:
+            import tushare as ts
+            token = self.config.get('tushare_token', '')
+            if not token:
+                return []
+            pro = ts.pro_api(token)
+            ts_index = index_code.replace('.SS', '.SH').replace('.XSHE', '.SZ').replace('.XSHG', '.SH')
+            df = pro.index_weight(index_code=ts_index, trade_date=date, fields='con_code')
+            if df is not None and not df.empty:
+                codes = []
+                for ts_code in df['con_code'].tolist():
+                    c, s = ts_code.split('.')
+                    codes.append(c + ('.SS' if s == 'SH' else '.' + s))
+                return codes
+        except Exception as e:
+            print(f"    [get_index_components] 获取失败: {e}")
+        return []
+
+    def get_fundamentals_compat(self, codes=None, date=None, fields=None):
+        """兼容旧接口的get_fundamentals（codes参数名）"""
+        symbols = codes if codes else []
+        return self.get_fundamentals(symbols=symbols, date=date, fields=fields)

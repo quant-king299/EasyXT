@@ -14,7 +14,7 @@ from datetime import datetime
 import warnings
 
 # 导入原有的数据管理器
-from easyxt_backtest.data_manager import DataManager
+from core.data_manager import HybridDataManager as DataManager
 from easyxt_backtest.strategy_base import StrategyBase
 
 
@@ -614,7 +614,7 @@ class BacktestEngineV2:
         """
         try:
             df = self.data_manager.get_price(
-                codes=symbol,
+                symbol=symbol,
                 start_date=start_date,
                 end_date=end_date
             )
@@ -667,24 +667,24 @@ class BacktestEngineV2:
             if df.empty:
                 return None
 
-            # ✅ 核心修复：处理 QMT 返回的 MultiIndex 格式
-            # QMT 返回的 DataFrame 索引是 MultiIndex，格式：(date, symbol)
-            # date 是 Unix 时间戳（毫秒），symbol 是股票代码
+            # ✅ 核心修复：处理各种日期格式
             try:
                 if isinstance(df.index, pd.MultiIndex):
                     # MultiIndex 格式：(date, symbol)
-                    # 级别0是date（Unix时间戳），级别1是symbol
-                    df.index = df.index.get_level_values(0)  # 提取级别0（date）
-                    # 将 Unix 时间戳（毫秒）转换为 datetime
+                    df.index = df.index.get_level_values(0)
                     df.index = pd.to_datetime(df.index, unit='ms')
                     df.index.name = 'datetime'
                     print(f"  [OK] {symbol} 从MultiIndex提取日期索引（Unix时间戳）")
+                elif 'date' in df.columns and not isinstance(df.index, pd.DatetimeIndex):
+                    # date在列中（QMT/Tushare返回的格式），设为索引
+                    df = df.set_index('date')
+                    df.index = pd.to_datetime(df.index)
+                    df.index.name = 'datetime'
                 elif not isinstance(df.index, pd.DatetimeIndex):
-                    # 普通索引，尝试转换
+                    # 索引本身就是日期
                     df.index = pd.to_datetime(df.index)
                     df.index.name = 'datetime'
                 else:
-                    # 已经是 DatetimeIndex，直接使用
                     df.index.name = 'datetime'
 
                 # 验证日期是否合理

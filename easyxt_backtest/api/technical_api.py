@@ -10,7 +10,8 @@ import pandas as pd
 from typing import Dict, Any, Optional, Type
 from datetime import datetime
 
-from ..core import BacktestCore, DataManager
+from ..core import BacktestCore
+from core.data_manager import HybridDataManager as DataManager
 from ..strategies.technical import (
     DualMovingAverageStrategy,
     RSIStrategy,

@@ -5,9 +5,8 @@
 提供统一的 Backtrader 底层引擎，所有回测策略都基于此核心
 """
 
-from .backtest_core import BacktestCore, DataManager
+from .backtest_core import BacktestCore
 
 __all__ = [
     'BacktestCore',
-    'DataManager',
 ]

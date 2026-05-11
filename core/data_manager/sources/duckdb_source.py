@@ -159,6 +159,9 @@ class DuckDBSource(BaseDataSource):
                 print(f"[DuckDBSource] 日期格式错误: {date}")
                 return None
 
+            if not symbols:
+                return None
+
             # 标准化股票代码
             symbols = [self.normalize_symbol(s) for s in symbols]
 

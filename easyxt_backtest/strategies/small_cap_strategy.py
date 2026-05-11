@@ -10,10 +10,10 @@ import pandas as pd
 # 尝试相对导入，失败则使用绝对导入
 try:
     from ..strategy_base import StrategyBase
-    from ..data_manager import DataManager
+    from core.data_manager import HybridDataManager as DataManager
 except ImportError:
     from easyxt_backtest.strategy_base import StrategyBase
-    from easyxt_backtest.data_manager import DataManager
+    from core.data_manager import HybridDataManager as DataManager
 
 
 class SmallCapStrategy(StrategyBase):

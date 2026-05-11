@@ -7,7 +7,7 @@ from typing import Dict, List, Optional
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from easyxt_backtest.data_manager import DataManager
+from core.data_manager import HybridDataManager as DataManager
 from easyxt_backtest.strategy_base import StrategyBase
 from easyxt_backtest.performance import PerformanceAnalyzer
 

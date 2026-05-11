@@ -247,6 +247,9 @@ class TushareSource(BaseDataSource):
         if not self.is_available():
             return None
 
+        if not symbols:
+            return None
+
         try:
             # 验证日期格式
             if not validate_date(date):
