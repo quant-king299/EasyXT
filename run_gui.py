@@ -43,7 +43,7 @@ def main():
         print(f"  pip install {' '.join(missing_deps)}")
         return False
 
-    # 检查转换器
+    # 检查转换器（独立仓库，可选）
     print("\n[*] 检查转换器...")
     try:
         from code_converter.converters.jq_to_ptrade_unified_v3 import JQToPtradeUnifiedConverter as JQToPtradeConverter
@@ -52,8 +52,9 @@ def main():
         print(f"    - API映射规则: {len(converter.api_mapping)} 条")
         print(f"    - 不支持的API: {len(converter.unsupported_apis)} 个")
     except ImportError as e:
-        print(f"  [FAIL] 转换器导入失败: {e}")
-        return False
+        print(f"  [SKIP] 转换器未安装: {e}")
+        print(f"    聚宽转PTrade功能将不可用")
+        print(f"    安装方式: git clone https://github.com/quant-king299/JQ2PTrade.git code_converter")
 
     # 检查GUI组件
     print("\n[*] 检查GUI组件...")

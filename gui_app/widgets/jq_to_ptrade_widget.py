@@ -105,7 +105,7 @@ class CodeConversionWorker(QThread):
             if CONVERTER_AVAILABLE:
                 if self.converter_type == "unified" and JQToPtradeUnifiedConverter:
                     converter = JQToPtradeUnifiedConverter(verbose=False)
-                    self.progress_updated.emit(50, "正在使用统一转换器转换（v3.10最新版）...")
+                    self.progress_updated.emit(50, "正在使用统一转换器转换（v5.1 全面兼容版）...")
                 elif self.converter_type == "backtest" and JQToPtradeBacktestConverter:
                     converter = JQToPtradeBacktestConverter()
                     self.progress_updated.emit(50, "正在转换为回测版本...")
@@ -163,7 +163,7 @@ class JQToPtradeWidget(QWidget):
         layout.addWidget(title_label)
         
         # 版本说明标签
-        self.version_info_label = QLabel("🌟 统一转换器v3.10：修复get_Ashares().index.tolist()错误，证券代码后缀可选转换，新增get_factor_values兼容，完善get_fundamentals转换，所有已知问题已修复。")
+        self.version_info_label = QLabel("v5.1 全面兼容版：集成PTrade运行调试发现的所有问题修复（set_slippage、query ORM括号计数、日期格式、参数转换等15+项改进），自动注入Tushare替代实现。")
         self.version_info_label.setWordWrap(True)
         self.version_info_label.setStyleSheet("""
             QLabel {
@@ -234,7 +234,7 @@ class JQToPtradeWidget(QWidget):
         converter_type_layout = QHBoxLayout()
         converter_type_label = QLabel("转换版本:")
         self.converter_type_combo = QComboBox()
-        self.converter_type_combo.addItem("🌟 统一转换器 v3.10 (推荐)", "unified")  # 最新版：修复get_Ashares返回值
+        self.converter_type_combo.addItem("v5.1 统一转换器 (推荐-全面兼容)", "unified")
         self.converter_type_combo.addItem("标准版本", "default")
         self.converter_type_combo.addItem("回测版本", "backtest")
         self.converter_type_combo.addItem("增强回测版本", "enhanced")
@@ -518,7 +518,7 @@ class JQToPtradeWidget(QWidget):
         style_sheet = ""
 
         if converter_type == "unified":
-            info_text = "🌟 统一转换器v3.10（推荐）：修复get_Ashares().index.tolist()错误（改为list(get_Ashares())）。基于Ptrade实际Demo策略验证。证券代码后缀默认不转换。新增get_factor_values兼容函数。完善get_fundamentals转换。所有已知问题已修复！"
+            info_text = "v5.1 统一转换器（推荐）：集成PTrade运行调试发现的所有问题修复（set_slippage/FixedSlippage、query ORM括号计数自动转换、日期格式、get_history参数、panel移除、has_key、subportfolios等15+项），自动注入Tushare替代实现，PTrade可直接运行。"
             style_sheet = """
                 QLabel {
                     background-color: #fff3e0;
