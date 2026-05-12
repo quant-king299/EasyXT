@@ -62,7 +62,7 @@ except ImportError:
 
 # 导入各个功能组件
 from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
-from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget
+from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget, CONVERTER_AVAILABLE
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
 from gui_app.widgets.local_data_manager_simple import LocalDataManagerWidget
@@ -111,12 +111,13 @@ class MainWindow(QMainWindow):
         
     def create_tabs(self):
         """创建各个功能标签页"""
-        # 聚宽到Ptrade转换标签页
-        jq_to_ptrade_tab = QWidget()
-        jq_to_ptrade_layout = QVBoxLayout(jq_to_ptrade_tab)
-        self.jq_to_ptrade_widget = JQToPtradeWidget()
-        jq_to_ptrade_layout.addWidget(self.jq_to_ptrade_widget)
-        self.tab_widget.addTab(jq_to_ptrade_tab, "JQ转Ptrade")
+        # 聚宽到Ptrade转换标签页（仅转换器可用时显示）
+        if CONVERTER_AVAILABLE:
+            jq_to_ptrade_tab = QWidget()
+            jq_to_ptrade_layout = QVBoxLayout(jq_to_ptrade_tab)
+            self.jq_to_ptrade_widget = JQToPtradeWidget()
+            jq_to_ptrade_layout.addWidget(self.jq_to_ptrade_widget)
+            self.tab_widget.addTab(jq_to_ptrade_tab, "JQ转Ptrade")
 
         # 网格交易标签页
         grid_trading_tab = QWidget()
