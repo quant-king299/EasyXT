@@ -319,6 +319,10 @@ class UnifiedDuckDBManager:
             df.columns = df.columns.str.lower()
             df.index.name = 'date'
 
+            # 确保amount列存在
+            if 'amount' not in df.columns and 'volume' in df.columns and 'close' in df.columns:
+                df['amount'] = df['volume'] * df['close']
+
             # 添加元数据
             df['symbol'] = symbol
             df['period'] = period
@@ -437,11 +441,17 @@ class UnifiedDuckDBManager:
                     AND period = '{period}'
                 """)
 
-            # 插入新数据
+            # 插入新数据 - 使用显式列名映射，避免列顺序/数量不匹配
             self.conn.register('data_df', df)
-            self.conn.execute("""
-                INSERT INTO stock_data
-                SELECT * FROM data_df
+            table_columns = ['symbol', 'date', 'period', 'open', 'high', 'low',
+                           'close', 'volume', 'amount', 'turnover', 'pe_ratio',
+                           'pb_ratio', 'market_cap', 'circulating_cap',
+                           'created_at', 'updated_at']
+            df_columns = [c for c in table_columns if c in df.columns]
+            col_list = ', '.join(df_columns)
+            self.conn.execute(f"""
+                INSERT INTO stock_data ({col_list})
+                SELECT {col_list} FROM data_df
             """)
             self.conn.unregister('data_df')
 

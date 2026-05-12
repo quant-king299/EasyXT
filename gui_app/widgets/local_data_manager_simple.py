@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-简化版DuckDB增强组件 - 只在需要时连接
+简化版DuckDB增强组件 - 所有下载按钮走DuckDB
+
+修复：
+- download_stocks/download_bonds 原来走 LocalDataManager+ParquetStorage
+  在 pyarrow 版本过低时保存失败。现在统一走 UnifiedDuckDBManager。
 """
 
 import sys
@@ -32,162 +36,137 @@ from gui_app.widgets.local_data_manager_widget import (
 
 class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
     """
-    本地数据管理GUI组件 - DuckDB增强版（简化）
+    本地数据管理GUI组件 - DuckDB增强版
 
     策略：
-    - UI界面：完全继承原版（你熟悉的界面）
-    - 存储层：只在下载时使用DuckDB
-    - 避免连接冲突：不在初始化时连接数据库
+    - UI界面：完全继承原版
+    - 下载A股/可转债：走 UnifiedDuckDBManager（绕过 pyarrow 依赖）
+    - 更新/补全：已由原版直接写 DuckDB，无需覆盖
     """
 
     def __init__(self, parent=None):
-        # 初始化标志
         self.duckdb_manager = None
         self.use_duckdb = DUCKDB_AVAILABLE
 
-        # 调用父类初始化（保持原UI）
         _OriginalLocalDataManagerWidget.__init__(self)
 
-        # 不在这里初始化DuckDB，避免连接冲突
         if self.use_duckdb:
-            self.log("✅ DuckDB单文件存储已启用（延迟初始化）")
+            self.log("DuckDB单文件存储已启用（延迟初始化）")
             self.log(f"   数据库: {get_default_db_path()}")
-            self.log("   性能: 查询速度提升100倍")
 
-    def start_download(self):
-        """开始下载 - 使用DuckDB"""
-        if self.use_duckdb:
-            self._start_download_with_duckdb()
-        else:
-            super().start_download()
+    def _ensure_duckdb_manager(self):
+        """确保 DuckDB 管理器已创建"""
+        if not self.duckdb_manager:
+            db_path = get_default_db_path()
+            self.duckdb_manager = UnifiedDuckDBManager(db_path)
+            self.log("DuckDB管理器已创建")
+        return self.duckdb_manager
 
-    def _start_download_with_duckdb(self):
-        """使用DuckDB下载"""
+    def _get_stock_list(self):
+        """获取全部A股列表（排除ETF和基金）"""
         try:
-            # 只在需要时创建DuckDB管理器
-            if not self.duckdb_manager:
-                db_path = get_default_db_path()
-                self.duckdb_manager = UnifiedDuckDBManager(db_path)
-                self.log("✅ DuckDB管理器已创建")
-
-            # 获取参数
-            if hasattr(self, 'stock_list_edit'):
-                symbols_str = self.stock_list_edit.text().strip()
-            else:
-                symbols_str = ""
-
-            if symbols_str:
-                symbols = [s.strip() for s in symbols_str.split(',') if s.strip()]
-            else:
-                symbols = []
-
-            if hasattr(self, 'start_date_edit'):
-                start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
-                end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
-            else:
-                start_date = '2024-01-01'
-                end_date = datetime.now().strftime('%Y-%m-%d')
-
-            if hasattr(self, 'data_source_combo'):
-                data_source = self.data_source_combo.currentText()
-            else:
-                data_source = 'qmt'
-
-            if not symbols:
-                from PyQt5.QtWidgets import QMessageBox
-                reply = QMessageBox.question(
-                    self, "确认", "未指定股票列表，是否下载测试数据（几只股票）？",
-                    QMessageBox.Yes | QMessageBox.No
-                )
-                if reply == QMessageBox.Yes:
-                    symbols = ['000001.SZ', '600000.SH']
-                    self.stock_list_edit.setText('000001.SZ,600000.SH')
-                else:
-                    return
-
-            # 清空日志
-            if hasattr(self, 'log_text'):
-                self.log_text.clear()
-
-            # 创建DuckDB下载线程
-            self.download_thread = DuckDBDataDownloadThread(
-                self.duckdb_manager,
-                'download',
-                symbols,
-                start_date,
-                end_date,
-                '1d',  # period
-                'none',  # adjust_type
-                data_source
-            )
-
-            # 连接信号
-            self.download_thread.log_signal.connect(self.log)
-            self.download_thread.progress_signal.connect(self.update_progress)
-            self.download_thread.finished_signal.connect(self.download_finished)
-            self.download_thread.error_signal.connect(self.download_error)
-
-            # 禁用按钮
-            if hasattr(self, 'download_btn'):
-                self.download_btn.setEnabled(False)
-            if hasattr(self, 'stop_btn'):
-                self.stop_btn.setEnabled(True)
-
-            # 开始下载
-            self.download_thread.start()
-
-        except Exception as e:
-            self.log(f"❌ DuckDB下载失败: {e}")
-            from PyQt5.QtWidgets import QMessageBox
-            QMessageBox.critical(self, "错误", f"DuckDB下载失败: {e}\n将使用原版方式")
-
-    def update_progress(self, current, total):
-        """更新进度"""
-        if hasattr(self, 'progress_bar'):
+            import easy_xt
+            api = easy_xt.get_api()
             try:
-                # 检查参数类型，过滤掉日志消息
-                if isinstance(current, str) or isinstance(total, str):
-                    # 如果是字符串，说明是日志消息，跳过进度更新
-                    return
-
-                # 数字类型才更新进度
-                if isinstance(current, (int, float)) and isinstance(total, (int, float)):
-                    self.progress_bar.setMaximum(int(total))
-                    self.progress_bar.setValue(int(current))
-            except (ValueError, TypeError):
-                # 如果转换失败，忽略此进度更新
+                api.init_data()
+            except Exception:
                 pass
 
-    def download_finished(self, result):
-        """下载完成"""
-        success = result.get('success', 0)
-        total = result.get('total', 0)
+            from xtquant import xtdata
+            stock_list = xtdata.get_stock_list_in_sector('沪深A股')
+            if not stock_list:
+                return []
 
-        self.log(f"\n✅ 任务完成！成功: {success}/{total}")
-        self.log(f"💾 存储位置: {get_default_db_path()}")
+            etf_patterns = ('51', '159', '150', '588', '50', '56', '58')
+            return [s for s in stock_list if not s.startswith(etf_pattern)
+                    for etf_pattern in etf_pattern] if False else \
+                   [s for s in stock_list
+                    if not any(s.startswith(p) for p in etf_pattern)]
+        except Exception as e:
+            self.log(f"获取股票列表失败: {e}")
+            return []
 
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.information(
-            self, "完成", f"下载完成！\n成功: {success}/{total}\n存储: DuckDB单文件"
+    def _get_bond_list(self):
+        """获取可转债列表"""
+        try:
+            from xtquant import xtdata
+            bond_list = xtdata.get_stock_list_in_sector('可转债')
+            return bond_list if bond_list else []
+        except Exception as e:
+            self.log(f"获取可转债列表失败: {e}")
+            return []
+
+    # ===== 覆盖下载按钮方法 =====
+
+    def download_stocks(self):
+        """下载A股数据 - 使用DuckDB"""
+        if not self.use_duckdb:
+            return super().download_stocks()
+
+        if self.download_thread and self.download_thread.isRunning():
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "提示", "已有下载任务正在运行")
+            return
+
+        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+
+        self.log(f"开始下载A股数据 ({start_date} ~ {end_date})")
+
+        # 获取股票列表
+        self.log("正在获取A股列表...")
+        symbols = self._get_stock_list()
+        if not symbols:
+            self.log("获取股票列表失败，使用默认列表")
+            symbols = ['000001.SZ', '600000.SH', '600519.SH']
+        self.log(f"获取到 {len(symbols)} 只A股")
+
+        # 创建DuckDB下载线程
+        manager = self._ensure_duckdb_manager()
+        self.download_thread = DuckDBDataDownloadThread(
+            manager, symbols, start_date, end_date
         )
+        self._connect_thread_signals()
+        self.download_thread.start()
+        self._set_download_state(True)
 
-        # 恢复按钮
-        if hasattr(self, 'download_btn'):
-            self.download_btn.setEnabled(True)
-        if hasattr(self, 'stop_btn'):
-            self.stop_btn.setEnabled(False)
+    def download_bonds(self):
+        """下载可转债数据 - 使用DuckDB"""
+        if not self.use_duckdb:
+            return super().download_bonds()
 
-    def download_error(self, error_msg):
-        """下载错误"""
-        self.log(f"\n❌ {error_msg}")
-        from PyQt5.QtWidgets import QMessageBox
-        QMessageBox.critical(self, "错误", error_msg)
+        if self.download_thread and self.download_thread.isRunning():
+            from PyQt5.QtWidgets import QMessageBox
+            QMessageBox.warning(self, "提示", "已有下载任务正在运行")
+            return
 
-        # 恢复按钮
-        if hasattr(self, 'download_btn'):
-            self.download_btn.setEnabled(True)
-        if hasattr(self, 'stop_btn'):
-            self.stop_btn.setEnabled(False)
+        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+
+        self.log(f"开始下载可转债数据 ({start_date} ~ {end_date})")
+
+        # 获取可转债列表
+        self.log("正在获取可转债列表...")
+        symbols = self._get_bond_list()
+        if not symbols:
+            self.log("获取可转债列表失败")
+            return
+        self.log(f"获取到 {len(symbols)} 只可转债")
+
+        manager = self._ensure_duckdb_manager()
+        self.download_thread = DuckDBDataDownloadThread(
+            manager, symbols, start_date, end_date
+        )
+        self._connect_thread_signals()
+        self.download_thread.start()
+        self._set_download_state(True)
+
+    def _connect_thread_signals(self):
+        """连接下载线程信号"""
+        self.download_thread.log_signal.connect(self.log)
+        self.download_thread.progress_signal.connect(self.update_progress)
+        self.download_thread.finished_signal.connect(self.on_download_finished)
+        self.download_thread.error_signal.connect(self.on_download_error)
 
     def log(self, message):
         """输出日志"""
@@ -199,73 +178,82 @@ class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
 
     def closeEvent(self, event):
         """关闭事件"""
-        # 关闭DuckDB管理器
         if self.duckdb_manager:
             try:
                 self.duckdb_manager.close()
-            except:
+            except Exception:
                 pass
-
-        # 调用父类关闭
         try:
             super().closeEvent(event)
-        except:
+        except Exception:
             event.accept()
 
 
 class DuckDBDataDownloadThread(DataDownloadThread):
-    """DuckDB数据下载线程"""
+    """DuckDB数据下载线程 - 绕过 ParquetStorage/pyarrow"""
 
-    def __init__(self, manager, task_type, symbols, start_date, end_date,
+    def __init__(self, manager, symbols, start_date, end_date,
                  period='1d', adjust_type='none', data_source='qmt'):
-        super().__init__(task_type, symbols, start_date, end_date)
+        super().__init__('download', symbols, start_date, end_date)
         self.duckdb_manager = manager
         self.period = period
         self.adjust_type = adjust_type
         self.data_source = data_source
 
     def run(self):
-        """运行下载任务"""
         try:
-            self.log_signal.emit("开始下载数据到DuckDB单文件...")
-            self.log_signal.emit(f"股票数量: {len(self.symbols)}")
+            self.log_signal.emit(f"使用DuckDB存储，股票数量: {len(self.symbols)}")
             self.log_signal.emit(f"日期范围: {self.start_date} ~ {self.end_date}")
-            self.log_signal.emit(f"数据源: {self.data_source}")
 
             success_count = 0
             total = len(self.symbols)
+            failed_list = []
 
             for i, symbol in enumerate(self.symbols):
                 if not self._is_running:
+                    self.log_signal.emit("用户中断下载")
                     break
 
                 try:
                     self.progress_signal.emit(i + 1, total)
 
-                    # 获取数据
                     df = self.duckdb_manager._fetch_from_source(
-                        symbol,
-                        self.start_date,
-                        self.end_date,
-                        self.period,
-                        self.adjust_type,
-                        self.data_source
+                        symbol, self.start_date, self.end_date,
+                        self.period, self.adjust_type, self.data_source
                     )
 
                     if df is not None and not df.empty:
-                        # 保存到DuckDB
-                        self.duckdb_manager.save_data(df, symbol, self.period, self.adjust_type)
+                        self.duckdb_manager.save_data(
+                            df, symbol, self.period, self.adjust_type
+                        )
                         success_count += 1
-                        self.log_signal.emit(f"✓ {symbol} ({len(df)}条记录)")
+                        if (i + 1) % 100 == 0:
+                            self.log_signal.emit(
+                                f"  进度: {i+1}/{total} | 成功: {success_count}"
+                            )
                     else:
-                        self.log_signal.emit(f"✗ {symbol} 数据为空")
+                        failed_list.append(f"{symbol} - 数据为空")
 
                 except Exception as e:
-                    self.log_signal.emit(f"✗ {symbol} 失败: {e}")
+                    failed_list.append(f"{symbol} - {str(e)[:50]}")
 
-            self.log_signal.emit(f"\n下载完成! 成功: {success_count}/{total}")
-            self.log_signal.emit(f"💾 存储位置: {get_default_db_path()}")
-            self.finished_signal.emit({'success': success_count, 'total': total})
+            failed_count = len(failed_list)
+            self.log_signal.emit(
+                f"\n下载完成! 成功: {success_count}/{total}, 失败: {failed_count}"
+            )
+            self.log_signal.emit(f"存储: DuckDB ({get_default_db_path()})")
+
+            if failed_list and len(failed_list) <= 20:
+                self.log_signal.emit("失败清单:")
+                for item in failed_list:
+                    self.log_signal.emit(f"  {item}")
+
+            self.finished_signal.emit({
+                'total': total,
+                'success': success_count,
+                'failed': failed_count,
+                'failed_list': failed_list,
+            })
 
         except Exception as e:
             import traceback
