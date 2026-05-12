@@ -1,6 +1,6 @@
 [build-system]
-requires = ["flit_core >=3.2,<4"]
-build-backend = "flit_core.buildapi"
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "easy-xt"
@@ -26,9 +26,8 @@ Homepage = "https://github.com/quant-king299/EasyXT"
 Source = "https://github.com/quant-king299/EasyXT"
 Documentation = "https://github.com/quant-king299/EasyXT/blob/main/easy_xt/README.md"
 
-[project.scripts]
-# 如需 CLI，可在 easy_xt/cli.py 内实现 main()
-# easyxt-cli = "easy_xt.cli:main"
+[tool.setuptools]
+packages = ["easy_xt"]
 
-[tool.flit.module]
-name = "easy_xt"
+[tool.setuptools.package-dir]
+easy_xt = "."
