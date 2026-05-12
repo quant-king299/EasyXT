@@ -104,7 +104,7 @@ easyxt_backtest OK
 
 4. 验证安装：
    ```bash
-   python -c "from xtquant import datacenter; print('✓ xtquant 安装正确')"
+   python -c "from xtquant import xtdata; print('✓ xtquant 安装正确')"
    ```
 
 **方法 2：一键下载并解压（PowerShell）**

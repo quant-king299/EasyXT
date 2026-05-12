@@ -512,10 +512,10 @@ git submodule update --init
 ##### 验证安装
 
 ```bash
-python -c "from xtquant import datacenter; print('✓ xtquant 安装正确')"
+python -c "from xtquant import xtdata; print('✓ xtquant 安装正确')"
 ```
 
-如果报错 `cannot import name 'datacenter' from 'xtquant'`，说明 xtquant **未安装或版本不完整**。
+如果报错 `No module named 'xtquant'`，说明 xtquant **未安装**。
 
 ##### 一键下载并解压（PowerShell）
 
@@ -614,7 +614,7 @@ Token 获取地址：https://tushare.pro → 注册 → 用户中心 → 接口T
 在开始使用前，请确认以下事项：
 
 - [ ] 已下载并解压特殊版本的 `xtquant`
-- [ ] 验证 `from xtquant import datacenter` 不报错
+- [ ] 验证 `from xtquant import xtdata` 不报错
 - [ ] 已安装 `easy_xt` 核心库（`pip install -e ./easy_xt`）
 - [ ] 如需回测，已设置 PYTHONPATH 指向项目目录
 - [ ] 如需Tushare数据，已配置 Token
@@ -627,7 +627,7 @@ Token 获取地址：https://tushare.pro → 注册 → 用户中心 → 接口T
 
 ```bash
 # 1. 验证 xtquant（如果报错，查看 SETUP_GUIDE.md）
-python -c "from xtquant import datacenter; print('✓ xtquant OK')"
+python -c "from xtquant import xtdata; print('✓ xtquant OK')"
 
 # 2. 验证 easy_xt
 python -c "from easy_xt import get_api; print('✓ easy_xt OK')"

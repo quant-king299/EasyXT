@@ -11,6 +11,11 @@ if sys.platform == 'win32':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
     sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
 
+# 确保项目根目录在 sys.path 中（xtquant 可能放在项目根目录下）
+_project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _project_root not in sys.path:
+    sys.path.insert(0, _project_root)
+
 
 def print_banner():
     """打印横幅"""
@@ -33,26 +38,24 @@ def check_xtquant():
         print(f"  错误信息: {e}")
         return False
 
-    # 检查 2：能否导入 datacenter（关键组件）
+    # 检查 2：能否导入 xtdata（核心数据模块）
     try:
-        from xtquant import datacenter
-        print("✓ xtquant.datacenter 可以导入（关键组件）")
+        from xtquant import xtdata
+        print("✓ xtquant.xtdata 可以导入（核心数据模块）")
     except ImportError as e:
-        print("✗ 无法导入 xtquant.datacenter（文件不完整或版本不匹配）")
+        print("✗ 无法导入 xtquant.xtdata（文件不完整或版本不匹配）")
         print(f"  错误信息: {e}")
         print("\n这是最常见的错误！通常是因为：")
         print("  - GitHub 上的 xtquant 文件不完整（大文件被截断）")
         print("  - 使用了 pip 安装的官方版本（不兼容）")
         return False
 
-    # 检查 3：检查关键文件
+    # 检查 3：能否导入 datacenter（投研版交易组件，可选）
     try:
-        import xtquant.xtdata as xtdata
-        print("✓ xtquant.xtdata 可以导入")
-    except ImportError as e:
-        print("✗ 无法导入 xtquant.xtdata")
-        print(f"  错误信息: {e}")
-        return False
+        from xtquant import datacenter
+        print("✓ xtquant.datacenter 可以导入（投研版交易组件）")
+    except ImportError:
+        print("ℹ xtquant.datacenter 不可用（仅投研版需要，miniQMT 不影响使用）")
 
     print("\n" + "=" * 70)
     print("✓ 所有检查通过！xtquant 安装正确")

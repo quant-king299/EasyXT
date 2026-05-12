@@ -43,7 +43,7 @@
 
 4. 验证安装：
    ```bash
-   python -c "from xtquant import datacenter; print('✓ OK')"
+   python -c "from xtquant import xtdata; print('✓ OK')"
    ```
 
 **方法 2：一键下载并解压（PowerShell）**

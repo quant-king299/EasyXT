@@ -535,7 +535,7 @@ Eastmoney（东方财富）
    ```python
    import os
    print(os.getenv('XTQUANT_PATH'))  # 应该输出路径
-   from xtquant import datacenter  # 不应该报错
+   from xtquant import xtdata  # 不应该报错
    ```
 
 ### 3.5 Jupyter Notebook 配置
@@ -602,7 +602,7 @@ sys.path.insert(0, '项目根目录路径')
 
 ```bash
 # 验证 xtquant
-python -c "from xtquant import datacenter; print('✓ xtquant OK')"
+python -c "from xtquant import xtdata; print('✓ xtquant OK')"
 
 # 验证配置
 python -c "from easy_xt.config import config; config.print_qmt_status()"
