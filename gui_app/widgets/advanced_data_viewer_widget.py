@@ -36,6 +36,8 @@ except ImportError:
     DB_MANAGER_AVAILABLE = False
     FINANCIAL_SAVER_AVAILABLE = False
 
+from config.env_config import get_default_db_path
+
 
 class DataLoadThread(QThread):
     """数据加载线程"""
@@ -378,7 +380,7 @@ class AdvancedDataViewerWidget(QWidget):
         """加载股票列表（支持全局搜索）"""
         try:
             # 检查数据库文件是否存在
-            db_path = r'D:/StockData/stock_data.ddb'
+            db_path = get_default_db_path()
             if not os.path.exists(db_path):
                 # 数据库不存在，显示友好提示而不是错误
                 self.data_stats_label.setText("⚠️ 未找到DuckDB数据库，请先下载数据")
@@ -1097,7 +1099,7 @@ class FinancialDataSaveThread(QThread):
                 self.error_signal.emit("数据库管理器不可用")
                 return
 
-            manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+            manager = get_db_manager(get_default_db_path())
 
             # 创建财务数据保存器
             if not FINANCIAL_SAVER_AVAILABLE:
@@ -1192,7 +1194,7 @@ class BatchFinancialSaveThread(QThread):
                 self.error_signal.emit("数据库模块不可用")
                 return
 
-            manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+            manager = get_db_manager(get_default_db_path())
             saver = FinancialDataSaver(manager)
 
             from xtquant import xtdata
@@ -1322,7 +1324,7 @@ class TickDataLoadThread(QThread):
         try:
             # 首先尝试从DuckDB加载tick数据
             if DB_MANAGER_AVAILABLE:
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+                manager = get_db_manager(get_default_db_path())
 
                 # 解析日期
                 date_obj = datetime.strptime(self.tick_date, '%Y-%m-%d')

@@ -15,6 +15,8 @@ from typing import Dict, Optional, Tuple
 from datetime import datetime, date
 import duckdb
 
+from config.env_config import get_default_db_path
+
 
 class FiveFoldAdjustmentManager:
     """
@@ -35,13 +37,15 @@ class FiveFoldAdjustmentManager:
         'geometric_back': '等比后复权'
     }
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         """
         初始化五维复权管理器
 
         Args:
             duckdb_path: DuckDB 数据库路径
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.con = None
 

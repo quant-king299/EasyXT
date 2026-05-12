@@ -37,6 +37,8 @@ try:
 except ImportError:
     DB_MANAGER_AVAILABLE = False
 
+from config.env_config import get_default_db_path
+
 
 # 专业交易风格样式表
 DARK_THEME_STYLESHEET = """
@@ -236,7 +238,7 @@ class DataLoadThread(QThread):
     def run(self):
         try:
             if DB_MANAGER_AVAILABLE:
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+                manager = get_db_manager(get_default_db_path())
 
                 # 根据复权类型选择列
                 if self.adjust_type == 'none':
@@ -266,7 +268,7 @@ class DataLoadThread(QThread):
 
                 df = manager.execute_read_query(query)
             else:
-                con = duckdb.connect(r'D:/StockData/stock_data.ddb', read_only=True)
+                con = duckdb.connect(get_default_db_path(), read_only=True)
                 df = con.execute("SELECT * FROM stock_daily LIMIT 1").df()
                 con.close()
 
@@ -509,7 +511,7 @@ class AdvancedDataViewer(QWidget):
         """加载股票列表"""
         try:
             # 检查数据库文件是否存在
-            db_path = Path(r'D:/StockData/stock_data.ddb')
+            db_path = Path(get_default_db_path())
             if not db_path.exists():
                 # 数据库不存在，清空表格并显示提示
                 self.stock_table.setRowCount(0)

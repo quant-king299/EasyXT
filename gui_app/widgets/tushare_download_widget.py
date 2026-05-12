@@ -30,6 +30,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from config.env_config import get_default_db_path
+
 
 class TushareDownloadThread(QThread):
     """Tushare下载线程"""
@@ -58,7 +60,7 @@ class TushareDownloadThread(QThread):
     def _get_db_path(self):
         """获取DuckDB数据库路径（自动检测）"""
         common_paths = [
-            'D:/StockData/stock_data.ddb',
+            get_default_db_path(),
             'C:/StockData/stock_data.ddb',
             'E:/StockData/stock_data.ddb',
             './data/stock_data.ddb',
@@ -67,7 +69,7 @@ class TushareDownloadThread(QThread):
             abs_path = os.path.abspath(path)
             if os.path.exists(abs_path):
                 return abs_path
-        return 'D:/StockData/stock_data.ddb'
+        return get_default_db_path()
 
     def run(self):
         """运行下载任务"""

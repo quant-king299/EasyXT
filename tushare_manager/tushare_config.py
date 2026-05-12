@@ -14,7 +14,13 @@ from typing import Optional
 class TushareConfig:
     """Tushare配置管理器"""
 
-    DEFAULT_DB_PATH = 'D:/StockData/stock_data.ddb'
+    @staticmethod
+    def _default_db_path():
+        try:
+            from config.env_config import get_default_db_path
+            return get_default_db_path()
+        except ImportError:
+            return 'D:/StockData/stock_data.ddb'
 
     def __init__(self, config_path: Optional[str] = None):
         """
@@ -64,7 +70,7 @@ class TushareConfig:
         # 合并配置（环境变量优先级更高）
         default_config = {
             'token': env_token or file_config.get('token', ''),
-            'db_path': self.env_config.duckdb_path if self.env_config else self.DEFAULT_DB_PATH,
+            'db_path': self.env_config.duckdb_path if self.env_config else self._default_db_path(),
             'sync_settings': {
                 'financial_years': 5,
                 'dividend_years': 10
@@ -88,7 +94,7 @@ class TushareConfig:
     @property
     def db_path(self) -> str:
         """获取DuckDB数据库路径"""
-        return self.config.get('db_path', self.DEFAULT_DB_PATH)
+        return self.config.get('db_path', self._default_db_path())
 
     @property
     def financial_years(self) -> int:

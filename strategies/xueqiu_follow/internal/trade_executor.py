@@ -87,7 +87,7 @@ class TradeExecutor:
             self.logger.info("初始化交易执行器...")
             
             # 初始化交易接口
-            userdata_path = self.config.get('userdata_path', 'D:/国金证券QMT交易端/userdata_mini')
+            userdata_path = self.config.get('userdata_path', '')
             session_id = self.config.get('session_id', 'xueqiu_follow')
             
             if not self.trader_api.connect(userdata_path, session_id):

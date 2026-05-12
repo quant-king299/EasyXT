@@ -17,6 +17,8 @@ from typing import Dict, List, Tuple, Optional
 from datetime import datetime, date, timedelta
 import duckdb
 
+from config.env_config import get_default_db_path
+
 
 class TradingCalendar:
     """
@@ -187,13 +189,15 @@ class SmartDataDetector:
     3. 支持断点续传
     """
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         """
         初始化检测器
 
         Args:
             duckdb_path: DuckDB 数据库路径
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.con = None
         self.calendar = TradingCalendar()

@@ -22,6 +22,8 @@ import duckdb
 from typing import Literal
 import warnings
 
+from config.env_config import get_default_db_path
+
 # 复权类型定义
 AdjustType = Literal['none', 'front', 'back', 'geometric_front', 'geometric_back']
 
@@ -292,7 +294,7 @@ def test_adjustment_cache():
     print("复权查询测试（QMT API方案）")
     print("=" * 60)
 
-    db_path = r'D:/StockData/stock_data.ddb'
+    db_path = get_default_db_path()
     cache = AdjustmentCache(db_path)
 
     con = duckdb.connect(db_path)

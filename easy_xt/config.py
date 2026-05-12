@@ -172,6 +172,7 @@ config = Config()
 
 # 尝试从统一配置文件加载配置
 update_config_with_unified_settings(config)
-        
-# 尝试从统一配置文件加载配置
-update_config_with_unified_settings(config)
+
+# 如果配置文件中的路径无效，回退到自动检测
+if not config.get_userdata_path() or not os.path.exists(config.get_userdata_path()):
+    config._detect_qmt_path()

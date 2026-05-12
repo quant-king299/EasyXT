@@ -125,6 +125,8 @@ class EnvConfig:
 
 # 全局配置实例
 _env_config_instance = None
+_default_db_path = None
+_default_stock_root = None
 
 
 def get_env_config() -> EnvConfig:
@@ -133,6 +135,22 @@ def get_env_config() -> EnvConfig:
     if _env_config_instance is None:
         _env_config_instance = EnvConfig()
     return _env_config_instance
+
+
+def get_default_db_path() -> str:
+    """返回 DuckDB 默认路径（从 .env 读取，兜底 D:/StockData/stock_data.ddb）"""
+    global _default_db_path
+    if _default_db_path is None:
+        _default_db_path = get_env_config().duckdb_path
+    return _default_db_path
+
+
+def get_default_stock_root() -> str:
+    """返回数据根目录（从 .env 读取，兜底 D:/StockData）"""
+    global _default_stock_root
+    if _default_stock_root is None:
+        _default_stock_root = get_env_config().stock_data_root
+    return _default_stock_root
 
 
 if __name__ == "__main__":

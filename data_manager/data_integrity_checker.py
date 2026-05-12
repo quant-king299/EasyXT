@@ -22,6 +22,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from smart_data_detector import SmartDataDetector, TradingCalendar
 
+from config.env_config import get_default_db_path
+
 
 class DataQualityReport:
     """数据质量报告"""
@@ -67,13 +69,15 @@ class DataIntegrityChecker:
     4. 生成完整性报告
     """
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         """
         初始化检查器
 
         Args:
             duckdb_path: DuckDB 数据库路径
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.con = None
         self.detector = SmartDataDetector(duckdb_path)

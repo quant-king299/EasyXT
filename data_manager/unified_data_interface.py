@@ -15,6 +15,8 @@ from datetime import datetime, timedelta
 import warnings
 warnings.filterwarnings('ignore')
 
+from config.env_config import get_default_db_path
+
 class UnifiedDataInterface:
     """
     统一数据接口
@@ -27,13 +29,15 @@ class UnifiedDataInterface:
     5. 支持5种复权类型（通过QMT API按需获取，不预存复权列）
     """
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         """
         初始化统一数据接口
 
         Args:
             duckdb_path: DuckDB数据库路径
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.con = None
         self.qmt_available = False
@@ -1056,7 +1060,7 @@ def get_stock_data(
     end_date: str,
     period: str = '1d',
     adjust: str = 'none',
-    duckdb_path: str = r'D:/StockData/stock_data.ddb'
+    duckdb_path: str = None
 ) -> pd.DataFrame:
     """
     便捷函数：获取股票数据（统一入口）
@@ -1072,6 +1076,8 @@ def get_stock_data(
     Returns:
         DataFrame: OHLCV数据
     """
+    if duckdb_path is None:
+        duckdb_path = get_default_db_path()
     interface = UnifiedDataInterface(duckdb_path=duckdb_path)
     interface.connect()
 

@@ -21,6 +21,8 @@ try:
 except ImportError:
     DUCKDB_AVAILABLE = False
 
+from config.env_config import get_default_db_path
+
 # 导入原版组件
 from gui_app.widgets.local_data_manager_widget import (
     LocalDataManagerWidget as _OriginalLocalDataManagerWidget,
@@ -49,7 +51,7 @@ class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
         # 不在这里初始化DuckDB，避免连接冲突
         if self.use_duckdb:
             self.log("✅ DuckDB单文件存储已启用（延迟初始化）")
-            self.log("   数据库: D:/StockData/stock_data.ddb")
+            self.log(f"   数据库: {get_default_db_path()}")
             self.log("   性能: 查询速度提升100倍")
 
     def start_download(self):
@@ -64,7 +66,7 @@ class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
         try:
             # 只在需要时创建DuckDB管理器
             if not self.duckdb_manager:
-                db_path = 'D:/StockData/stock_data.ddb'
+                db_path = get_default_db_path()
                 self.duckdb_manager = UnifiedDuckDBManager(db_path)
                 self.log("✅ DuckDB管理器已创建")
 
@@ -162,7 +164,7 @@ class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
         total = result.get('total', 0)
 
         self.log(f"\n✅ 任务完成！成功: {success}/{total}")
-        self.log(f"💾 存储位置: D:/StockData/stock_data.ddb")
+        self.log(f"💾 存储位置: {get_default_db_path()}")
 
         from PyQt5.QtWidgets import QMessageBox
         QMessageBox.information(
@@ -262,7 +264,7 @@ class DuckDBDataDownloadThread(DataDownloadThread):
                     self.log_signal.emit(f"✗ {symbol} 失败: {e}")
 
             self.log_signal.emit(f"\n下载完成! 成功: {success_count}/{total}")
-            self.log_signal.emit(f"💾 存储位置: D:/StockData/stock_data.ddb")
+            self.log_signal.emit(f"💾 存储位置: {get_default_db_path()}")
             self.finished_signal.emit({'success': success_count, 'total': total})
 
         except Exception as e:

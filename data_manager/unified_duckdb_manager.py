@@ -27,6 +27,8 @@ from typing import List, Dict, Optional, Union, Tuple
 import logging
 import warnings
 
+from config.env_config import get_default_db_path
+
 try:
     import duckdb
     DUCKDB_AVAILABLE = True
@@ -48,7 +50,7 @@ class UnifiedDuckDBManager:
     使用示例：
     ```python
     # 创建管理器
-    manager = UnifiedDuckDBManager('D:/StockData/stock_data.ddb')
+    manager = UnifiedDuckDBManager()
 
     # 下载数据（只存储不复权数据）
     manager.download_data(['000001.SZ', '600000.SH'], '2020-01-01', '2024-12-31')
@@ -72,7 +74,7 @@ class UnifiedDuckDBManager:
     ADJUST_QFQ = 'qfq'    # 前复权（实时计算）
     ADJUST_HFQ = 'hfq'    # 后复权（实时计算）
 
-    def __init__(self, db_path: str = 'D:/StockData/stock_data.ddb',
+    def __init__(self, db_path: str = None,
                  threads: int = 4, memory_limit: str = '4GB'):
         """
         初始化DuckDB数据管理器
@@ -82,6 +84,8 @@ class UnifiedDuckDBManager:
             threads: DuckDB线程数
             memory_limit: 内存限制
         """
+        if db_path is None:
+            db_path = get_default_db_path()
         if not DUCKDB_AVAILABLE:
             raise ImportError("DuckDB未安装，请运行: pip install duckdb")
 
@@ -845,7 +849,7 @@ class UnifiedDuckDBManager:
 
 
 # 便捷函数
-def get_duckdb_manager(db_path: str = 'D:/StockData/stock_data.ddb') -> UnifiedDuckDBManager:
+def get_duckdb_manager(db_path: str = None) -> UnifiedDuckDBManager:
     """
     获取DuckDB数据管理器实例
 
@@ -855,6 +859,8 @@ def get_duckdb_manager(db_path: str = 'D:/StockData/stock_data.ddb') -> UnifiedD
     Returns:
         UnifiedDuckDBManager实例
     """
+    if db_path is None:
+        db_path = get_default_db_path()
     return UnifiedDuckDBManager(db_path)
 
 
@@ -869,7 +875,7 @@ if __name__ == '__main__':
     print("="*70)
 
     # 创建管理器
-    manager = UnifiedDuckDBManager('D:/StockData/stock_data.ddb')
+    manager = UnifiedDuckDBManager(get_default_db_path())
 
     # 测试下载
     print("\n[测试1] 下载不复权数据...")

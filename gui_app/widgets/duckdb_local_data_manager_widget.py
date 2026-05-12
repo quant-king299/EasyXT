@@ -34,6 +34,8 @@ project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+from config.env_config import get_default_db_path
+
 # 导入统一DuckDB管理器
 try:
     from data_manager.unified_duckdb_manager import UnifiedDuckDBManager
@@ -196,7 +198,7 @@ class DuckDBLocalDataManagerWidget(QWidget):
 
         # 数据库路径
         settings_layout.addWidget(QLabel("数据库路径:"), 0, 0)
-        self.db_path_edit = QLineEdit("D:/StockData/stock_data.ddb")
+        self.db_path_edit = QLineEdit(get_default_db_path())
         settings_layout.addWidget(self.db_path_edit, 0, 1)
 
         browse_btn = QPushButton("浏览...")

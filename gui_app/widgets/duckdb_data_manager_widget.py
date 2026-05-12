@@ -177,7 +177,8 @@ class DuckDBDataManagerWidget(QWidget):
     def __init__(self):
         super().__init__()
 
-        self.duckdb_path = r'D:/StockData/stock_data.ddb'
+        from config.env_config import get_default_db_path
+        self.duckdb_path = get_default_db_path()
         self.con = None
 
         self.init_ui()

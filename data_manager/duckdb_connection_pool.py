@@ -12,6 +12,8 @@ from contextlib import contextmanager
 from typing import Optional
 from pathlib import Path
 
+from config.env_config import get_default_db_path
+
 
 class DuckDBConnectionManager:
     """
@@ -27,7 +29,7 @@ class DuckDBConnectionManager:
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __new__(cls, duckdb_path: str = None):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
@@ -35,10 +37,12 @@ class DuckDBConnectionManager:
                     cls._instance._initialized = False
         return cls._instance
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         if self._initialized:
             return
 
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self._write_lock = threading.Lock()
         self._connection_count = 0
@@ -262,10 +266,12 @@ class DuckDBConnectionManager:
 _db_manager = None
 
 
-def get_db_manager(duckdb_path: str = r'D:/StockData/stock_data.ddb') -> DuckDBConnectionManager:
+def get_db_manager(duckdb_path: str = None) -> DuckDBConnectionManager:
     """获取数据库管理器单例"""
     global _db_manager
     if _db_manager is None:
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         _db_manager = DuckDBConnectionManager(duckdb_path)
     return _db_manager
 

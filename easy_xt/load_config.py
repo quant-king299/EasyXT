@@ -80,8 +80,11 @@ def update_config_with_unified_settings(config_instance) -> bool:
                 if os.path.exists(qmt_path):
                     config_instance.settings['trade']['userdata_path'] = qmt_path
                     config_instance.settings['qmt']['detected_path'] = os.path.dirname(qmt_path)
+                else:
+                    print(f"[WARN] 配置文件中的QMT路径不存在: {qmt_path}，将尝试自动检测")
             else:
                 # 否则使用原始逻辑设置QMT路径
-                config_instance.set_qmt_path(qmt_path)
+                if not config_instance.set_qmt_path(qmt_path):
+                    print(f"[WARN] 配置文件中的QMT路径无效: {qmt_path}，将尝试自动检测")
     
     return True

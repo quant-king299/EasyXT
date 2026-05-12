@@ -13,6 +13,8 @@ from datetime import datetime, timedelta
 import time
 import pandas as pd
 
+from config.env_config import get_default_db_path
+
 # 添加项目路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -36,13 +38,15 @@ class UniversalDataImporter:
     6. 断点续传
     """
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
+    def __init__(self, duckdb_path: str = None):
         """
         初始化通用导入器
 
         Args:
             duckdb_path: DuckDB数据库路径
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.interface = UnifiedDataInterface(duckdb_path=duckdb_path)
         self.board_loader = BoardStocksLoader()

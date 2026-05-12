@@ -31,6 +31,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from smart_data_detector import TradingCalendar
 import pandas as pd
 
+from config.env_config import get_default_db_path
+
 
 # 配置日志
 logging.basicConfig(
@@ -56,7 +58,7 @@ class AutoDataUpdater:
     """
 
     def __init__(self,
-                 duckdb_path: str = r'D:/StockData/stock_data.ddb',
+                 duckdb_path: str = None,
                  update_time: str = '15:30'):
         """
         初始化自动更新器
@@ -65,6 +67,8 @@ class AutoDataUpdater:
             duckdb_path: DuckDB 数据库路径
             update_time: 每日更新时间（默认 15:30，收盘后）
         """
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.update_time = update_time
         self.calendar = TradingCalendar()

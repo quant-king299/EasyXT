@@ -45,6 +45,8 @@ try:
 except ImportError:
     BATCH_SAVE_AVAILABLE = False
 
+from config.env_config import get_default_db_path, get_default_stock_root
+
 
 class DataDownloadThread(QThread):
     """数据下载线程"""
@@ -93,7 +95,7 @@ class DataDownloadThread(QThread):
             manager = LocalDataManager(
                 config={
                     'data_paths': {
-                        'root_dir': 'D:/StockData',
+                        'root_dir': get_default_stock_root(),
                         'raw_data': 'raw',
                         'metadata': 'metadata.db'
                     },
@@ -323,7 +325,7 @@ class DataDownloadThread(QThread):
             self.log_signal.emit("📋 正在检测缺失数据...")
 
             # 获取DuckDB管理器
-            manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+            manager = get_db_manager(get_default_db_path())
 
             # 查找需要更新的股票（任何缺失数据的股票）
             # 策略：自动检测每只股票的最新日期，补充从该日期之后的所有缺失数据
@@ -624,7 +626,7 @@ class DataDownloadThread(QThread):
             end_dt = pd.to_datetime(end_date, format='%Y%m%d')
 
             # 获取DuckDB管理器
-            manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+            manager = get_db_manager(get_default_db_path())
 
             # 查询所有股票及其最早日期（排除ETF和基金）
             query = """
@@ -940,7 +942,7 @@ class SingleStockDownloadThread(QThread):
             # 检查DuckDB管理器是否可用
             try:
                 from data_manager.duckdb_connection_pool import get_db_manager
-                manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+                manager = get_db_manager(get_default_db_path())
                 self.log_signal.emit(f"[OK] 数据管理器初始化成功")
             except ImportError:
                 self.error_signal.emit("DuckDB管理器不可用，请确保data_manager.duckdb_connection_pool模块存在")
@@ -1227,7 +1229,7 @@ class VerifyDataThread(QThread):
         try:
             import duckdb
 
-            db_path = r'D:/StockData/stock_data.ddb'
+            db_path = get_default_db_path()
             con = duckdb.connect(db_path, read_only=True)
 
             # 检查1分钟数据
@@ -2084,7 +2086,7 @@ class LocalDataManagerWidget(QWidget):
             import duckdb
             from pathlib import Path
 
-            db_path = Path(r'D:/StockData/stock_data.ddb')
+            db_path = Path(get_default_db_path())
 
             # 检查数据库文件是否存在
             if not db_path.exists():
@@ -2097,7 +2099,7 @@ class LocalDataManagerWidget(QWidget):
                 self.log("   3. 等待下载完成（首次可能需要几小时）")
                 self.log("")
                 self.log("💡 提示：下载过程可以最小化窗口，不影响使用")
-                self.log("💡 数据存储位置：D:/StockData/stock_data.ddb")
+                self.log(f"💡 数据存储位置：{get_default_db_path()}")
                 self.total_symbols_label.setText("标的总数: 0")
                 self.total_stocks_label.setText("股票数量: 0")
                 self.total_bonds_label.setText("可转债数量: 0")
@@ -2951,7 +2953,7 @@ class DataViewerDialog(QDialog):
             log_buffer = io.StringIO()
 
             # DuckDB数据库路径
-            db_path = Path('D:/StockData/stock_data.ddb')
+            db_path = Path(get_default_db_path())
 
             if not db_path.exists():
                 self.stats_label.setText(f"❌ 数据库不存在: {db_path}")
