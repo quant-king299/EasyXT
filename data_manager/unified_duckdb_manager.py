@@ -132,8 +132,12 @@ class UnifiedDuckDBManager:
 
             # 检查表是否存在
             tables = self.conn.execute("SHOW TABLES").fetchdf()
-            if 'stock_data' not in tables['name'].values:
+            table_names = tables['name'].values
+            if 'stock_data' not in table_names:
                 self._create_tables()
+            elif 'stock_daily' not in table_names:
+                # stock_data 存在但 stock_daily VIEW 缺失，补建 VIEW
+                self._ensure_stock_daily_view()
 
         except Exception as e:
             logger.warning(f"数据库初始化警告: {e}")
@@ -178,23 +182,36 @@ class UnifiedDuckDBManager:
         """)
 
         # 创建兼容性视图（为旧GUI代码提供表名兼容）
-        # 注意：旧表可能包含adjust_type字段，这里提供兼容
-        self.conn.execute("""
-            CREATE VIEW stock_daily AS
-            SELECT
-                symbol,
-                date,
-                period,
-                'none' as adjust_type,   -- 固定为none（不复权）
-                open, high, low, close, volume, amount,
-                turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
-                created_at, updated_at
-            FROM stock_data
-        """)
+        # 映射：symbol → stock_code, 补充 symbol_type/adjust_type/factor
+        try:
+            tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
+            if 'stock_daily' not in tables:
+                self.conn.execute("""
+                    CREATE VIEW stock_daily AS
+                    SELECT
+                        symbol as stock_code,
+                        CASE
+                            WHEN symbol LIKE '11%' OR symbol LIKE '12%' OR symbol LIKE '13%' THEN 'bond'
+                            ELSE 'stock'
+                        END as symbol_type,
+                        date,
+                        period,
+                        open, high, low, close, volume, amount,
+                        'none' as adjust_type,
+                        1.0 as factor,
+                        turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
+                        created_at, updated_at
+                    FROM stock_data
+                """)
+                logger.info("已创建 stock_daily 兼容性视图")
+            else:
+                logger.info("stock_daily 已存在（TABLE或VIEW），跳过创建")
+        except Exception as e:
+            logger.warning(f"创建 stock_daily 视图时跳过: {e}")
 
-        # 创建stock_market_cap视图（如果需要）
+        # 创建stock_market_cap视图
         self.conn.execute("""
-            CREATE VIEW stock_market_cap AS
+            CREATE OR REPLACE VIEW stock_market_cap AS
             SELECT
                 symbol as stock_code,
                 date,
@@ -213,6 +230,33 @@ class UnifiedDuckDBManager:
         self.conn.execute("CREATE INDEX idx_period ON stock_data(period)")
 
         logger.info("数据表创建完成（仅存储不复权数据）")
+
+    def _ensure_stock_daily_view(self):
+        """确保 stock_daily 兼容性视图存在"""
+        try:
+            tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
+            if 'stock_daily' in tables:
+                return
+            self.conn.execute("""
+                CREATE VIEW stock_daily AS
+                SELECT
+                    symbol as stock_code,
+                    CASE
+                        WHEN symbol LIKE '11%' OR symbol LIKE '12%' OR symbol LIKE '13%' THEN 'bond'
+                        ELSE 'stock'
+                    END as symbol_type,
+                    date,
+                    period,
+                    open, high, low, close, volume, amount,
+                    'none' as adjust_type,
+                    1.0 as factor,
+                    turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
+                    created_at, updated_at
+                FROM stock_data
+            """)
+            logger.info("已补建 stock_daily 兼容性视图")
+        except Exception as e:
+            logger.warning(f"创建 stock_daily 视图失败（非致命）: {e}")
 
     def download_data(self, symbols: Union[str, List[str]],
                      start_date: str, end_date: str,

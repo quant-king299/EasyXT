@@ -2080,17 +2080,24 @@ class LocalDataManagerWidget(QWidget):
         cursor.movePosition(QTextCursor.End)
         self.log_text.setTextCursor(cursor)
 
+    def _get_duckdb_connection(self):
+        """获取DuckDB连接，子类可override复用已有连接"""
+        import duckdb
+        from pathlib import Path
+        db_path = Path(get_default_db_path())
+        if not db_path.exists():
+            return None
+        return duckdb.connect(str(db_path), read_only=False)
+
     def load_duckdb_statistics(self):
         """从DuckDB加载统计数据"""
         try:
-            import duckdb
             from pathlib import Path
 
             db_path = Path(get_default_db_path())
 
             # 检查数据库文件是否存在
             if not db_path.exists():
-                # 首次使用，数据库文件不存在是正常的
                 self.log("ℹ️  DuckDB数据库尚未创建，请先下载股票数据")
                 self.log("")
                 self.log("🚀 推荐操作流程：")
@@ -2108,39 +2115,63 @@ class LocalDataManagerWidget(QWidget):
                 self.latest_date_label.setText("最新日期: N/A")
                 return
 
-            con = duckdb.connect(str(db_path), read_only=True)
+            con = self._get_duckdb_connection()
+            if con is None:
+                return
 
-            # 统计stock_daily表
-            stats_daily = con.execute("""
-                SELECT
-                    COUNT(DISTINCT stock_code) as stock_count,
-                    SUM(CASE WHEN symbol_type = 'stock' THEN 1 ELSE 0 END) as stock_only,
-                    SUM(CASE WHEN symbol_type = 'etf' THEN 1 ELSE 0 END) as etf_count,
-                    COUNT(*) as total_records,
-                    MAX(date) as latest_date
-                FROM stock_daily
-            """).fetchone()
+            try:
+                # 检测表结构：优先使用stock_daily（VIEW或TABLE），其次stock_data
+                tables = [row[0] for row in con.execute("SHOW TABLES").fetchall()]
 
-            # 统计所有分钟数据表
-            minute_tables = ['stock_1m', 'stock_5m', 'stock_15m', 'stock_30m', 'stock_60m']
-            minute_records = 0
-            minute_stocks = set()
+                if 'stock_daily' in tables:
+                    # stock_daily 存在（VIEW或TABLE），直接查询
+                    cols = [row[0] for row in con.execute("DESCRIBE stock_daily").fetchall()]
+                    code_col = 'stock_code' if 'stock_code' in cols else 'symbol'
+                    has_symbol_type = 'symbol_type' in cols
 
-            for table in minute_tables:
-                try:
-                    result = con.execute(f"""
+                    if has_symbol_type:
+                        symbol_type_expr = "SUM(CASE WHEN symbol_type = 'stock' THEN 1 ELSE 0 END)"
+                    else:
+                        symbol_type_expr = "COUNT(*)"
+
+                    stats_daily = con.execute(f"""
                         SELECT
-                            COUNT(DISTINCT stock_code) as cnt,
-                            COUNT(*) as records
-                        FROM {table}
+                            COUNT(DISTINCT {code_col}) as stock_count,
+                            {symbol_type_expr} as stock_only,
+                            0 as etf_count,
+                            COUNT(*) as total_records,
+                            MAX(date) as latest_date
+                        FROM stock_daily
                     """).fetchone()
-                    if result:
-                        minute_stocks.update(con.execute(f"SELECT DISTINCT stock_code FROM {table}").fetchall())
-                        minute_records += result[1]
-                except:
-                    pass
+                elif 'stock_data' in tables:
+                    # 只有 stock_data 表，没有 stock_daily VIEW
+                    stats_daily = con.execute("""
+                        SELECT
+                            COUNT(DISTINCT symbol) as stock_count,
+                            COUNT(*) as stock_only,
+                            0 as etf_count,
+                            COUNT(*) as total_records,
+                            MAX(date) as latest_date
+                        FROM stock_data
+                    """).fetchone()
+                else:
+                    # 没有找到数据表
+                    self.log("ℹ️  数据库中没有数据表，请先下载股票数据")
+                    return
 
-            con.close()
+                # 统计所有分钟数据表
+                minute_tables = ['stock_1m', 'stock_5m', 'stock_15m', 'stock_30m', 'stock_60m']
+                minute_records = 0
+
+                for table in minute_tables:
+                    try:
+                        count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                        if count:
+                            minute_records += count[0]
+                    except:
+                        pass
+            finally:
+                con.close()
 
             # 更新UI
             total_symbols = stats_daily[0] if stats_daily else 0
@@ -2150,7 +2181,7 @@ class LocalDataManagerWidget(QWidget):
             latest_date = str(stats_daily[4]) if stats_daily and stats_daily[4] else 'N/A'
 
             total_records = daily_records + minute_records
-            total_bonds = 0  # 暂时没有可转债数据
+            total_bonds = 0
 
             # 估算存储大小（每条记录约0.1KB）
             size_mb = total_records * 0.0001
