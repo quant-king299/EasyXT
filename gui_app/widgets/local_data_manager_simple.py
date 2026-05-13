@@ -179,10 +179,8 @@ class LocalDataManagerWidget(_OriginalLocalDataManagerWidget):
                 return []
 
             etf_patterns = ('51', '159', '150', '588', '50', '56', '58')
-            return [s for s in stock_list if not s.startswith(etf_pattern)
-                    for etf_pattern in etf_pattern] if False else \
-                   [s for s in stock_list
-                    if not any(s.startswith(p) for p in etf_pattern)]
+            return [s for s in stock_list
+                    if not any(s.startswith(p) for p in etf_patterns)]
         except Exception as e:
             self.log(f"获取股票列表失败: {e}")
             return []
