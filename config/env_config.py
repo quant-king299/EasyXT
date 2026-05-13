@@ -115,12 +115,14 @@ class EnvConfig:
     @property
     def duckdb_path(self) -> str:
         """获取 DuckDB 数据库路径"""
-        return self.get('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+        default = str(Path(__file__).parent.parent / 'data' / 'stock_data.ddb')
+        return self.get('DUCKDB_PATH', default)
 
     @property
     def stock_data_root(self) -> str:
         """获取数据根目录路径"""
-        return self.get('STOCK_DATA_ROOT', 'D:/StockData')
+        default = str(Path(__file__).parent.parent / 'data')
+        return self.get('STOCK_DATA_ROOT', default)
 
 
 # 全局配置实例

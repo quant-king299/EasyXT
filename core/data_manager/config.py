@@ -137,28 +137,30 @@ class DataManagerConfig:
         Returns:
             Optional[str]: 找到的DuckDB路径，未找到返回None
         """
+        # 项目根目录下的 data/stock_data.ddb
+        project_root = Path(__file__).parent.parent.parent
+        project_db = project_root / 'data' / 'stock_data.ddb'
+
         # 常见路径列表（按优先级）
         possible_paths = [
+            str(project_db),               # 项目目录（最优先）
             'D:/StockData/stock_data.ddb',  # Windows D盘
             'C:/StockData/stock_data.ddb',  # Windows C盘
             'E:/StockData/stock_data.ddb',  # Windows E盘
-            './data/stock_data.ddb',        # 项目相对路径
             '~/StockData/stock_data.ddb',   # 用户主目录
-            '../stock_data.ddb',            # 项目上级目录
         ]
 
         for path in possible_paths:
-            # 展开 ~
             expanded_path = os.path.expanduser(path)
-            # 转为绝对路径
             abs_path = os.path.abspath(expanded_path)
 
             if os.path.exists(abs_path):
                 print(f"[Config] 自动检测到DuckDB数据库: {abs_path}")
                 return abs_path
 
-        # 未找到DuckDB文件
-        return None
+        # 未找到已有文件，返回项目目录路径（首次会自动创建）
+        print(f"[Config] 使用默认路径: {project_db}")
+        return str(project_db)
 
     def _detect_available_sources(self) -> List[str]:
         """
