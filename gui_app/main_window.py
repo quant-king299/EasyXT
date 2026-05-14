@@ -65,7 +65,7 @@ from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
 from gui_app.widgets.jq_to_ptrade_widget import JQToPtradeWidget, CONVERTER_AVAILABLE
 from gui_app.widgets.grid_trading_widget import GridTradingWidget
 from gui_app.widgets.conditional_order_widget import ConditionalOrderWidget
-from gui_app.widgets.local_data_manager_simple import LocalDataManagerWidget
+from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
 from gui_app.widgets.duckdb_local_data_manager_widget import DuckDBLocalDataManagerWidget
 from gui_app.widgets.advanced_data_viewer_widget import AdvancedDataViewerWidget
 from gui_app.widgets.tushare_data_widget import TushareDataWidget

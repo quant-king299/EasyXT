@@ -338,9 +338,11 @@ class UnifiedDuckDBManager:
             except:
                 pass
 
-            # 转换日期格式
-            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+            # 转换日期格式（兼容 YYYY-MM-DD 和 YYYYMMDD）
+            start_date_clean = start_date.replace('-', '')
+            end_date_clean = end_date.replace('-', '')
+            start_dt = datetime.strptime(start_date_clean, '%Y%m%d')
+            end_dt = datetime.strptime(end_date_clean, '%Y%m%d')
             days = (end_dt - start_dt).days + 500  # 多取一些确保覆盖
 
             # ⭐ 强制使用不复权数据（QMT API的dividend_type=0表示不复权）
@@ -370,6 +372,7 @@ class UnifiedDuckDBManager:
             # 添加元数据
             df['symbol'] = symbol
             df['period'] = period
+            df['adjust_type'] = 'none'
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
@@ -473,31 +476,37 @@ class UnifiedDuckDBManager:
         if 'updated_at' not in df.columns:
             df['updated_at'] = datetime.now()
 
+        # 先获取表结构（事务外）
+        actual_cols = [row[0] for row in self.conn.execute("DESCRIBE stock_data").fetchall()]
+        df_columns = [c for c in actual_cols if c in df.columns]
+        col_list = ', '.join(df_columns)
+        placeholders = ', '.join(['?'] * len(df_columns))
+        insert_sql = f"INSERT INTO stock_data ({col_list}) VALUES ({placeholders})"
+
         try:
-            # 使用UPSERT更新数据（存在则更新，不存在则插入）
             self.conn.execute("BEGIN TRANSACTION")
 
-            # 删除旧数据
-            if symbol:
+            # 只删除日期范围内的旧数据（增量更新时保留历史数据）
+            if symbol and 'date' in df.columns:
+                min_date = pd.to_datetime(df['date']).min()
+                max_date = pd.to_datetime(df['date']).max()
+                self.conn.execute(f"""
+                    DELETE FROM stock_data
+                    WHERE symbol = '{symbol}'
+                    AND period = '{period}'
+                    AND date >= '{min_date}'
+                    AND date <= '{max_date}'
+                """)
+            elif symbol:
                 self.conn.execute(f"""
                     DELETE FROM stock_data
                     WHERE symbol = '{symbol}'
                     AND period = '{period}'
                 """)
 
-            # 插入新数据 - 使用显式列名映射，避免列顺序/数量不匹配
-            self.conn.register('data_df', df)
-            table_columns = ['symbol', 'date', 'period', 'open', 'high', 'low',
-                           'close', 'volume', 'amount', 'turnover', 'pe_ratio',
-                           'pb_ratio', 'market_cap', 'circulating_cap',
-                           'created_at', 'updated_at']
-            df_columns = [c for c in table_columns if c in df.columns]
-            col_list = ', '.join(df_columns)
-            self.conn.execute(f"""
-                INSERT INTO stock_data ({col_list})
-                SELECT {col_list} FROM data_df
-            """)
-            self.conn.unregister('data_df')
+            # 用参数化插入，避免register/unregister兼容性问题
+            rows = df[df_columns].where(df[df_columns].notna(), None).values.tolist()
+            self.conn.executemany(insert_sql, rows)
 
             self.conn.execute("COMMIT")
 

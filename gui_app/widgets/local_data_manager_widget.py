@@ -393,6 +393,12 @@ class DataDownloadThread(QThread):
                     start_dt = latest_dt + timedelta(days=1)  # 从最新日期的下一天开始
                     end_dt = datetime.now()  # 到今天
 
+                    # 如果只需今天的数据且还没到收盘后（16:00），今天行情尚未生成，跳过
+                    market_closed = end_dt.hour >= 16
+                    if start_dt.date() >= end_dt.date() and not market_closed:
+                        skipped_count += 1
+                        continue
+
                     # 格式化为QMT需要的格式：YYYYMMDD
                     start_time = start_dt.strftime('%Y%m%d')
                     end_time = end_dt.strftime('%Y%m%d')
@@ -495,31 +501,40 @@ class DataDownloadThread(QThread):
                         # 注册临时表
                         con.register('temp_updates', df_all)
 
-                        # 策略：先删除重复数据，再插入新数据
-                        # 修复类型转换问题：明确将temp_updates的date列转换为DATE类型
-                        self.log_signal.emit("  🗑️ 删除重复数据...")
-                        con.execute("""
-                            DELETE FROM stock_daily
-                            WHERE (stock_code, CAST(date AS DATE), period, adjust_type) IN (
-                                SELECT stock_code, CAST(date AS DATE), period, adjust_type
-                                FROM temp_updates
-                            )
-                        """)
+                        # 动态检测目标表（兼容旧版stock_daily TABLE和新版stock_data TABLE）
+                        table_info = con.execute("SELECT table_name, table_type FROM information_schema.tables WHERE table_name IN ('stock_daily', 'stock_data')").fetchall()
+                        daily_is_table = any(name == 'stock_daily' and ttype == 'BASE TABLE' for name, ttype in table_info)
 
-                        # 插入新数据（只插入表结构中存在的列）
-                        self.log_signal.emit("  📝 插入新数据...")
-                        con.execute("""
-                            INSERT INTO stock_daily (
-                                stock_code, symbol_type, date, period,
-                                open, high, low, close, volume, amount,
-                                adjust_type, factor, created_at, updated_at
-                            )
-                            SELECT
-                                stock_code, symbol_type, CAST(date AS DATE), period,
-                                open, high, low, close, volume, amount,
-                                adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                            FROM temp_updates
-                        """)
+                        if daily_is_table:
+                            # 旧版：stock_daily 是真 TABLE，直接写入
+                            self.log_signal.emit("  📝 写入 stock_daily ...")
+                            con.execute("""
+                                INSERT OR REPLACE INTO stock_daily (
+                                    stock_code, symbol_type, date, period,
+                                    open, high, low, close, volume, amount,
+                                    adjust_type, factor, created_at, updated_at
+                                )
+                                SELECT
+                                    stock_code, symbol_type, CAST(date AS DATE), period,
+                                    open, high, low, close, volume, amount,
+                                    adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                FROM temp_updates
+                            """)
+                        else:
+                            # 新版：stock_daily 是 VIEW，写入 stock_data
+                            self.log_signal.emit("  📝 写入 stock_data ...")
+                            con.execute("""
+                                INSERT OR IGNORE INTO stock_data (
+                                    symbol, date, period, adjust_type,
+                                    open, high, low, close, volume, amount,
+                                    created_at, updated_at
+                                )
+                                SELECT
+                                    stock_code, CAST(date AS DATE), period, adjust_type,
+                                    open, high, low, close, volume, amount,
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                FROM temp_updates
+                            """)
 
                         # 注销临时表
                         con.unregister('temp_updates')
@@ -540,18 +555,32 @@ class DataDownloadThread(QThread):
                                 time.sleep(0.5)
                             with manager.get_write_connection() as con:
                                 con.register('temp_batch', df_batch)
-                                con.execute("""
-                                    INSERT INTO stock_daily (
-                                        stock_code, symbol_type, date, period,
-                                        open, high, low, close, volume, amount,
-                                        adjust_type, factor, created_at, updated_at
-                                    )
-                                    SELECT
-                                        stock_code, symbol_type, CAST(date AS DATE), period,
-                                        open, high, low, close, volume, amount,
-                                        adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                                    FROM temp_batch
-                                """)
+                                if daily_is_table:
+                                    con.execute("""
+                                        INSERT OR REPLACE INTO stock_daily (
+                                            stock_code, symbol_type, date, period,
+                                            open, high, low, close, volume, amount,
+                                            adjust_type, factor, created_at, updated_at
+                                        )
+                                        SELECT
+                                            stock_code, symbol_type, CAST(date AS DATE), period,
+                                            open, high, low, close, volume, amount,
+                                            adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                        FROM temp_batch
+                                    """)
+                                else:
+                                    con.execute("""
+                                        INSERT OR IGNORE INTO stock_data (
+                                            symbol, date, period, adjust_type,
+                                            open, high, low, close, volume, amount,
+                                            created_at, updated_at
+                                        )
+                                        SELECT
+                                            stock_code, CAST(date AS DATE), period, adjust_type,
+                                            open, high, low, close, volume, amount,
+                                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                        FROM temp_batch
+                                    """)
                                 con.unregister('temp_batch')
                             success_batches += 1
                             self.log_signal.emit(f"  ✅ 批次 {i//batch_size + 1} 写入成功 ({len(df_batch)} 条)")
@@ -813,26 +842,36 @@ class DataDownloadThread(QThread):
                     df_all = pd.concat(backfill_data, ignore_index=True)
 
                     with manager.get_write_connection() as con:
-                        # 直接插入缺失数据（不删除已有数据）
                         con.register('temp_backfill', df_all)
-                        con.execute("""
-                            INSERT INTO stock_daily (
-                                stock_code, symbol_type, date, period,
-                                open, high, low, close, volume, amount,
-                                adjust_type, factor, created_at, updated_at
-                            )
-                            SELECT
-                                stock_code, symbol_type, CAST(date AS DATE), period,
-                                open, high, low, close, volume, amount,
-                                adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                            FROM temp_backfill
-                            WHERE NOT EXISTS (
-                                SELECT 1 FROM stock_daily sd
-                                WHERE sd.stock_code = temp_backfill.stock_code
-                                AND sd.date = temp_backfill.date
-                                AND sd.period = temp_backfill.period
-                            )
-                        """)
+                        table_info = con.execute("SELECT table_name, table_type FROM information_schema.tables WHERE table_name IN ('stock_daily', 'stock_data')").fetchall()
+                        daily_is_table = any(name == 'stock_daily' and ttype == 'BASE TABLE' for name, ttype in table_info)
+
+                        if daily_is_table:
+                            con.execute("""
+                                INSERT OR REPLACE INTO stock_daily (
+                                    stock_code, symbol_type, date, period,
+                                    open, high, low, close, volume, amount,
+                                    adjust_type, factor, created_at, updated_at
+                                )
+                                SELECT
+                                    stock_code, symbol_type, CAST(date AS DATE), period,
+                                    open, high, low, close, volume, amount,
+                                    adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                FROM temp_backfill
+                            """)
+                        else:
+                            con.execute("""
+                                INSERT OR IGNORE INTO stock_data (
+                                    symbol, date, period, adjust_type,
+                                    open, high, low, close, volume, amount,
+                                    created_at, updated_at
+                                )
+                                SELECT
+                                    stock_code, CAST(date AS DATE), period, adjust_type,
+                                    open, high, low, close, volume, amount,
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                FROM temp_backfill
+                            """)
                         con.unregister('temp_backfill')
 
                     inserted_count = len(df_all)
@@ -1230,7 +1269,7 @@ class VerifyDataThread(QThread):
             import duckdb
 
             db_path = get_default_db_path()
-            con = duckdb.connect(db_path, read_only=True)
+            con = duckdb.connect(db_path, read_only=False)
 
             # 检查1分钟数据
             has_1min = False
