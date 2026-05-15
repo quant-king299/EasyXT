@@ -5,15 +5,14 @@
 提供简洁的 API 用于选股策略回测
 """
 from typing import Dict, List
-from ..engine_v2 import BacktestEngineV2, BacktestResult
+from ..enhanced_backtest_engine import EnhancedBacktestEngine
 
 
 class SelectionBacktestEngine:
     """
     选股策略回测引擎
 
-    使用完全修复的新引擎（基于 Backtrader）
-    所有已知的除零错误都已修复
+    使用增强回测引擎（自研框架，无第三方依赖）
     """
 
     def __init__(self,
@@ -28,8 +27,7 @@ class SelectionBacktestEngine:
             commission: 佣金率
             data_manager: 数据管理器
         """
-        # 使用修复后的新引擎
-        self._engine = BacktestEngineV2(
+        self._engine = EnhancedBacktestEngine(
             initial_cash=initial_cash,
             commission=commission,
             data_manager=data_manager
@@ -38,7 +36,7 @@ class SelectionBacktestEngine:
     def run_backtest(self,
                     strategy,
                     start_date: str,
-                    end_date: str) -> BacktestResult:
+                    end_date: str):
         """
         运行回测
 

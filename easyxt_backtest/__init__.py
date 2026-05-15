@@ -6,8 +6,6 @@ EasyXT 统一回测框架
 - 技术指标策略：双均线、RSI、MACD等
 - 选股策略：小市值、因子策略等
 - 网格策略：固定网格、自适应网格等
-
-统一使用 Backtrader 底层引擎
 """
 
 # 核心模块
@@ -18,8 +16,7 @@ from core.data_manager import HybridDataManager as DataManager
 from .strategy_base import StrategyBase, FactorStrategyBase
 
 # 回测引擎
-from .engine_v2 import BacktestEngineV2, BacktestResult
-from .engine import BacktestEngine as BacktestEngineV1
+from .enhanced_backtest_engine import EnhancedBacktestEngine
 
 # 性能分析
 from .performance import PerformanceAnalyzer
@@ -40,8 +37,8 @@ from .strategies.small_cap_strategy import SmallCapStrategy
 from .strategies.technical import DualMovingAverageStrategy, RSIStrategy, BollingerBandsStrategy
 from .strategies.grid_strategy import GridStrategy, AdaptiveGridStrategy, ATRGridStrategy
 
-# 默认使用选股策略引擎
-BacktestEngine = BacktestEngineV2
+# 默认使用增强回测引擎
+BacktestEngine = EnhancedBacktestEngine
 
 __version__ = '3.0.0'
 
@@ -55,10 +52,8 @@ __all__ = [
     'FactorStrategyBase',
 
     # 回测引擎
-    'BacktestEngine',          # 默认：选股策略引擎
-    'BacktestEngineV1',        # 旧版：自研引擎（保留兼容）
-    'BacktestEngineV2',        # 选股策略引擎
-    'BacktestResult',
+    'BacktestEngine',            # 默认：增强回测引擎
+    'EnhancedBacktestEngine',    # 增强回测引擎（自研框架）
 
     # API
     'TechnicalBacktestEngine',   # 技术指标策略引擎
