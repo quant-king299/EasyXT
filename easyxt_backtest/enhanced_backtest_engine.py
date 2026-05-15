@@ -652,7 +652,7 @@ class EnhancedBacktestEngine:
             # 方法2: 使用 get_price (DataManager / DuckDBDataReader 风格)
             elif hasattr(self.data_manager, 'get_price'):
                 df = self.data_manager.get_price(
-                    codes=symbols,
+                    symbol=symbols,
                     start_date=date,
                     end_date=date
                 )
@@ -789,7 +789,7 @@ class EnhancedBacktestEngine:
             # 方法2: get_price (DataManager 风格，返回合并的 DataFrame)
             elif hasattr(self.data_manager, 'get_price'):
                 df = self.data_manager.get_price(
-                    codes=symbols,
+                    symbol=symbols,
                     start_date=start_date,
                     end_date=end_date
                 )

@@ -271,9 +271,11 @@ def display_backtest_results(results, initial_cash):
 
     print(f"\n⚠️ 风险指标：")
     print(f"  • 最大回撤：{perf['max_drawdown'] * 100:.2f}%")
-    print(f"  • 波动率：{perf['volatility'] * 100:.2f}%")
+    if 'volatility' in perf:
+        print(f"  • 波动率：{perf['volatility'] * 100:.2f}%")
     print(f"  • 夏普比率：{perf['sharpe_ratio']:.2f}")
-    print(f"  • 卡玛比率：{perf.get('calmar_ratio', 0):.2f}")
+    if 'calmar_ratio' in perf:
+        print(f"  • 卡玛比率：{perf['calmar_ratio']:.2f}")
 
     print(f"\n📈 交易统计：")
     print(f"  • 总交易次数：{len(results.trades)} 笔")
