@@ -91,16 +91,15 @@ class DataDownloadThread(QThread):
 
             from data_manager import LocalDataManager
 
-            # 使用DuckDB存储
             manager = LocalDataManager(
                 config={
                     'data_paths': {
                         'root_dir': get_default_stock_root(),
                         'raw_data': 'raw',
-                        'metadata': 'metadata.db'
+                        'metadata': 'stock_data.ddb'
                     },
                     'storage': {
-                        'format': 'duckdb',  # 使用DuckDB存储
+                        'format': 'duckdb',
                         'compression': 'snappy'
                     }
                 }
