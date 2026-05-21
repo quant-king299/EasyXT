@@ -48,7 +48,7 @@ def print_banner():
     
     # 尝试从配置管理器获取启用的组合
     try:
-        from strategies.xueqiu_follow.core.config_manager import ConfigManager
+        from strategies.xueqiu_follow.internal.config_manager import ConfigManager
         config_manager = ConfigManager("strategies/xueqiu_follow/config/unified_config.json")
         config_manager.load_all_configs()  # 确保加载所有配置
         
@@ -324,7 +324,7 @@ async def test_portfolio_data():
     
     # 获取启用组合
     try:
-        from strategies.xueqiu_follow.core.config_manager import ConfigManager
+        from strategies.xueqiu_follow.internal.config_manager import ConfigManager
         config_manager = ConfigManager("strategies/xueqiu_follow/config/unified_config.json")
         config_manager.load_all_configs()
         enabled_portfolios = config_manager.get_enabled_portfolios()
@@ -339,7 +339,7 @@ async def test_portfolio_data():
         
         # 初始化数据采集器
         print("🚀 初始化数据采集器...")
-        from strategies.xueqiu_follow.core.xueqiu_collector_real import XueqiuCollectorReal
+        from strategies.xueqiu_follow.internal.xueqiu_collector_real import XueqiuCollectorReal
         collector = XueqiuCollectorReal()
         
         # 初始化采集器
@@ -400,7 +400,7 @@ async def main():
 
         # 获取启用的组合（使用配置管理器）
         try:
-            from strategies.xueqiu_follow.core.config_manager import ConfigManager
+            from strategies.xueqiu_follow.internal.config_manager import ConfigManager
             config_manager = ConfigManager("strategies/xueqiu_follow/config/unified_config.json")
             config_manager.load_all_configs()  # 确保加载所有配置
             enabled_portfolios = config_manager.get_setting("portfolios", [])
@@ -444,7 +444,7 @@ async def main():
         print("\n🚀 启动雪球跟单系统...")
 
         # 初始化配置管理器，使用真实交易配置
-        from strategies.xueqiu_follow.core.config_manager import ConfigManager
+        from strategies.xueqiu_follow.internal.config_manager import ConfigManager
         config_manager = ConfigManager("strategies/xueqiu_follow/config/unified_config.json")
         
         # 手动设置账户ID到配置管理器
@@ -454,7 +454,7 @@ async def main():
         # 使用统一配置管理器，无需额外加载
         
         # 初始化策略引擎
-        from strategies.xueqiu_follow.core.strategy_engine import StrategyEngine
+        from strategies.xueqiu_follow.internal.strategy_engine import StrategyEngine
         strategy_engine = StrategyEngine(config_manager)
         
         # 初始化策略引擎

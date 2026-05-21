@@ -30,11 +30,11 @@ from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 
 try:
-    from xueqiu_follow.core.xueqiu_collector import XueqiuCollector
+    from xueqiu_follow.internal.xueqiu_collector import XueqiuCollector
     # 直接使用easy_xt的AdvancedTradeAPI
-    from xueqiu_follow.core.risk_manager import RiskManager
-    from xueqiu_follow.core.strategy_engine import StrategyEngine
-    from xueqiu_follow.core.config_manager import ConfigManager
+    from xueqiu_follow.internal.risk_manager import RiskManager
+    from xueqiu_follow.internal.strategy_engine import StrategyEngine
+    from xueqiu_follow.internal.config_manager import ConfigManager
     from xueqiu_follow.start_xueqiu_follow_easyxt import XueqiuFollowSystem, check_qmt_config, test_qmt_connection
     XUEQIU_AVAILABLE = True
 except ImportError:

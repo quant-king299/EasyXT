@@ -13,8 +13,8 @@ from typing import Optional
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from strategies.xueqiu_follow.core.strategy_engine import XueqiuFollowStrategy
-from strategies.xueqiu_follow.core.config_manager import get_config_manager
+from strategies.xueqiu_follow.internal.strategy_engine import XueqiuFollowStrategy
+from strategies.xueqiu_follow.internal.config_manager import get_config_manager
 from strategies.xueqiu_follow.gui.main_window import XueqiuFollowWidget, XueqiuFollowMainWindow
 from strategies.xueqiu_follow.utils.logger import setup_logger
 

@@ -37,7 +37,7 @@ if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
 # 现在可以导入统一路径管理器了
-from core.path_manager import init_paths, get_project_root
+from internal.path_manager import init_paths, get_project_root
 
 # 初始化项目路径（幂等性，会自动添加所有需要的路径）
 init_paths()
@@ -48,7 +48,7 @@ init_paths()
 def ensure_qmt_connection():
     """确保QMT已连接并登录"""
     try:
-        from core.qmt_connection import ensure_qmt_logged_in, get_qmt_status
+        from internal.qmt_connection import ensure_qmt_logged_in, get_qmt_status
 
         print("\n" + "=" * 60)
         print("QMT连接检查")
