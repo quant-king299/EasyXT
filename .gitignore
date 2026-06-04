@@ -121,6 +121,8 @@ dmypy.json
 # 项目特定文件
 # 数据文件
 data/
+qlib_data/
+easyxt_backtest/ml/models/
 logs/
 *.csv
 *.xlsx
@@ -443,3 +445,4 @@ close_and_restart.bat
 tools/qmt_bond_list.txt
 101因子/101因子分析平台/src/cb_backtest/cb_data_manager.py.tmp.23928.1777516038102
 101因子/101因子分析平台/src/cb_backtest/cb_backtest_engine.py.tmp.23928.1777516463913
+tools/duckdb_to_qlib.py
