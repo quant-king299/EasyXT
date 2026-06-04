@@ -75,9 +75,12 @@ class AdjustmentCache:
         """
         获取复权数据
 
-        策略：
+        降级策略（逐层 fallback）：
         1. 不复权（none）：从DuckDB读取原始数据
-        2. 需要复权：调用QMT API，失败则降级到原始数据
+        2. QMT 在线 → xtdata.get_market_data_ex(dividend_type=...)
+        3. QMT 离线 → tushare adj_factor 自行计算（方案B）
+        4. tushare adj_factor 也失败 → tushare pro_bar(adj=...)（方案A）
+        5. 全部失败 → DuckDB 原始数据 + warning
 
         Args:
             stock_code: 股票代码
@@ -93,15 +96,23 @@ class AdjustmentCache:
         if adjust_type == 'none':
             return self._get_raw_data(stock_code, start_date, end_date, con)
 
-        # 2. 需要复权：调用QMT API
+        # 2. QMT API（主力方案）
         qmt_data = self._get_from_qmt_api(stock_code, start_date, end_date, adjust_type)
+        if not qmt_data.empty:
+            return qmt_data
 
-        # 3. 如果QMT API失败，降级到原始数据并打印警告
-        if qmt_data.empty:
-            warnings.warn(f"QMT API获取复权数据失败，降级使用原始数据（复权类型：{adjust_type}）")
-            return self._get_raw_data(stock_code, start_date, end_date, con)
+        # 3. tushare 兜底（QMT 离线时）
+        print(f"  [INFO] QMT 不可用，尝试 tushare 获取复权数据...")
+        tushare_data = self._get_from_tushare_api(stock_code, start_date, end_date, adjust_type)
+        if not tushare_data.empty:
+            return tushare_data
 
-        return qmt_data
+        # 4. 全部失败：降级到原始数据
+        warnings.warn(
+            f"QMT 和 tushare 均无法获取复权数据，降级使用原始数据"
+            f"（复权类型：{adjust_type}）"
+        )
+        return self._get_raw_data(stock_code, start_date, end_date, con)
 
     def _get_raw_data(self,
                      stock_code: str,
@@ -160,8 +171,10 @@ class AdjustmentCache:
                 self.qmt_available = True
                 print(f"  [INFO] AdjustmentCache: xtdata导入成功")
             except ImportError as e:
-                print(f"  [ERROR] xtdata导入失败: {e}")
-                warnings.warn(f"QMT不可用，无法获取复权数据: {e}")
+                print(f"  [DEBUG] xtdata导入失败（QMT 未运行）: {e}")
+                return pd.DataFrame()
+            except Exception as e:
+                print(f"  [DEBUG] xtdata连接异常: {e}")
                 return pd.DataFrame()
 
         # 转换复权类型
@@ -206,6 +219,164 @@ class AdjustmentCache:
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
+
+    def _get_from_tushare_api(self,
+                              stock_code: str,
+                              start_date: str,
+                              end_date: str,
+                              adjust_type: AdjustType) -> pd.DataFrame:
+        """
+        tushare 备选方案（QMT 离线时使用）
+
+        降级策略：
+        1. 方案B：调 adj_factor + daily，自行计算后复权（准确，需 2 次 API 调用）
+        2. 方案A：调 pro_bar(adj=...)，直接获取复权数据（简单，1 次 API 调用）
+        """
+        try:
+            from config.env_config import get_env_config
+            token = get_env_config().tushare_token
+            if not token:
+                print(f"  [DEBUG] tushare token 未配置，跳过 tushare 兜底")
+                return pd.DataFrame()
+        except Exception:
+            return pd.DataFrame()
+
+        # 转换股票代码格式：600519.SH → tushare 的 ts_code
+        ts_code = self._convert_to_ts_code(stock_code)
+        if not ts_code:
+            return pd.DataFrame()
+
+        # 转换日期格式
+        start_fmt = start_date.replace('-', '')
+        end_fmt = end_date.replace('-', '')
+
+        # 方案B：用 adj_factor 自行计算
+        try:
+            result = self._tushare_adj_factor_calc(ts_code, start_fmt, end_fmt, adjust_type)
+            if not result.empty:
+                return result
+        except Exception as e:
+            print(f"  [DEBUG] tushare adj_factor 计算失败: {e}")
+
+        # 方案A：pro_bar 直接获取
+        try:
+            result = self._tushare_pro_bar(ts_code, start_fmt, end_fmt, adjust_type)
+            if not result.empty:
+                return result
+        except Exception as e:
+            print(f"  [DEBUG] tushare pro_bar 也失败: {e}")
+
+        return pd.DataFrame()
+
+    def _tushare_adj_factor_calc(self,
+                                 ts_code: str,
+                                 start_date: str,
+                                 end_date: str,
+                                 adjust_type: AdjustType) -> pd.DataFrame:
+        """
+        方案B：用 tushare adj_factor + daily 自行计算复权价格
+
+        后复权公式: adj_price = raw_price × (factor_today / factor_latest)
+        前复权公式: adj_price = raw_price × (factor_today / factor_earliest)
+        """
+        import tushare as ts
+        pro = ts.pro_api()
+
+        # 获取不复权行情
+        df_daily = pro.daily(ts_code=ts_code, start_date=start_date, end_date=end_date)
+        if df_daily is None or df_daily.empty:
+            return pd.DataFrame()
+
+        # 获取复权因子
+        df_adj = pro.adj_factor(ts_code=ts_code, start_date=start_date, end_date=end_date)
+        if df_adj is None or df_adj.empty:
+            return pd.DataFrame()
+
+        # 合并
+        df = df_daily.merge(df_adj[['trade_date', 'adj_factor']], on='trade_date', how='left')
+        if df['adj_factor'].isna().all():
+            return pd.DataFrame()
+
+        df['adj_factor'] = df['adj_factor'].ffill()
+
+        # 计算复权价格
+        if adjust_type in ('back', 'geometric_back'):
+            # 后复权：以最新因子为基准
+            base_factor = df['adj_factor'].iloc[-1]
+        else:
+            # 前复权：以最早因子为基准
+            base_factor = df['adj_factor'].iloc[0]
+
+        if base_factor <= 0:
+            return pd.DataFrame()
+
+        ratio = df['adj_factor'] / base_factor
+        for col in ['open', 'high', 'low', 'close']:
+            df[col] = df[col] * ratio
+
+        df = df.rename(columns={'trade_date': 'date', 'vol': 'volume'})
+        df['stock_code'] = ts_code
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.set_index('date')
+        df.index.name = 'date'
+
+        print(f"  [OK] tushare adj_factor 计算复权成功 {len(df)} 条 [股票:{ts_code}]")
+        return df[['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount']]
+
+    def _tushare_pro_bar(self,
+                         ts_code: str,
+                         start_date: str,
+                         end_date: str,
+                         adjust_type: AdjustType) -> pd.DataFrame:
+        """
+        方案A：用 tushare pro_bar 直接获取复权数据（最后兜底）
+        """
+        import tushare as ts
+
+        # 映射复权类型到 pro_bar 的 adj 参数
+        adj_map = {
+            'front': 'qfq',
+            'back': 'hfq',
+            'geometric_front': 'qfq',   # pro_bar 不支持等比，用普通前复权替代
+            'geometric_back': 'hfq',
+        }
+        adj = adj_map.get(adjust_type, 'hfq')
+
+        df = ts.pro_bar(ts_code=ts_code, start_date=start_date, end_date=end_date, adj=adj)
+        if df is None or df.empty:
+            return pd.DataFrame()
+
+        df = df.rename(columns={'trade_date': 'date', 'vol': 'volume'})
+        df['stock_code'] = ts_code
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.set_index('date')
+        df.index.name = 'date'
+
+        print(f"  [OK] tushare pro_bar({adj}) 获取复权成功 {len(df)} 条 [股票:{ts_code}]")
+        return df[['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount']]
+
+    @staticmethod
+    def _convert_to_ts_code(stock_code: str) -> str:
+        """
+        转换股票代码格式为 tushare 的 ts_code
+
+        Examples:
+            '600519.SH' → '600519.SH'  (已正确)
+            '600519'    → '600519.SH'  (根据号段判断)
+            '000001.SZ' → '000001.SZ'
+        """
+        stock_code = stock_code.strip().upper()
+        if '.' in stock_code:
+            # 把 .SS 转为 .SH（GUI 用的 .SS 后缀，tushare 用 .SH）
+            return stock_code.replace('.SS', '.SH')
+        # 无后缀，根据号段判断
+        if stock_code.startswith(('6', '9')):
+            return f"{stock_code}.SH"
+        elif stock_code.startswith(('0', '3', '2')):
+            return f"{stock_code}.SZ"
+        elif stock_code.startswith(('4', '8')):
+            return f"{stock_code}.BJ"
+        return f"{stock_code}.SH"
 
     def _format_qmt_data(self, data: pd.DataFrame, stock_code: str) -> pd.DataFrame:
         """

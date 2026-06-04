@@ -124,7 +124,8 @@ class EnhancedBacktestEngine:
                  initial_cash: float = 1000000,
                  commission: float = 0.001,
                  slippage: float = 0.0,
-                 data_manager=None):
+                 data_manager=None,
+                 adjust: str = 'back'):
         """
         初始化回测引擎
 
@@ -133,11 +134,17 @@ class EnhancedBacktestEngine:
             commission: 佣金率
             slippage: 滑点
             data_manager: 数据管理器
+            adjust: 复权类型 ('none'=不复权, 'back'=后复权, 'front'=前复权)
+                    默认 'back'（后复权），适合回测场景
         """
         self.initial_cash = initial_cash
         self.commission = commission
         self.slippage = slippage
         self.data_manager = data_manager
+        self.adjust = adjust
+
+        # 复权数据接口（延迟初始化）
+        self._unified_interface = None
 
         # 新增：仓位管理器
         self.position_manager = PositionManager(initial_cash)
@@ -149,6 +156,18 @@ class EnhancedBacktestEngine:
         self.positions_history: Dict[datetime, Dict[str, float]] = {}
         self.trades_history: Dict[datetime, List[TradeRecord]] = {}
         self.prices_history: Dict[datetime, Dict[str, float]] = {}
+
+    def _get_unified_interface(self):
+        """延迟初始化 UnifiedDataInterface（支持复权的数据接口）"""
+        if self._unified_interface is None:
+            try:
+                from data_manager.unified_data_interface import UnifiedDataInterface
+                self._unified_interface = UnifiedDataInterface()
+                print(f"[OK] 回测引擎已接入复权数据接口 (adjust={self.adjust})")
+            except ImportError:
+                print("[WARN] UnifiedDataInterface 不可用，回测将使用不复权数据")
+                self._unified_interface = None
+        return self._unified_interface
 
     def run_backtest(self,
                      strategy,
@@ -178,6 +197,7 @@ class EnhancedBacktestEngine:
         print(f"  期间: {start_date} - {end_date}")
         print(f"  初始资金: {self.initial_cash:,.2f}")
         print(f"  佣金: {self.commission:.2%}")
+        print(f"  复权: {self.adjust}")
 
         # ========== 阶段1：准备数据 ==========
         # 获取交易日历
@@ -617,12 +637,9 @@ class EnhancedBacktestEngine:
     def _get_current_prices(self, symbols: List[str], date: str,
                             max_days_back: int = 10) -> Dict[str, float]:
         """
-        获取当前价格（支持非交易日自动回退）
+        获取当前价格（支持复权 + 非交易日自动回退）
 
-        自动兼容多种 data_manager 接口：
-        - LocalDataAdapter: get_stock_price_data() -> Dict[str, DataFrame]
-        - DataManager: get_price() -> DataFrame with MultiIndex
-        - DuckDBDataReader: get_price() -> DataFrame
+        优先使用 UnifiedDataInterface（带复权），不可用时 fallback 到 data_manager
 
         Args:
             symbols: 股票代码列表
@@ -630,6 +647,57 @@ class EnhancedBacktestEngine:
             max_days_back: 非交易日最大回退天数
         """
         prices = {}
+
+        # 优先走复权接口
+        if self.adjust != 'none':
+            unified = self._get_unified_interface()
+            if unified is not None:
+                date_fmt = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+                for symbol in symbols:
+                    try:
+                        df = unified.get_stock_data(
+                            stock_code=symbol,
+                            start_date=date_fmt,
+                            end_date=date_fmt,
+                            period='1d',
+                            adjust=self.adjust,
+                            local_only=True  # 优先本地，避免回测时触发在线下载
+                        )
+                        if df is not None and not df.empty and 'close' in df.columns:
+                            prices[symbol] = float(df['close'].iloc[-1])
+                    except Exception:
+                        pass
+
+                if prices:
+                    return prices
+
+                # 复权接口失败，尝试向后回退几天
+                if len(prices) < len(symbols):
+                    dt_obj = datetime.strptime(date, '%Y%m%d')
+                    for days_back in range(1, max_days_back + 1):
+                        prev_date = (dt_obj - __import__('datetime').timedelta(days=days_back)).strftime('%Y%m%d')
+                        prev_fmt = f"{prev_date[:4]}-{prev_date[4:6]}-{prev_date[6:]}"
+                        missing = [s for s in symbols if s not in prices]
+                        for symbol in missing:
+                            try:
+                                df = unified.get_stock_data(
+                                    stock_code=symbol,
+                                    start_date=prev_fmt,
+                                    end_date=prev_fmt,
+                                    period='1d',
+                                    adjust=self.adjust,
+                                    local_only=True
+                                )
+                                if df is not None and not df.empty and 'close' in df.columns:
+                                    prices[symbol] = float(df['close'].iloc[-1])
+                            except Exception:
+                                pass
+                        if len(prices) == len(symbols):
+                            return prices
+
+                if prices:
+                    return prices
+                # 复权接口全失败，fallthrough 到原始逻辑
 
         if not self.data_manager:
             return prices
@@ -747,7 +815,7 @@ class EnhancedBacktestEngine:
         """
         批量加载所有股票在整个回测期间的日线价格数据
 
-        参考 vnpy 的 load_data 设计：一次性加载所有数据到内存
+        优先使用 UnifiedDataInterface（带复权），不可用时 fallback 到 data_manager
 
         Args:
             symbols: 股票代码列表
@@ -757,7 +825,45 @@ class EnhancedBacktestEngine:
         Returns:
             {symbol: DataFrame(index=date, columns=[open,close,...])}
         """
-        if not self.data_manager or not symbols:
+        if not symbols:
+            return {}
+
+        # 优先走复权接口
+        if self.adjust != 'none':
+            unified = self._get_unified_interface()
+            if unified is not None:
+                start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
+                end_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
+                all_price_data = {}
+                for symbol in symbols:
+                    try:
+                        df = unified.get_stock_data(
+                            stock_code=symbol,
+                            start_date=start_fmt,
+                            end_date=end_fmt,
+                            period='1d',
+                            adjust=self.adjust,
+                            local_only=True
+                        )
+                        if df is not None and not df.empty:
+                            df_copy = df.copy()
+                            # 统一索引为 YYYYMMDD 字符串
+                            if not isinstance(df_copy.index, str):
+                                try:
+                                    df_copy.index = pd.to_datetime(df_copy.index).strftime('%Y%m%d')
+                                except Exception:
+                                    pass
+                            all_price_data[symbol] = df_copy
+                    except Exception:
+                        pass
+
+                if all_price_data:
+                    print(f"[OK] 通过复权接口加载 {len(all_price_data)} 只股票日线数据 (adjust={self.adjust})")
+                    return all_price_data
+                # 复权接口全失败，fallthrough 到原始逻辑
+                print(f"[WARN] 复权接口加载失败，降级到原始数据接口")
+
+        if not self.data_manager:
             return {}
 
         all_price_data = {}
