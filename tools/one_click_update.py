@@ -103,8 +103,6 @@ def update_data():
                             'close': df['close'],
                             'volume': df['volume'].astype('int64'),
                             'amount': df['amount'],
-                            'adjust_type': 'none',
-                            'factor': 1.0,
                             'created_at': datetime.now(),
                             'updated_at': datetime.now()
                         })
@@ -112,17 +110,6 @@ def update_data():
                         # 只保留最新日期之后的数据
                         latest_date_str = pd.to_datetime(latest_date).strftime('%Y-%m-%d')
                         df_processed = df_processed[df_processed['date'] > latest_date_str]
-
-                        if df_processed.empty:
-                            skipped_count += 1
-                            continue
-
-                        # 填充复权数据
-                        for col in ['open', 'high', 'low', 'close']:
-                            df_processed[f'{col}_front'] = df_processed[col]
-                            df_processed[f'{col}_back'] = df_processed[col]
-                            df_processed[f'{col}_geometric_front'] = df_processed[col]
-                            df_processed[f'{col}_geometric_back'] = df_processed[col]
 
                         update_data.append(df_processed)
                         success_count += 1
@@ -148,7 +135,17 @@ def update_data():
             write_con = duckdb.connect(db_path, read_only=False)
             try:
                 write_con.register('temp_updates', df_all)
-                write_con.execute("INSERT INTO stock_daily SELECT * FROM temp_updates")
+                write_con.execute("""
+                    INSERT INTO stock_daily
+                        (stock_code, symbol_type, date, period,
+                         open, high, low, close, volume, amount,
+                         created_at, updated_at)
+                    SELECT
+                        stock_code, symbol_type, date, period,
+                        open, high, low, close, volume, amount,
+                        created_at, updated_at
+                    FROM temp_updates
+                """)
                 write_con.unregister('temp_updates')
                 print(f"[OK] 成功保存 {len(df_all)} 条记录")
             finally:

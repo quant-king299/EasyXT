@@ -197,10 +197,9 @@ try:
                 stock_code VARCHAR, symbol_type VARCHAR DEFAULT 'stock', date DATE,
                 period VARCHAR DEFAULT '1d', open DOUBLE, high DOUBLE, low DOUBLE,
                 close DOUBLE, volume BIGINT, amount DOUBLE,
-                adjust_type VARCHAR DEFAULT 'none', factor DOUBLE DEFAULT 1.0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (stock_code, date, period, adjust_type)
+                PRIMARY KEY (stock_code, date, period)
             )
         """)
         print("已创建 stock_daily 表")
@@ -222,17 +221,15 @@ try:
                 df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
                 df['symbol_type'] = 'stock'
                 df['period'] = '1d'
-                df['adjust_type'] = 'none'
-                df['factor'] = 1.0
                 df['created_at'] = pd.Timestamp.now()
                 df['updated_at'] = pd.Timestamp.now()
 
                 cols = ['stock_code', 'symbol_type', 'date', 'period',
                         'open', 'high', 'low', 'close', 'volume', 'amount',
-                        'adjust_type', 'factor', 'created_at', 'updated_at']
+                        'created_at', 'updated_at']
                 df = df[cols]
 
-                conn.execute(f"DELETE FROM stock_daily WHERE stock_code = '{ts_code}' AND period = '1d' AND adjust_type = 'none'")
+                conn.execute(f"DELETE FROM stock_daily WHERE stock_code = '{ts_code}' AND period = '1d'")
                 df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')
 
                 success_count += 1

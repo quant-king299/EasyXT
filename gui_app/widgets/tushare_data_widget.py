@@ -1019,14 +1019,12 @@ class TushareDownloadThread(QThread):
                         df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
                         df['symbol_type'] = 'stock'
                         df['period'] = '1d'
-                        df['adjust_type'] = 'none'
-                        df['factor'] = 1.0
                         df['created_at'] = pd.Timestamp.now()
                         df['updated_at'] = pd.Timestamp.now()
 
                         cols = ['stock_code', 'symbol_type', 'date', 'period',
                                 'open', 'high', 'low', 'close', 'volume', 'amount',
-                                'adjust_type', 'factor', 'created_at', 'updated_at']
+                                'created_at', 'updated_at']
                         df = df[cols]
 
                         df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')

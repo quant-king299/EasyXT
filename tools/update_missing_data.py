@@ -134,18 +134,9 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                         'close': df['close'],
                         'volume': df['volume'].astype('int64'),
                         'amount': df['amount'],
-                        'adjust_type': 'none',
-                        'factor': 1.0,
                         'created_at': datetime.now(),
                         'updated_at': datetime.now()
                     })
-
-                    # 填充复权数据（与原始价格相同）
-                    for col in ['open', 'high', 'low', 'close']:
-                        df_processed[f'{col}_front'] = df_processed[col]
-                        df_processed[f'{col}_back'] = df_processed[col]
-                        df_processed[f'{col}_geometric_front'] = df_processed[col]
-                        df_processed[f'{col}_geometric_back'] = df_processed[col]
 
                     # 保存到DuckDB
                     print(f"  正在保存到DuckDB...")
@@ -155,7 +146,14 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                         con.register('temp_data', df_processed)
                         con.execute("""
                             INSERT INTO stock_daily
-                            SELECT * FROM temp_data
+                                (stock_code, symbol_type, date, period,
+                                 open, high, low, close, volume, amount,
+                                 created_at, updated_at)
+                            SELECT
+                                stock_code, symbol_type, date, period,
+                                open, high, low, close, volume, amount,
+                                created_at, updated_at
+                            FROM temp_data
                         """)
                         con.unregister('temp_data')
 

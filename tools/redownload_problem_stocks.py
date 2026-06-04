@@ -27,7 +27,7 @@ def find_problem_stocks(duckdb_path: str = r'D:/StockData/stock_data.ddb'):
             MIN(date) as min_date,
             MAX(date) as max_date
         FROM stock_daily
-        WHERE adjust_type = 'none'
+        WHERE 1=1
         GROUP BY stock_code
         HAVING COUNT(*) < 10
            OR MIN(date) < '1990-01-01'

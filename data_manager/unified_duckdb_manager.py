@@ -182,7 +182,7 @@ class UnifiedDuckDBManager:
         """)
 
         # 创建兼容性视图（为旧GUI代码提供表名兼容）
-        # 映射：symbol → stock_code, 补充 symbol_type/adjust_type/factor
+        # 映射：symbol → stock_code, 补充 symbol_type
         try:
             tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
             if 'stock_daily' not in tables:
@@ -197,8 +197,6 @@ class UnifiedDuckDBManager:
                         date,
                         period,
                         open, high, low, close, volume, amount,
-                        'none' as adjust_type,
-                        1.0 as factor,
                         turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
                         created_at, updated_at
                     FROM stock_data
@@ -248,8 +246,6 @@ class UnifiedDuckDBManager:
                     date,
                     period,
                     open, high, low, close, volume, amount,
-                    'none' as adjust_type,
-                    1.0 as factor,
                     turnover, pe_ratio, pb_ratio, market_cap, circulating_cap,
                     created_at, updated_at
                 FROM stock_data
@@ -372,7 +368,6 @@ class UnifiedDuckDBManager:
             # 添加元数据
             df['symbol'] = symbol
             df['period'] = period
-            df['adjust_type'] = 'none'
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
@@ -454,17 +449,11 @@ class UnifiedDuckDBManager:
             df: 要保存的数据
             symbol: 股票代码（如果df中没有symbol列）
             period: 周期
-            adjust_type: 复权类型（⭐ 必须为'none'，否则会报错）
+            adjust_type: 已废弃（保留参数兼容性，不再使用）
         """
         if df.empty:
             logger.warning("数据为空，跳过保存")
             return
-
-        # ⭐ 安全检查：只允许存储不复权数据
-        if adjust_type is not None and adjust_type != self.ADJUST_NONE:
-            logger.error(f"⚠️  拒绝存储复权数据（adjust_type={adjust_type}）")
-            logger.error("   本系统只存储不复权数据，复权数据查询时实时计算")
-            raise ValueError(f"不允许存储复权数据（{adjust_type}），只允许存储不复权数据（{self.ADJUST_NONE}）")
 
         # 添加元数据列
         if symbol and 'symbol' not in df.columns:

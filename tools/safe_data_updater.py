@@ -166,7 +166,7 @@ def fill_adjustment_batch():
             COUNT(*) as total_rows,
             COUNT(open_front) as has_front_data
         FROM stock_daily
-        WHERE adjust_type = 'none'
+        WHERE 1=1
     """)
 
     print(f"股票数量: {stats['stock_count'].iloc[0]:,}")
@@ -202,7 +202,7 @@ def fill_adjustment_batch():
                 high_geometric_back = high,
                 low_geometric_back = low,
                 close_geometric_back = close
-            WHERE adjust_type = 'none'
+            WHERE 1=1
               AND open_front IS NULL
         """)
 

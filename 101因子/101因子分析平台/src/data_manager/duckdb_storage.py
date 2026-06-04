@@ -85,11 +85,9 @@ class DuckDBStorage:
                 close DOUBLE,
                 volume BIGINT,
                 amount DOUBLE,
-                adjust_type VARCHAR DEFAULT 'none',  -- 'none', 'front', 'back'
-                factor DOUBLE DEFAULT 1.0,            -- 复权因子
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (stock_code, date, period, adjust_type)
+                PRIMARY KEY (stock_code, date, period)
             )
         """)
 
@@ -134,7 +132,6 @@ class DuckDBStorage:
             "CREATE INDEX IF NOT EXISTS idx_stock_code ON stock_daily (stock_code)",
             "CREATE INDEX IF NOT EXISTS idx_date ON stock_daily (date)",
             "CREATE INDEX IF NOT EXISTS idx_period ON stock_daily (period)",
-            "CREATE INDEX IF NOT EXISTS idx_adjust_type ON stock_daily (adjust_type)",
             "CREATE INDEX IF NOT EXISTS idx_stock_date ON stock_daily (stock_code, date)",
             "CREATE INDEX IF NOT EXISTS idx_stock_period ON stock_daily (stock_code, period)",
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_dividends ON dividends (stock_code, ex_date)",
@@ -155,16 +152,13 @@ class DuckDBStorage:
             df: DataFrame，必须包含列：stock_code, date, open, high, low, close, volume, amount
             symbol_type: 标的类型 ('stock', 'index', 'etf')
             period: 周期 ('1d', '1h', '5m', '1m')
-            adjust_type: 复权类型（会被强制设置为'none'）
+            adjust_type: 已废弃，保留参数兼容性
 
         Returns:
             (成功标志, 保存的记录数)
         """
         if df.empty:
             return False, 0
-
-        # 强制只保存不复权数据
-        adjust_type = 'none'
 
         # 准备数据
         df_copy = df.copy()
@@ -176,11 +170,9 @@ class DuckDBStorage:
         # 添加元数据列
         df_copy['symbol_type'] = symbol_type
         df_copy['period'] = period
-        df_copy['adjust_type'] = adjust_type
-        df_copy['factor'] = 1.0
 
         # 去除重复数据
-        df_copy = df_copy.drop_duplicates(subset=['stock_code', 'date', 'period', 'adjust_type'])
+        df_copy = df_copy.drop_duplicates(subset=['stock_code', 'date', 'period'])
 
         # 使用UPSERT（INSERT OR REPLACE）
         try:
@@ -192,7 +184,6 @@ class DuckDBStorage:
                 INSERT OR REPLACE INTO stock_daily
                 SELECT stock_code, symbol_type, date, period,
                        open, high, low, close, volume, amount,
-                       adjust_type, factor,
                        CURRENT_TIMESTAMP as created_at,
                        CURRENT_TIMESTAMP as updated_at
                 FROM temp_data
@@ -236,7 +227,6 @@ class DuckDBStorage:
                 FROM stock_daily
                 WHERE stock_code = ?
                   AND period = ?
-                  AND adjust_type = 'none'
                 ORDER BY date ASC
             """
 
@@ -390,7 +380,6 @@ class DuckDBStorage:
             FROM stock_daily
             WHERE stock_code = ?
               AND period = ?
-              AND adjust_type = 'none'
             ORDER BY date ASC
         """
 
@@ -425,8 +414,7 @@ class DuckDBStorage:
 
             where_conditions = [
                 f"stock_code IN ({codes_str})",
-                f"period = '{period}'",
-                f"adjust_type = 'none'"
+                f"period = '{period}'"
             ]
 
             if start_date:
@@ -493,8 +481,7 @@ class DuckDBStorage:
                 WHERE stock_code = ?
                   AND date BETWEEN ? AND ?
                   AND period = '1d'
-                  AND adjust_type = 'none'
-                ORDER BY date
+                    ORDER BY date
             ),
             ma_data AS (
                 SELECT date, close,
@@ -555,15 +542,6 @@ class DuckDBStorage:
             """).fetchall()
 
             stats['by_period'] = {period: count for period, count in period_stats}
-
-            # 按复权类型统计
-            adjust_stats = self.con.execute("""
-                SELECT adjust_type, COUNT(*) as count
-                FROM stock_daily
-                GROUP BY adjust_type
-            """).fetchall()
-
-            stats['by_adjust_type'] = {adj: count for adj, count in adjust_stats}
 
             # 数据库文件大小（修复：正确计算目录/文件大小）
             if self.db_path.exists():

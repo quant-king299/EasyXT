@@ -128,11 +128,9 @@ class UnifiedDataInterface:
                     close DECIMAL(18, 6),
                     volume BIGINT,
                     amount DECIMAL(18, 6),
-                    adjust_type VARCHAR DEFAULT 'none',
-                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, date, period, adjust_type)
+                    PRIMARY KEY (stock_code, date, period)
                 )
             """)
 
@@ -149,11 +147,9 @@ class UnifiedDataInterface:
                     close DECIMAL(18, 6),
                     volume BIGINT,
                     amount DECIMAL(18, 6),
-                    adjust_type VARCHAR DEFAULT 'none',
-                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                    PRIMARY KEY (stock_code, datetime, period)
                 )
             """)
 
@@ -170,11 +166,9 @@ class UnifiedDataInterface:
                     close DECIMAL(18, 6),
                     volume BIGINT,
                     amount DECIMAL(18, 6),
-                    adjust_type VARCHAR DEFAULT 'none',
-                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                    PRIMARY KEY (stock_code, datetime, period)
                 )
             """)
 
@@ -191,11 +185,9 @@ class UnifiedDataInterface:
                     close DECIMAL(18, 6),
                     volume BIGINT,
                     amount DECIMAL(18, 6),
-                    adjust_type VARCHAR DEFAULT 'none',
-                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period, adjust_type)
+                    PRIMARY KEY (stock_code, datetime, period)
                 )
             """)
 
@@ -829,13 +821,8 @@ class UnifiedDataInterface:
                 con.execute(delete_sql)
                 print(f"    [DEBUG] DELETE执行完成")
 
-                # 添加缺失的列
+                # 添加缺失的元数据列
                 if table_name == 'stock_daily':
-                    if 'adjust_type' not in df_to_save.columns:
-                        df_to_save['adjust_type'] = 'none'
-                    if 'factor' not in df_to_save.columns:
-                        df_to_save['factor'] = 1.0
-
                     import time
                     current_time = pd.Timestamp.now()
                     if 'created_at' not in df_to_save.columns:
@@ -876,20 +863,12 @@ class UnifiedDataInterface:
                         INSERT INTO {table_name} (
                             stock_code, symbol_type, date, period,
                             open, high, low, close, volume, amount,
-                            adjust_type, factor, created_at, updated_at,
-                            open_front, high_front, low_front, close_front,
-                            open_back, high_back, low_back, close_back,
-                            open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
-                            open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                            created_at, updated_at
                         )
                         SELECT
                             stock_code, symbol_type, CAST(date AS DATE), period,
                             open, high, low, close, volume, amount,
-                            adjust_type, factor, created_at, updated_at,
-                            open_front, high_front, low_front, close_front,
-                            open_back, high_back, low_back, close_back,
-                            open_geometric_front, high_geometric_front, low_geometric_front, close_geometric_front,
-                            open_geometric_back, high_geometric_back, low_geometric_back, close_geometric_back
+                            created_at, updated_at
                         FROM df_to_save_temp
                     """)
 
@@ -904,7 +883,7 @@ class UnifiedDataInterface:
                     basic_cols = [
                         'stock_code', 'symbol_type', 'date', 'period',
                         'open', 'high', 'low', 'close', 'volume', 'amount',
-                        'adjust_type', 'factor', 'created_at', 'updated_at'
+                        'created_at', 'updated_at'
                     ]
 
                     # 确保这些列都存在
@@ -969,11 +948,9 @@ class UnifiedDataInterface:
                     close DECIMAL(18, 6),
                     volume BIGINT,
                     amount DECIMAL(18, 6),
-                    adjust_type VARCHAR DEFAULT 'none',
-                    factor DECIMAL(18, 6) DEFAULT 1.0,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, date, period, adjust_type)
+                    PRIMARY KEY (stock_code, date, period)
                 )
             """)
             print("[DEBUG] 表检查完成")

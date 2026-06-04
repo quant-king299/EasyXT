@@ -437,18 +437,9 @@ class DataDownloadThread(QThread):
                                 'close': df['close'],
                                 'volume': df['volume'].astype('int64'),
                                 'amount': df['amount'],
-                                'adjust_type': 'none',
-                                'factor': 1.0,
                                 'created_at': datetime.now(),
                                 'updated_at': datetime.now()
                             })
-
-                            # 填充复权数据
-                            for col in ['open', 'high', 'low', 'close']:
-                                df_processed[f'{col}_front'] = df_processed[col]
-                                df_processed[f'{col}_back'] = df_processed[col]
-                                df_processed[f'{col}_geometric_front'] = df_processed[col]
-                                df_processed[f'{col}_geometric_back'] = df_processed[col]
 
                             # 只保留最新日期之后的数据
                             latest_date_str = pd.to_datetime(latest_date).strftime('%Y-%m-%d')
@@ -511,12 +502,12 @@ class DataDownloadThread(QThread):
                                 INSERT OR REPLACE INTO stock_daily (
                                     stock_code, symbol_type, date, period,
                                     open, high, low, close, volume, amount,
-                                    adjust_type, factor, created_at, updated_at
+                                    created_at, updated_at
                                 )
                                 SELECT
                                     stock_code, symbol_type, CAST(date AS DATE), period,
                                     open, high, low, close, volume, amount,
-                                    adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                 FROM temp_updates
                             """)
                         else:
@@ -524,12 +515,12 @@ class DataDownloadThread(QThread):
                             self.log_signal.emit("  📝 写入 stock_data ...")
                             con.execute("""
                                 INSERT OR IGNORE INTO stock_data (
-                                    symbol, date, period, adjust_type,
+                                    symbol, date, period,
                                     open, high, low, close, volume, amount,
                                     created_at, updated_at
                                 )
                                 SELECT
-                                    stock_code, CAST(date AS DATE), period, adjust_type,
+                                    stock_code, CAST(date AS DATE), period,
                                     open, high, low, close, volume, amount,
                                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                 FROM temp_updates
@@ -559,12 +550,12 @@ class DataDownloadThread(QThread):
                                         INSERT OR REPLACE INTO stock_daily (
                                             stock_code, symbol_type, date, period,
                                             open, high, low, close, volume, amount,
-                                            adjust_type, factor, created_at, updated_at
+                                            adjust_type, created_at, updated_at
                                         )
                                         SELECT
                                             stock_code, symbol_type, CAST(date AS DATE), period,
                                             open, high, low, close, volume, amount,
-                                            adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                            adjust_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                         FROM temp_batch
                                     """)
                                 else:
@@ -776,8 +767,6 @@ class DataDownloadThread(QThread):
                                         'close': df['close'],
                                         'volume': df['volume'].astype('int64'),
                                         'amount': df['amount'],
-                                        'adjust_type': 'none',
-                                        'factor': 1.0,
                                         'created_at': datetime.now(),
                                         'updated_at': datetime.now()
                                     })
@@ -850,23 +839,23 @@ class DataDownloadThread(QThread):
                                 INSERT OR REPLACE INTO stock_daily (
                                     stock_code, symbol_type, date, period,
                                     open, high, low, close, volume, amount,
-                                    adjust_type, factor, created_at, updated_at
+                                    created_at, updated_at
                                 )
                                 SELECT
                                     stock_code, symbol_type, CAST(date AS DATE), period,
                                     open, high, low, close, volume, amount,
-                                    adjust_type, factor, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                 FROM temp_backfill
                             """)
                         else:
                             con.execute("""
                                 INSERT OR IGNORE INTO stock_data (
-                                    symbol, date, period, adjust_type,
+                                    symbol, date, period,
                                     open, high, low, close, volume, amount,
                                     created_at, updated_at
                                 )
                                 SELECT
-                                    stock_code, CAST(date AS DATE), period, adjust_type,
+                                    stock_code, CAST(date AS DATE), period,
                                     open, high, low, close, volume, amount,
                                     CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                 FROM temp_backfill
@@ -1200,13 +1189,12 @@ class SingleStockDownloadThread(QThread):
                     'close': df['close'],
                     'volume': df['volume'].astype('int64') if 'volume' in df.columns else 0,
                     'amount': df['amount'] if 'amount' in df.columns else 0,
-                    'adjust_type': 'none',
-                    'factor': 1.0,
                     'created_at': datetime.now(),
                     'updated_at': datetime.now()
                 })
 
-                # 性能优化：移除预存复权列（提升5倍I/O性能）
+                # 性能优化：已移除 factor/adjust_type 无用列（节省存储空间）
+                # 复权功能改用按需调用QMT API实现
                 # 复权功能改用按需调用QMT API实现
                 # 查询时自动调用QMT API获取复权数据
                 # 价格列: 4个（open, high, low, close）
