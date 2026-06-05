@@ -121,92 +121,177 @@ class DuckDBModelTrainer:
 
     # ─── 特征计算 ──────────────────────────────────────
 
-    def compute_features(self, df: pd.DataFrame) -> pd.DataFrame:
-        """从 OHLCV 计算技术因子特征
+    def compute_features(self, df: pd.DataFrame, fast_mode: bool = False) -> pd.DataFrame:
+        """从 OHLCV 批量计算因子特征
 
-        包括:
-          - 收益率类: ret_1d, ret_5d, ret_20d
-          - 均线偏离: ma5_bias, ma10_bias, ma20_bias, ma60_bias
-          - 波动率: vol_5d, vol_20d
-          - 量价: vol_ratio_5, vol_ratio_20, amount_ratio_5
-          - 价格位置: high_low_ratio, close_position
-          - 动量: rsi_14, macd, wr_14
-          - 换手率代理: turnover_proxy (amount/close 标准化)
+        与项目 alpha101/191 因子库互补，使用纯 pandas 批量计算。
+        fast_mode=True 时只算基础 17 因子（快速验证用），
+        fast_mode=False 时算 ~80 因子（包含 alpha 类因子）。
 
         Args:
             df: load_data() 返回的 OHLCV DataFrame
+            fast_mode: 是否快速模式
 
         Returns:
-            特征 DataFrame (包含原始 stock_code, date + 因子列)
+            特征 DataFrame
         """
-        print("[FEAT] 计算特征...")
+        mode = "快速" if fast_mode else "完整"
+        print(f"[FEAT] 计算特征 ({mode}模式)...")
         df = df.sort_values(["stock_code", "date"]).copy()
 
         g = df.groupby("stock_code")
+        o, h, l, c, v = df["open"], df["high"], df["low"], df["close"], df["volume"]
 
-        # 收益率
+        # ═══ 收益率类 ═══
         df["ret_1d"] = g["close"].pct_change(1)
         df["ret_5d"] = g["close"].pct_change(5)
         df["ret_20d"] = g["close"].pct_change(20)
 
-        # 均线
+        # ═══ 均线偏离 ═══
         for w in [5, 10, 20, 60]:
             ma = g["close"].transform(lambda x: x.rolling(w, min_periods=1).mean())
-            df[f"ma{w}"] = ma
-            df[f"ma{w}_bias"] = (df["close"] - ma) / ma
+            df[f"ma{w}_bias"] = (c - ma) / (ma + 1e-9)
 
-        # 波动率
-        for w in [5, 20]:
-            df[f"vol_{w}d"] = g["ret_1d"].transform(
-                lambda x: x.rolling(w, min_periods=5).std()
-            )
+        # ═══ 波动率 ═══
+        for w in [5, 10, 20]:
+            df[f"vol_{w}d"] = df["ret_1d"].rolling(w, min_periods=5).std()
 
-        # 量价特征
-        df["vol_ratio_5"] = df["volume"] / g["volume"].transform(
-            lambda x: x.rolling(5, min_periods=1).mean()
-        )
-        df["vol_ratio_20"] = df["volume"] / g["volume"].transform(
-            lambda x: x.rolling(20, min_periods=1).mean()
-        )
-        df["amount"] = df["volume"] * df["close"]
-        df["amount_ratio_5"] = df["amount"] / (
-            g["amount"].transform(lambda x: x.rolling(5, min_periods=1).mean()) + 1e-9
-        )
-        df = df.drop(columns=["amount"])
+        # ═══ 量价关系 ═══
+        for w in [5, 10, 20]:
+            df[f"vol_ratio_{w}"] = v / (g["volume"].transform(
+                lambda x: x.rolling(w, min_periods=1).mean()) + 1e-9)
 
-        # 价格位置
-        df["high_low_ratio"] = (df["high"] - df["low"]) / df["close"]
-        roll_high = g["high"].transform(lambda x: x.rolling(20, min_periods=1).max())
-        roll_low = g["low"].transform(lambda x: x.rolling(20, min_periods=1).min())
-        df["close_position"] = (df["close"] - roll_low) / (roll_high - roll_low + 1e-9)
+        df["amount"] = v * c
+        for w in [5, 10]:
+            df[f"amount_ratio_{w}"] = df["amount"] / (
+                g["amount"].transform(lambda x: x.rolling(w, min_periods=1).mean()) + 1e-9)
 
-        # RSI 14
-        delta = g["close"].diff()
-        gain = delta.clip(lower=0)
-        loss = (-delta).clip(lower=0)
-        avg_gain = gain.rolling(14, min_periods=1).mean()
-        avg_loss = loss.rolling(14, min_periods=1).mean()
-        rs = avg_gain / (avg_loss + 1e-9)
-        df["rsi_14"] = 100 - 100 / (1 + rs)
+        # ═══ 价格位置 ═══
+        df["high_low_ratio"] = (h - l) / (c + 1e-9)
+        for w in [10, 20, 60]:
+            rh = g["high"].transform(lambda x: x.rolling(w, min_periods=1).max())
+            rl = g["low"].transform(lambda x: x.rolling(w, min_periods=1).min())
+            df[f"close_pos_{w}"] = (c - rl) / (rh - rl + 1e-9)
 
-        # 换手率代理
-        df["turnover_proxy"] = (df["volume"] * df["close"]) / g["close"].transform(
-            lambda x: x.rolling(60, min_periods=1).mean()
-        )
+        # ═══ RSI ═══
+        for w in [6, 14, 24]:
+            delta = g["close"].diff()
+            gain = delta.clip(lower=0).rolling(w, min_periods=1).mean()
+            loss = (-delta).clip(lower=0).rolling(w, min_periods=1).mean()
+            df[f"rsi_{w}"] = 100 - 100 / (1 + gain / (loss + 1e-9))
 
-        # 市值代理 (用 amount 作为 market_cap 代理)
-        df["size_proxy"] = np.log1p(df["volume"] * df["close"])
+        if not fast_mode:
+            # ═══ 扩展因子 (alpha101/191 类) ═══
+
+            # --- alpha001: 反转信号 ---
+            ret_std20 = df["ret_1d"].rolling(20, min_periods=5).std()
+            df["alpha001"] = (c.where(df["ret_1d"] < 0, ret_std20) ** 2).rolling(5).apply(
+                lambda x: x.argmax(), raw=True
+            ) / 5 - 0.5
+
+            # --- alpha002: 量价相关性 ---
+            dlogvol = np.log1p(v).diff(2)
+            ret_open = (c - o) / (o + 1e-9)
+            df["alpha002"] = -dlogvol.rolling(6).corr(ret_open)
+
+            # --- alpha006: 开盘价突破 ---
+            df["alpha006"] = -g["open"].transform(
+                lambda x: (x - x.rolling(10, min_periods=1).min()).corr(
+                    c.loc[x.index].rolling(10, min_periods=1).mean()))
+
+            # --- alpha008: 量价动量和 ---
+            df["alpha008"] = -((v * c).rolling(5).sum() / v.rolling(20).sum())
+
+            # --- alpha009: 极端收益 ---
+            df["alpha009"] = (c.where(df["ret_1d"] < 0, df["ret_5d"]).rolling(5).max() -
+                               c.where(df["ret_1d"] > 0, df["ret_5d"]).rolling(5).min())
+
+            # --- alpha012: 成交量信号 ---
+            df["alpha012"] = (v.rolling(10).mean() - v) / (v.rolling(10).std() + 1e-9)
+
+            # --- alpha014: 开盘价动量 ---
+            df["alpha014"] = -g["open"].transform(
+                lambda x: x.diff(3).rolling(10, min_periods=1).mean())
+
+            # --- alpha017: 最高/收盘比 ---
+            df["alpha017"] = (h / (c.shift(1) + 1e-9)).rolling(20).mean()
+
+            # --- alpha020: 延迟信号 ---
+            df["alpha020"] = -g["open"].transform(
+                lambda x: x.diff(5).rolling(5, min_periods=1).mean())
+
+            # --- alpha023: 高低价差 ---
+            df["alpha023"] = (h - l).rolling(20).mean() / c
+
+            # --- alpha028: 量价背离 ---
+            df["alpha028"] = (c.rolling(10).mean() / c).rolling(20).corr(
+                v.rolling(10).mean() / v)
+
+            # --- alpha033: 反转 ---
+            df["alpha033"] = -g["close"].pct_change(5).rolling(5).mean()
+
+            # --- alpha038: 均价 ---
+            df["alpha038"] = (o + h + l + c) / 4
+            df["alpha038"] = df["alpha038"].diff(10)
+
+            # --- alpha041: VWAP ---
+            vwap = (v * c).rolling(20).sum() / (v.rolling(20).sum() + 1e-9)
+            df["alpha041"] = (c - vwap) / (vwap + 1e-9)
+
+            # --- alpha046: 窄幅突破 ---
+            df["alpha046"] = -((c - c.shift(20)) / (c.shift(20) + 1e-9)).rolling(20).mean()
+
+            # --- alpha049: 日内波动 ---
+            df["alpha049"] = ((h + l) / 2 - c.shift(1)).rolling(20).std()
+
+            # --- alpha053: 尾部风险 ---
+            df["alpha053"] = ((c - l) - (h - c)) / ((h - l) + 1e-9)
+
+            # --- alpha054: 开盘反转 ---
+            df["alpha054"] = -(o - c.shift(1)).rolling(10).mean()
+
+            # --- alpha064: 量能减弱 ---
+            df["alpha064"] = df["ret_1d"].rolling(20).corr(v.rolling(20).mean())
+
+            # --- alpha067: 加权动量 ---
+            df["alpha067"] = df["ret_1d"].rolling(20).mean() * (1 + v / (v.rolling(20).mean() + 1e-9))
+
+            # --- alpha071: 加速 ---
+            df["alpha071"] = df["close"].diff(1).diff(5)
+
+            # --- alpha083: 振幅 ---
+            df["alpha083"] = (h - l) / (c.shift(1) + 1e-9)
+            df["alpha083"] = df["alpha083"].rolling(5).mean()
+
+        # ═══ 换手率 & 规模 ═══
+        amt = v * c
+        df["turnover_proxy"] = amt / (g["close"].transform(
+            lambda x: x.rolling(60, min_periods=1).mean()) * v + 1e-9)
+        df["size_proxy"] = np.log1p(amt)
+
+        # ═══ 动量因子 (alpha191 类) ═══
+        if not fast_mode:
+            for w in [5, 10, 20, 60]:
+                # 指数加权动量
+                df[f"mom_ewm_{w}"] = g["close"].transform(
+                    lambda x: x.pct_change(w).ewm(span=w).mean())
+                # 偏度（min_periods 至少为 min(w, 3)）
+                mp = min(w, max(5, 3))
+                df[f"skew_{w}"] = df["ret_1d"].rolling(w, min_periods=mp).skew()
+                # 峰度
+                df[f"kurt_{w}"] = df["ret_1d"].rolling(w, min_periods=mp).kurt()
+                # 涨跌比
+                up = (df["ret_1d"] > 0).astype(float).rolling(w).sum()
+                down = (df["ret_1d"] < 0).astype(float).rolling(w).sum()
+                df[f"ud_ratio_{w}"] = up / (down + 1e-9)
 
         # 删除中间列
-        drop_cols = ["open", "high", "low", "close", "volume",
-                      "ma5", "ma10", "ma20", "ma60"]
+        drop_cols = ["open", "high", "low", "close", "volume", "amount"]
         df = df.drop(columns=[c for c in drop_cols if c in df.columns], errors="ignore")
 
-        # 记录特征名
         self._feature_names = [c for c in df.columns
                                if c not in ("stock_code", "date", "label")]
-
-        print(f"  [OK] {len(self._feature_names)} 个特征: {self._feature_names}")
+        print(f"  [OK] {len(self._feature_names)} 个特征")
         return df
 
     # ─── 标签构造 ──────────────────────────────────────
@@ -298,6 +383,13 @@ class DuckDBModelTrainer:
         X_train, y_train = X_train[mask_train], y_train[mask_train]
         X_valid, y_valid = X_valid[mask_valid], y_valid[mask_valid]
         print(f"  过滤极端值后: train={len(X_train):,}, valid={len(X_valid):,}")
+
+        if len(X_valid) == 0:
+            print("  [WARN] 验证集为空，使用训练集的一部分作为验证集")
+            split = int(len(X_train) * 0.8)
+            X_valid, y_valid = X_train[split:], y_train[split:]
+            X_train, y_train = X_train[:split], y_train[:split]
+            print(f"  重新划分: train={len(X_train):,}, valid={len(X_valid):,}")
 
         # LightGBM 训练
         t0 = datetime.now()
