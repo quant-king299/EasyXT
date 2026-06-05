@@ -82,47 +82,57 @@ class DataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def _download_stocks(self):
-        """下载股票数据"""
+        """下载股票数据 — 使用批量预下载到QMT缓存再读取的模式"""
         try:
-            # 导入本地数据管理器
-            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
-            if str(factor_platform_path) not in sys.path:
-                sys.path.insert(0, str(factor_platform_path))
+            from xtquant import xtdata
+            from data_manager.duckdb_connection_pool import get_db_manager
 
-            from data_manager import LocalDataManager
+            # 周期映射：data_type → QMT period
+            qmt_period_map = {
+                'daily': '1d', '1min': '1m', '5min': '5m',
+                '15min': '15m', '30min': '30m', '60min': '60m'
+            }
+            qmt_period = qmt_period_map.get(self.data_type, '1d')
+            is_daily = (self.data_type == 'daily')
 
-            manager = LocalDataManager(
-                config={
-                    'data_paths': {
-                        'root_dir': get_default_stock_root(),
-                        'raw_data': 'raw',
-                        'metadata': 'stock_data.ddb'
-                    },
-                    'storage': {
-                        'format': 'duckdb',
-                        'compression': 'snappy'
-                    }
-                }
-            )
-            self.log_signal.emit("✅ 数据管理器初始化成功 (DuckDB单文件存储)")
+            self.log_signal.emit(f"✅ 数据管理器初始化成功 (周期: {qmt_period})")
+
+            # 获取DuckDB管理器
+            db_manager = get_db_manager(get_default_db_path())
 
             # 如果没有指定股票列表，获取全部A股（排除ETF）
             if not self.symbols:
                 self.log_signal.emit("📊 正在获取A股列表（排除ETF）...")
-                all_stocks = manager.get_all_stocks_list(
-                    include_st=True,
-                    include_sz=True,
-                    include_bj=True,
-                    exclude_st=True,
-                    exclude_delisted=True
-                )
+                try:
+                    all_stocks = xtdata.get_stock_list_in_sector('沪深A股')
+                    # 合并北交所
+                    try:
+                        bj_stocks = xtdata.get_stock_list_in_sector('北交所')
+                        if bj_stocks:
+                            all_stocks = list(set(all_stocks + bj_stocks))
+                    except Exception:
+                        pass
+                except Exception as e:
+                    self.log_signal.emit(f"⚠️ 获取A股列表失败: {e}，尝试通过easy_xt获取...")
+                    try:
+                        import easy_xt
+                        api = easy_xt.get_api()
+                        all_stocks_resp = api.data.get_all_securities()
+                        if hasattr(all_stocks_resp, 'index'):
+                            all_stocks = all_stocks_resp.index.tolist()
+                        else:
+                            all_stocks = []
+                    except Exception as e2:
+                        self.log_signal.emit(f"❌ 无法获取股票列表: {e2}")
+                        self.error_signal.emit(f"无法获取股票列表: {e2}")
+                        return
 
                 # 过滤掉ETF和基金
                 etf_patterns = [
-                    '51',      # 上海ETF：510xxx, 511xxx, 512xxx, 513xxx, 515xxx, 516xxx
-                    '159',     # 深圳ETF：159xxx
-                    '150',     # 深圳基金：150xxx
-                    '588',     # 上海ETF：588xxx
+                    '51',      # 上海ETF
+                    '159',     # 深圳ETF
+                    '150',     # 深圳基金
+                    '588',     # 上海科创板ETF
                     '50',      # 上海50开头基金
                     '56',      # 上海56开头基金
                     '58',      # 上海58开头基金
@@ -135,7 +145,6 @@ class DataDownloadThread(QThread):
                         if stock.startswith(pattern):
                             is_etf = True
                             break
-
                     if not is_etf:
                         self.symbols.append(stock)
 
@@ -144,57 +153,211 @@ class DataDownloadThread(QThread):
             total = len(self.symbols)
             success_count = 0
             failed_count = 0
-            failed_list = []  # 记录失败的股票及原因
+            failed_list = []
+            all_save_data = []
 
-            for i, symbol in enumerate(self.symbols):
+            # 日期格式转换
+            start_time = self.start_date.replace('-', '') if '-' in self.start_date else self.start_date
+            end_time = self.end_date.replace('-', '') if '-' in self.end_date else self.end_date
+
+            # ===== 分批下载优化 =====
+            BATCH_SIZE = 50
+            total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+            self.log_signal.emit(f"🚀 使用批量下载模式，每批{BATCH_SIZE}只股票，共{total_batches}批")
+
+            for batch_idx in range(total_batches):
                 if not self._is_running:
                     self.log_signal.emit("⚠️ 用户中断下载")
                     break
 
+                batch_start = batch_idx * BATCH_SIZE
+                batch_end = min(batch_start + BATCH_SIZE, total)
+                batch_codes = self.symbols[batch_start:batch_end]
+                batch_num = batch_idx + 1
+
+                self.progress_signal.emit(batch_end, total)
+
+                if batch_num <= 3 or batch_num % 5 == 0:
+                    self.log_signal.emit(f"📦 批次 {batch_num}/{total_batches}: 处理股票 {batch_start+1}-{batch_end}...")
+
+                # 步骤1: 批量触发下载到QMT本地缓存（逐个触发但容忍失败）
+                for stock_code in batch_codes:
+                    if not self._is_running:
+                        break
+                    try:
+                        xtdata.download_history_data(
+                            stock_code=stock_code,
+                            period=qmt_period,
+                            start_time=start_time,
+                            end_time=end_time,
+                            incrementally=True
+                        )
+                    except Exception:
+                        pass  # 单只失败跳过，不影响整批
+
+                if not self._is_running:
+                    break
+
+                # 步骤2: 批量读取数据
                 try:
-                    self.progress_signal.emit(i + 1, total)
-
-                    # 尝试获取数据（不保存）
-                    df = manager._fetch_from_source(symbol, self.start_date, self.end_date)
-
-                    if df.empty:
-                        # 数据确实为空
-                        failed_count += 1
-                        failed_list.append(f"{symbol} - 数据为空")
-                    else:
-                        # 数据获取成功，尝试保存
-                        try:
-                            success, file_size = manager.storage.save_data(df, symbol, data_type='daily')
-
-                            if success:
-                                # 更新元数据
-                                manager.metadata.update_data_version(
-                                    symbol=symbol,
-                                    symbol_type='stock',
-                                    start_date=str(df.index.min().date()),
-                                    end_date=str(df.index.max().date()),
-                                    record_count=len(df),
-                                    file_size=file_size
-                                )
-                                success_count += 1
-                            else:
-                                # 保存失败
-                                failed_count += 1
-                                failed_list.append(f"{symbol} - 保存失败 (数据量:{len(df)})")
-                        except Exception as save_error:
-                            # 保存异常
-                            failed_count += 1
-                            failed_list.append(f"{symbol} - 保存异常: {str(save_error)[:30]}")
-
-                    # 每下载100只股票输出一次日志
-                    if (i + 1) % 100 == 0:
-                        self.log_signal.emit(f"📊 进度: {i + 1}/{total} | 成功: {success_count} | 失败: {failed_count}")
-
+                    batch_data = xtdata.get_market_data_ex(
+                        stock_list=batch_codes,
+                        period=qmt_period,
+                        start_time=start_time,
+                        end_time=end_time
+                    )
                 except Exception as e:
-                    failed_count += 1
-                    failed_list.append(f"{symbol} - {str(e)[:50]}")
+                    self.log_signal.emit(f"  ⚠️ 批次 {batch_num} 读取失败: {str(e)[:50]}")
+                    for code in batch_codes:
+                        failed_count += 1
+                        failed_list.append(f"{code} - 批次读取失败")
                     continue
 
+                # 步骤3: 逐只处理并保存
+                for stock_code in batch_codes:
+                    if not self._is_running:
+                        break
+                    try:
+                        if isinstance(batch_data, dict) and stock_code in batch_data:
+                            df = batch_data[stock_code]
+                            if not df.empty:
+                                # 转换数据格式
+                                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+
+                                if is_daily:
+                                    date_series = time_series.dt.strftime('%Y-%m-%d')
+                                    df_processed = pd.DataFrame({
+                                        'stock_code': stock_code,
+                                        'symbol_type': 'stock',
+                                        'date': date_series,
+                                        'period': '1d',
+                                        'open': df['open'],
+                                        'high': df['high'],
+                                        'low': df['low'],
+                                        'close': df['close'],
+                                        'volume': df['volume'].astype('int64'),
+                                        'amount': df['amount'],
+                                        'created_at': datetime.now(),
+                                        'updated_at': datetime.now()
+                                    })
+                                else:
+                                    df_processed = pd.DataFrame({
+                                        'stock_code': stock_code,
+                                        'symbol_type': 'stock',
+                                        'date': time_series,
+                                        'period': self.data_type,
+                                        'open': df['open'],
+                                        'high': df['high'],
+                                        'low': df['low'],
+                                        'close': df['close'],
+                                        'volume': df['volume'].astype('int64'),
+                                        'amount': df['amount'],
+                                        'created_at': datetime.now(),
+                                        'updated_at': datetime.now()
+                                    })
+
+                                if not df_processed.empty:
+                                    all_save_data.append(df_processed)
+                                    success_count += 1
+                                else:
+                                    failed_count += 1
+                                    failed_list.append(f"{stock_code} - 处理后数据为空")
+                            else:
+                                failed_count += 1
+                                failed_list.append(f"{stock_code} - 返回空数据")
+                        else:
+                            failed_count += 1
+                            failed_list.append(f"{stock_code} - 无数据返回")
+                    except Exception as e:
+                        failed_count += 1
+                        failed_list.append(f"{stock_code} - {str(e)[:50]}")
+
+                # 每几批输出一次进度
+                if batch_num % 5 == 0 or batch_num == total_batches:
+                    self.log_signal.emit(f"📊 进度: {batch_end}/{total} ({batch_end/total*100:.1f}%) | 成功: {success_count} | 失败: {failed_count}")
+
+            self.log_signal.emit(f"📥 数据收集完成: {success_count} 只股票成功")
+
+            # ===== 批量写入DuckDB =====
+            if all_save_data:
+                self.log_signal.emit("💾 正在写入DuckDB...")
+                import time
+                time.sleep(1)  # 等待其他连接释放
+
+                try:
+                    df_all = pd.concat(all_save_data, ignore_index=True)
+
+                    # 确定目标表名
+                    if is_daily:
+                        table_name = 'stock_daily'
+                    else:
+                        table_name = f'stock_{self.data_type}'
+
+                    with db_manager.get_write_connection() as con:
+                        # 确保表存在
+                        if is_daily:
+                            con.execute(f"""
+                                CREATE TABLE IF NOT EXISTS {table_name} (
+                                    stock_code VARCHAR(20),
+                                    symbol_type VARCHAR(10),
+                                    date DATE,
+                                    period VARCHAR(10),
+                                    open DOUBLE,
+                                    high DOUBLE,
+                                    low DOUBLE,
+                                    close DOUBLE,
+                                    volume BIGINT,
+                                    amount DOUBLE,
+                                    created_at TIMESTAMP,
+                                    updated_at TIMESTAMP
+                                )
+                            """)
+                        else:
+                            con.execute(f"""
+                                CREATE TABLE IF NOT EXISTS {table_name} (
+                                    stock_code VARCHAR(20),
+                                    symbol_type VARCHAR(10),
+                                    date TIMESTAMP,
+                                    period VARCHAR(10),
+                                    open DOUBLE,
+                                    high DOUBLE,
+                                    low DOUBLE,
+                                    close DOUBLE,
+                                    volume BIGINT,
+                                    amount DOUBLE,
+                                    created_at TIMESTAMP,
+                                    updated_at TIMESTAMP
+                                )
+                            """)
+
+                        con.register('temp_batch', df_all)
+                        con.execute(f"DELETE FROM {table_name} WHERE stock_code IN (SELECT DISTINCT stock_code FROM temp_batch)")
+                        con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+                        con.unregister('temp_batch')
+
+                    self.log_signal.emit(f"✅ 成功保存 {len(df_all)} 条记录到 {table_name}")
+                except Exception as e:
+                    self.log_signal.emit(f"❌ 批量写入失败: {str(e)}")
+                    # 尝试分批写入
+                    self.log_signal.emit("🔄 尝试分批写入...")
+                    batch_write_size = 20
+                    write_success = 0
+                    for i in range(0, len(all_save_data), batch_write_size):
+                        try:
+                            batch = all_save_data[i:i+batch_write_size]
+                            df_batch = pd.concat(batch, ignore_index=True)
+                            with db_manager.get_write_connection() as con:
+                                con.register('temp_batch', df_batch)
+                                con.execute(f"DELETE FROM {table_name} WHERE stock_code IN (SELECT DISTINCT stock_code FROM temp_batch)")
+                                con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+                                con.unregister('temp_batch')
+                            write_success += 1
+                        except Exception:
+                            pass
+                    if write_success > 0:
+                        self.log_signal.emit(f"✅ 分批写入完成，成功 {write_success} 批")
+
+            # 输出结果
             result = {
                 'total': total,
                 'success': success_count,
@@ -211,8 +374,10 @@ class DataDownloadThread(QThread):
                 self.log_signal.emit("")
                 self.log_signal.emit("=" * 70)
                 self.log_signal.emit("  失败清单:")
-                for failed_item in failed_list:
+                for failed_item in failed_list[:30]:
                     self.log_signal.emit(f"    ✗ {failed_item}")
+                if len(failed_list) > 30:
+                    self.log_signal.emit(f"    ... 还有 {len(failed_list) - 30} 只")
                 self.log_signal.emit("=" * 70)
 
         except Exception as e:
@@ -222,70 +387,175 @@ class DataDownloadThread(QThread):
             self.error_signal.emit(error_msg)
 
     def _download_bonds(self):
-        """下载可转债数据"""
+        """下载可转债数据 — 使用批量预下载到QMT缓存再读取的模式"""
         try:
-            factor_platform_path = Path(__file__).parents[2] / "101因子" / "101因子分析平台" / "src"
-            if str(factor_platform_path) not in sys.path:
-                sys.path.insert(0, str(factor_platform_path))
+            from xtquant import xtdata
+            from data_manager.duckdb_connection_pool import get_db_manager
 
-            from data_manager import LocalDataManager
-
-            manager = LocalDataManager()
             self.log_signal.emit("✅ 数据管理器初始化成功")
+
+            # 获取DuckDB管理器
+            db_manager = get_db_manager(get_default_db_path())
 
             # 如果没有指定可转债列表，获取全部可转债
             if not self.symbols:
                 self.log_signal.emit("📊 正在获取可转债列表...")
-                self.symbols = manager.get_all_convertible_bonds_list()
+                try:
+                    self.symbols = xtdata.get_stock_list_in_sector('可转债')
+                except Exception:
+                    # 备用方案
+                    try:
+                        import easy_xt
+                        api = easy_xt.get_api()
+                        self.symbols = api.data.get_convertible_bonds()
+                    except Exception as e2:
+                        self.log_signal.emit(f"❌ 无法获取可转债列表: {e2}")
+                        self.error_signal.emit(f"无法获取可转债列表: {e2}")
+                        return
                 self.log_signal.emit(f"✅ 获取到 {len(self.symbols)} 只可转债")
 
             total = len(self.symbols)
             success_count = 0
             failed_count = 0
-            failed_list = []  # 记录失败的可转债及原因
+            failed_list = []
+            all_save_data = []
 
-            for i, symbol in enumerate(self.symbols):
+            # 日期格式转换
+            start_time = self.start_date.replace('-', '') if '-' in self.start_date else self.start_date
+            end_time = self.end_date.replace('-', '') if '-' in self.end_date else self.end_date
+
+            # ===== 分批下载优化 =====
+            BATCH_SIZE = 50
+            total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+            self.log_signal.emit(f"🚀 使用批量下载模式，每批{BATCH_SIZE}只可转债，共{total_batches}批")
+
+            for batch_idx in range(total_batches):
                 if not self._is_running:
                     self.log_signal.emit("⚠️ 用户中断下载")
                     break
 
-                try:
-                    self.progress_signal.emit(i + 1, total)
+                batch_start = batch_idx * BATCH_SIZE
+                batch_end = min(batch_start + BATCH_SIZE, total)
+                batch_codes = self.symbols[batch_start:batch_end]
+                batch_num = batch_idx + 1
 
-                    df = manager._fetch_from_source(symbol, self.start_date, self.end_date)
+                self.progress_signal.emit(batch_end, total)
 
-                    if df.empty:
-                        failed_count += 1
-                        failed_list.append(f"{symbol} - 数据为空")
-                        continue
+                if batch_num <= 3 or batch_num % 5 == 0:
+                    self.log_signal.emit(f"📦 批次 {batch_num}/{total_batches}: 处理可转债 {batch_start+1}-{batch_end}...")
 
-                    # 保存数据
-                    success, file_size = manager.storage.save_data(df, symbol, 'daily')
-
-                    if success:
-                        manager.metadata.update_data_version(
-                            symbol=symbol,
-                            symbol_type='bond',
-                            start_date=str(df.index.min().date()),
-                            end_date=str(df.index.max().date()),
-                            record_count=len(df),
-                            file_size=file_size
+                # 步骤1: 批量触发下载到QMT本地缓存
+                for bond_code in batch_codes:
+                    if not self._is_running:
+                        break
+                    try:
+                        xtdata.download_history_data(
+                            stock_code=bond_code,
+                            period='1d',
+                            start_time=start_time,
+                            end_time=end_time,
+                            incrementally=True
                         )
-                        success_count += 1
-                    else:
-                        failed_count += 1
-                        failed_list.append(f"{symbol} - 保存失败")
+                    except Exception:
+                        pass
 
-                    # 每下载50只可转债输出一次日志
-                    if (i + 1) % 50 == 0:
-                        self.log_signal.emit(f"📊 进度: {i + 1}/{total} | 成功: {success_count} | 失败: {failed_count}")
+                if not self._is_running:
+                    break
 
+                # 步骤2: 批量读取数据
+                try:
+                    batch_data = xtdata.get_market_data_ex(
+                        stock_list=batch_codes,
+                        period='1d',
+                        start_time=start_time,
+                        end_time=end_time
+                    )
                 except Exception as e:
-                    failed_count += 1
-                    failed_list.append(f"{symbol} - {str(e)[:50]}")
+                    self.log_signal.emit(f"  ⚠️ 批次 {batch_num} 读取失败: {str(e)[:50]}")
+                    for code in batch_codes:
+                        failed_count += 1
+                        failed_list.append(f"{code} - 批次读取失败")
                     continue
 
-            manager.close()
+                # 步骤3: 逐只处理
+                for bond_code in batch_codes:
+                    if not self._is_running:
+                        break
+                    try:
+                        if isinstance(batch_data, dict) and bond_code in batch_data:
+                            df = batch_data[bond_code]
+                            if not df.empty:
+                                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                                df_processed = pd.DataFrame({
+                                    'stock_code': bond_code,
+                                    'symbol_type': 'bond',
+                                    'date': time_series.dt.strftime('%Y-%m-%d'),
+                                    'period': '1d',
+                                    'open': df['open'],
+                                    'high': df['high'],
+                                    'low': df['low'],
+                                    'close': df['close'],
+                                    'volume': df['volume'].astype('int64'),
+                                    'amount': df['amount'],
+                                    'created_at': datetime.now(),
+                                    'updated_at': datetime.now()
+                                })
+                                if not df_processed.empty:
+                                    all_save_data.append(df_processed)
+                                    success_count += 1
+                                else:
+                                    failed_count += 1
+                                    failed_list.append(f"{bond_code} - 处理后数据为空")
+                            else:
+                                failed_count += 1
+                                failed_list.append(f"{bond_code} - 返回空数据")
+                        else:
+                            failed_count += 1
+                            failed_list.append(f"{bond_code} - 无数据返回")
+                    except Exception as e:
+                        failed_count += 1
+                        failed_list.append(f"{bond_code} - {str(e)[:50]}")
+
+                if batch_num % 5 == 0 or batch_num == total_batches:
+                    self.log_signal.emit(f"📊 进度: {batch_end}/{total} ({batch_end/total*100:.1f}%) | 成功: {success_count} | 失败: {failed_count}")
+
+            self.log_signal.emit(f"📥 数据收集完成: {success_count} 只可转债成功")
+
+            # ===== 批量写入DuckDB =====
+            if all_save_data:
+                self.log_signal.emit("💾 正在写入DuckDB...")
+                import time
+                time.sleep(1)
+
+                try:
+                    df_all = pd.concat(all_save_data, ignore_index=True)
+                    table_name = 'stock_daily'
+
+                    with db_manager.get_write_connection() as con:
+                        con.execute(f"""
+                            CREATE TABLE IF NOT EXISTS {table_name} (
+                                stock_code VARCHAR(20),
+                                symbol_type VARCHAR(10),
+                                date DATE,
+                                period VARCHAR(10),
+                                open DOUBLE,
+                                high DOUBLE,
+                                low DOUBLE,
+                                close DOUBLE,
+                                volume BIGINT,
+                                amount DOUBLE,
+                                created_at TIMESTAMP,
+                                updated_at TIMESTAMP
+                            )
+                        """)
+                        con.register('temp_batch', df_all)
+                        con.execute(f"DELETE FROM {table_name} WHERE stock_code IN (SELECT DISTINCT stock_code FROM temp_batch)")
+                        con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
+                        con.unregister('temp_batch')
+
+                    self.log_signal.emit(f"✅ 成功保存 {len(df_all)} 条可转债记录到 {table_name}")
+                except Exception as e:
+                    self.log_signal.emit(f"❌ 批量写入失败: {str(e)}")
 
             result = {
                 'total': total,
@@ -303,8 +573,10 @@ class DataDownloadThread(QThread):
                 self.log_signal.emit("")
                 self.log_signal.emit("=" * 70)
                 self.log_signal.emit("  失败清单:")
-                for failed_item in failed_list:
+                for failed_item in failed_list[:30]:
                     self.log_signal.emit(f"    ✗ {failed_item}")
+                if len(failed_list) > 30:
+                    self.log_signal.emit(f"    ... 还有 {len(failed_list) - 30} 只")
                 self.log_signal.emit("=" * 70)
 
         except Exception as e:
@@ -2685,13 +2957,23 @@ class LocalDataManagerWidget(QWidget):
         start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
         end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
 
-        self.log(f"📥 开始下载A股数据 ({start_date} ~ {end_date})")
+        # 读取用户选择的数据类型
+        data_type_text = self.data_type_combo.currentText()
+        period_map = {
+            "日线数据": "daily", "1分钟数据": "1min", "5分钟数据": "5min",
+            "15分钟数据": "15min", "30分钟数据": "30min", "60分钟数据": "60min",
+            "Tick数据": "tick"
+        }
+        data_type = period_map.get(data_type_text, "daily")
+
+        self.log(f"📥 开始下载A股数据 ({start_date} ~ {end_date}), 数据类型: {data_type_text}")
 
         self.download_thread = DataDownloadThread(
             task_type='download_stocks',
             symbols=None,  # 自动获取全部A股
             start_date=start_date,
-            end_date=end_date
+            end_date=end_date,
+            data_type=data_type
         )
         self.download_thread.log_signal.connect(self.log)
         self.download_thread.progress_signal.connect(self.update_progress)
