@@ -48,6 +48,28 @@ except ImportError:
 from config.env_config import get_default_db_path, get_default_stock_root
 
 
+def _extract_time_series(df):
+    """从QMT返回的DataFrame中提取时间序列（始终返回pd.Series）。
+
+    QMT的 get_market_data_ex 在1d/1m等常用周期下，时间戳存放在DataFrame的index中，
+    而不是列中。部分周期（如tick）的时间戳在 'time' 列中。此函数统一处理两种情况。
+    """
+    if 'time' in df.columns:
+        return pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+    else:
+        # 时间在index中，index已经是DatetimeIndex（由xtdata内部转换）
+        idx = df.index
+        if isinstance(idx, pd.DatetimeIndex):
+            # index已经是datetime，确保有时区信息
+            if idx.tz is None:
+                return pd.Series(idx.tz_localize('UTC').tz_convert('Asia/Shanghai'), index=df.index)
+            return pd.Series(idx.tz_convert('Asia/Shanghai'), index=df.index)
+        else:
+            # index是数值型毫秒时间戳
+            converted = pd.to_datetime(idx, unit='ms', utc=True).tz_convert('Asia/Shanghai')
+            return pd.Series(converted, index=df.index)
+
+
 class DataDownloadThread(QThread):
     """数据下载线程"""
     log_signal = pyqtSignal(str)
@@ -222,7 +244,7 @@ class DataDownloadThread(QThread):
                             df = batch_data[stock_code]
                             if not df.empty:
                                 # 转换数据格式
-                                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                                time_series = _extract_time_series(df)
 
                                 if is_daily:
                                     date_series = time_series.dt.strftime('%Y-%m-%d')
@@ -485,7 +507,7 @@ class DataDownloadThread(QThread):
                         if isinstance(batch_data, dict) and bond_code in batch_data:
                             df = batch_data[bond_code]
                             if not df.empty:
-                                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                                time_series = _extract_time_series(df)
                                 df_processed = pd.DataFrame({
                                     'stock_code': bond_code,
                                     'symbol_type': 'bond',
@@ -697,7 +719,7 @@ class DataDownloadThread(QThread):
                         if not df.empty:
                             # 转换数据格式
                             # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
-                            time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                            time_series = _extract_time_series(df)
                             df_processed = pd.DataFrame({
                                 'stock_code': stock_code,
                                 'symbol_type': 'stock',
@@ -1027,7 +1049,7 @@ class DataDownloadThread(QThread):
                                 df = batch_data[stock_code]
                                 if not df.empty:
                                     # 转换数据格式
-                                    time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                                    time_series = _extract_time_series(df)
                                     df_processed = pd.DataFrame({
                                         'stock_code': stock_code,
                                         'symbol_type': 'stock',
@@ -1355,7 +1377,7 @@ class SingleStockDownloadThread(QThread):
             # 根据日期范围过滤数据
             self.log_signal.emit("🔍 正在过滤日期范围...")
             # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
-            df['datetime'] = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+            df['datetime'] = _extract_time_series(df)
 
             if self.period == '1d':
                 # 日线：只保留日期范围内的数据
@@ -1381,7 +1403,7 @@ class SingleStockDownloadThread(QThread):
             if self.period == 'tick':
                 # tick数据处理（字段结构不同）
                 # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
-                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
+                time_series = _extract_time_series(df)
 
                 df_processed = pd.DataFrame({
                     'stock_code': self.stock_code,
@@ -1439,67 +1461,63 @@ class SingleStockDownloadThread(QThread):
                 self.log_signal.emit(f"[OK] {self.stock_code} 下载完成!")
                 return
 
-            if 'time' in df.columns:
-                # QMT返回的数据格式
-                # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
-                # 日线：使用DATE类型（字符串YYYY-MM-DD）
-                # 分钟线：使用TIMESTAMP类型（直接保存datetime对象）
-                time_series = pd.to_datetime(df['time'], unit='ms', utc=True).dt.tz_convert('Asia/Shanghai')
-                if self.period == '1d':
-                    date_series = time_series.dt.strftime('%Y-%m-%d')
-                else:
-                    date_series = time_series  # 直接使用datetime对象（支持分钟线）
-
-                df_processed = pd.DataFrame({
-                    'stock_code': self.stock_code,
-                    'symbol_type': 'stock' if (self.stock_code.startswith('0') or self.stock_code.startswith('3') or self.stock_code.startswith('6')) else 'etf',
-                    'date': date_series,
-                    'period': self.period,
-                    'open': df['open'],
-                    'high': df['high'],
-                    'low': df['low'],
-                    'close': df['close'],
-                    'volume': df['volume'].astype('int64') if 'volume' in df.columns else 0,
-                    'amount': df['amount'] if 'amount' in df.columns else 0,
-                    'created_at': datetime.now(),
-                    'updated_at': datetime.now()
-                })
-
-                # 性能优化：已移除 factor/adjust_type 无用列（节省存储空间）
-                # 复权功能改用按需调用QMT API实现
-                # 复权功能改用按需调用QMT API实现
-                # 查询时自动调用QMT API获取复权数据
-                # 价格列: 4个（open, high, low, close）
-                # 复权支持: none（不复权）, front（前复权）, back（后复权）, geometric_front（等比前复权）, geometric_back（等比后复权）
-
-                # 保存到DuckDB
-                if self.period == '1d':
-                    table_name = 'stock_daily'
-                else:
-                    table_name = f'stock_{self.period}'
-
-                with manager.get_write_connection() as con:
-                    con.register('temp_data', df_processed)
-                    # 删除该股票该周期的旧数据
-                    con.execute(f"DELETE FROM {table_name} WHERE stock_code = '{self.stock_code}'")
-                    # 插入新数据
-                    con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_data")
-                    con.unregister('temp_data')
-
-                self.log_signal.emit(f"✅ 已保存 {len(df_processed)} 条记录到DuckDB")
-
-                result = {
-                    'success': True,
-                    'symbol': self.stock_code,
-                    'record_count': len(df_processed),
-                    'file_size': len(df_processed) * 0.0001  # 估算
-                }
-
-                self.finished_signal.emit(result)
-                self.log_signal.emit(f"[OK] {self.stock_code} 下载完成!")
-
+            # QMT返回的数据格式（时间可能在列中也可能在index中）
+            # 注意：QMT返回的时间戳是UTC时间，需要转换为北京时间
+            # 日线：使用DATE类型（字符串YYYY-MM-DD）
+            # 分钟线：使用TIMESTAMP类型（直接保存datetime对象）
+            time_series = _extract_time_series(df)
+            if self.period == '1d':
+                date_series = time_series.dt.strftime('%Y-%m-%d')
             else:
-                self.error_signal.emit("数据格式不正确")
+                date_series = time_series  # 直接使用datetime对象（支持分钟线）
+
+            df_processed = pd.DataFrame({
+                'stock_code': self.stock_code,
+                'symbol_type': 'stock' if (self.stock_code.startswith('0') or self.stock_code.startswith('3') or self.stock_code.startswith('6')) else 'etf',
+                'date': date_series,
+                'period': self.period,
+                'open': df['open'],
+                'high': df['high'],
+                'low': df['low'],
+                'close': df['close'],
+                'volume': df['volume'].astype('int64') if 'volume' in df.columns else 0,
+                'amount': df['amount'] if 'amount' in df.columns else 0,
+                'created_at': datetime.now(),
+                'updated_at': datetime.now()
+            })
+
+            # 性能优化：已移除 factor/adjust_type 无用列（节省存储空间）
+            # 复权功能改用按需调用QMT API实现
+            # 复权功能改用按需调用QMT API实现
+            # 查询时自动调用QMT API获取复权数据
+            # 价格列: 4个（open, high, low, close）
+            # 复权支持: none（不复权）, front（前复权）, back（后复权）, geometric_front（等比前复权）, geometric_back（等比后复权）
+
+            # 保存到DuckDB
+            if self.period == '1d':
+                table_name = 'stock_daily'
+            else:
+                table_name = f'stock_{self.period}'
+
+            with manager.get_write_connection() as con:
+                con.register('temp_data', df_processed)
+                # 删除该股票该周期的旧数据
+                con.execute(f"DELETE FROM {table_name} WHERE stock_code = '{self.stock_code}'")
+                # 插入新数据
+                con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_data")
+                con.unregister('temp_data')
+
+            self.log_signal.emit(f"✅ 已保存 {len(df_processed)} 条记录到DuckDB")
+
+            result = {
+                'success': True,
+                'symbol': self.stock_code,
+                'record_count': len(df_processed),
+                'file_size': len(df_processed) * 0.0001  # 估算
+            }
+
+            self.finished_signal.emit(result)
+            self.log_signal.emit(f"[OK] {self.stock_code} 下载完成!")
 
         except Exception as e:
             import traceback

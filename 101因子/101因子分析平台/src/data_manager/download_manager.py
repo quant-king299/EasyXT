@@ -127,6 +127,9 @@ class DataDownloadManager:
                             df['ts_code'] = symbol
                             if 'time' in df.columns:
                                 df['trade_date'] = pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y%m%d')
+                            else:
+                                # 时间戳在index中（get_market_data_ex常用周期下的行为）
+                                df['trade_date'] = pd.to_datetime(df.index, unit='ms').strftime('%Y%m%d')
 
                             # 选择需要的字段
                             # QMT可能不直接提供PE、PB，这里先返回基础数据

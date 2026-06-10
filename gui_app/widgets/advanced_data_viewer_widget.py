@@ -1396,7 +1396,7 @@ class TickDataLoadThread(QThread):
 
                         # 应用时间范围过滤
                         if self.time_range != "全天":
-                            df['datetime'] = pd.to_datetime(df['time'], unit='ms')
+                            df['datetime'] = pd.to_datetime(pd.Series(df.index if 'time' not in df.columns else df['time']), unit='ms')
 
                             if self.time_range == "9:15-11:30":
                                 df = df[(df['datetime'].dt.hour >= 9) & (df['datetime'].dt.hour < 12)]

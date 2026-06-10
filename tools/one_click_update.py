@@ -95,7 +95,7 @@ def update_data():
                         df_processed = pd.DataFrame({
                             'stock_code': stock_code,
                             'symbol_type': 'stock',
-                            'date': pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y-%m-%d'),
+                            'date': pd.to_datetime(pd.Series(df.index if 'time' not in df.columns else df['time']), unit='ms').dt.strftime('%Y-%m-%d'),
                             'period': '1d',
                             'open': df['open'],
                             'high': df['high'],

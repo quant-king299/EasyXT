@@ -110,9 +110,13 @@ class QMTSource(BaseDataSource):
             df = data[symbol].reset_index()
 
             # QMT返回的时间戳是毫秒，需要转换为日期
+            # 注意：get_market_data_ex 在常用周期(1d/1m等)下，时间戳在index中而非列中
             if 'time' in df.columns:
                 df['date'] = pd.to_datetime(df['time'], unit='ms').dt.strftime('%Y%m%d')
                 df.drop(columns=['time'], inplace=True)
+            else:
+                # 时间在index中（reset_index后变为'index'列或已在index中）
+                df['date'] = pd.to_datetime(df.index, unit='ms').strftime('%Y%m%d')
             df['symbol'] = symbol
 
             # 选择需要的列
