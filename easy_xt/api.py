@@ -107,7 +107,52 @@ class EasyXT:
             self.init_data()
 
         return self.data.get_price(codes, start, end, period, count, fields, adjust)
-    
+
+    def get_price_with_fallback(self,
+                                codes: Union[str, List[str]],
+                                start: Optional[str] = None,
+                                end: Optional[str] = None,
+                                period: str = '1d',
+                                count: Optional[int] = None,
+                                fields: Optional[List[str]] = None,
+                                adjust: str = 'front') -> pd.DataFrame:
+        """
+        多级降级获取价格数据（高可用，推荐策略回测使用）。
+
+        自动按优先级尝试各数据源，任一成功即返回:
+          第1级: QMT xtdata        — 本地数据最快最全（EasyXT 主数据源）
+          第2级: 东方财富 HTTP API  — 免费，无需 QMT
+          第3级: TDX pytdx         — 免费 TCP 行情
+          第4级: 兜底空数据        — 不抛异常
+
+        Args:
+            codes: 股票代码或列表
+            start: 开始日期
+            end: 结束日期
+            period: 数据周期
+            count: 数据条数
+            fields: 字段列表
+            adjust: 复权类型
+
+        Returns:
+            DataFrame，含 'source' 列标示数据来源。
+            全部失败时返回空 DataFrame（不抛异常）。
+        """
+        if not self._data_connected:
+            self.init_data()
+        return self.data.get_price_with_fallback(
+            codes, start, end, period, count, fields, adjust
+        )
+
+    def get_fallback_stats(self) -> dict:
+        """
+        获取降级数据获取器的运行统计。
+
+        Returns:
+            dict: {total_calls, success_by_source, fail_count, avg_latency_ms}
+        """
+        return self.data.get_fallback_stats()
+
     def get_current_price(self, codes: Union[str, List[str]]) -> pd.DataFrame:
         """
         获取当前价格（实时行情）

@@ -417,6 +417,7 @@ class DataAPI:
         self._active_source = None  # 当前使用的数据源: 'qmt', 'tdx', 'eastmoney'
         self._tdx_provider = None
         self._eastmoney_provider = None
+        self._fallback_fetcher = None  # 多级降级获取器（懒加载）
 
     def connect(self) -> bool:
         """连接数据服务 - 自动选择最佳数据源"""
@@ -1985,11 +1986,106 @@ class DataAPI:
                 else:
                     break
         
-        # 所有重试都失败了
+        # QMT 所有重试都失败了 → 尝试降级到备用数据源
+        print(f"[降级] QMT 获取失败（{max_retries}次重试），尝试备用数据源...")
+        fallback_df = self.get_price_with_fallback(
+            codes=codes, start=start, end=end, period=period,
+            count=count, fields=fields, adjust=adjust
+        )
+        if fallback_df is not None and not fallback_df.empty:
+            source = fallback_df['source'].iloc[0] if 'source' in fallback_df.columns else 'unknown'
+            print(f"[降级] 成功从备用数据源获取数据 (来源: {source})")
+            return fallback_df
+
+        # 降级也失败
         if isinstance(last_error, (ConnectionError, DataError)):
             raise last_error
         ErrorHandler.log_error(f"获取价格数据失败: {str(last_error)}")
         raise DataError(f"获取价格数据失败: {str(last_error)}")
+
+    def get_fallback_fetcher(self):
+        """
+        获取多级降级数据获取器（懒加载）。
+
+        降级链: QMT xtdata → EastMoney HTTP → TDX pytdx → 兜底
+
+        Returns:
+            FallbackFetcher 实例
+        """
+        if self._fallback_fetcher is None:
+            from easy_xt.fallback_fetcher import FallbackFetcher
+            self._fallback_fetcher = FallbackFetcher(
+                qmt_api=self,
+                tdx_provider=self._tdx_provider,
+            )
+        return self._fallback_fetcher
+
+    def get_price_with_fallback(self,
+                                codes: Union[str, List[str]],
+                                start: Optional[str] = None,
+                                end: Optional[str] = None,
+                                period: str = '1d',
+                                count: Optional[int] = None,
+                                fields: Optional[List[str]] = None,
+                                adjust: str = 'front') -> pd.DataFrame:
+        """
+        多级降级获取价格数据（推荐用于策略回测）。
+
+        按优先级依次尝试各数据源:
+          第1级: QMT xtdata        — 本地数据，最快，支持全部周期和复权方式
+          第2级: 东方财富 HTTP API  — 免费，无需 QMT，全网可达
+          第3级: TDX pytdx         — 免费 TCP 行情服务器
+          第4级: 兜底返回空数据    — 不抛异常，返回 source='BACKUP_FAILED'
+
+        Args:
+            codes: 股票代码或列表
+            start: 开始日期 (YYYYMMDD 或 YYYY-MM-DD)
+            end: 结束日期
+            period: 数据周期 ('1d', '1m', '5m', '1w' 等)
+            count: 数据条数
+            fields: 字段列表
+            adjust: 复权类型（仅 QMT 支持）
+
+        Returns:
+            DataFrame，含 'source' 列标记实际数据来源。
+            所有数据源失败时返回空 DataFrame（不抛异常）。
+
+        Example:
+            >>> api = get_api()
+            >>> api.data.init_data()
+            >>> df = api.data.get_price_with_fallback(
+            ...     ['000001.SZ', '600000.SH'],
+            ...     start='20240101',
+            ...     period='1d'
+            ... )
+            >>> if not df.empty:
+            ...     print(f"数据来源: {df['source'].iloc[0]}")
+        """
+        fetcher = self.get_fallback_fetcher()
+
+        # 确保 TDX provider 已初始化
+        if fetcher.tdx_provider is None and self._tdx_provider:
+            fetcher.tdx_provider = self._tdx_provider
+
+        return fetcher.fetch(
+            codes=codes,
+            start=start or '',
+            end=end or '',
+            period=period,
+            count=count or 0,
+            fields=fields,
+            adjust=adjust,
+        )
+
+    def get_fallback_stats(self) -> dict:
+        """
+        获取降级获取器的运行统计。
+
+        Returns:
+            dict: 包含 total_calls, success_by_source, fail_count 等统计信息
+        """
+        fetcher = self.get_fallback_fetcher()
+        return fetcher.get_stats()
 
     # ==================== 订阅相关方法 ====================
 
