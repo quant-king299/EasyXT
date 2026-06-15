@@ -78,7 +78,7 @@ class Position(TypedDict):
     code: StockCode
     name: str
     volume: int
-    available_volume: int
+    can_use_volume: int
     frozen_volume: int
     cost_price: float
     current_price: float

@@ -495,7 +495,7 @@ class EasyXT:
                 return None
 
             # 获取持仓数量
-            volume_available = positions.iloc[0]['available_volume'] if 'available_volume' in positions.columns else positions.iloc[0]['volume']
+            volume_available = positions.iloc[0]['can_use_volume'] if 'can_use_volume' in positions.columns else positions.iloc[0]['volume']
             if volume_available <= 0:
                 ErrorHandler.log_error(f"{code}没有可用持仓")
                 return None
