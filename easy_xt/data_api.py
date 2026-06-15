@@ -4,17 +4,23 @@
 
 ⚠️ 线程安全说明：
 xtdata.download_history_data2() 和 download_history_data() 方法在并发调用时可能导致卡死。
-为了解决这个问题，我们在 DataAPI 类中添加了类级别的线程锁 (_download_lock)，
-确保同一时间只有一个线程执行下载操作。
+为了解决这个问题，我们采用了双重保护机制：
+
+1. 模块级 monkey-patch：在 xtdata 导入后立即对 download_history_data 和
+   download_history_data2 进行猴子补丁，使 ANY 调用方（包括 GUI、策略、工具脚本）
+   都自动受到全局线程锁保护，无需修改调用方代码。
+
+2. DataAPI._download_lock（RLock）：DataAPI 内部方法也持有同一把锁，
+   使用可重入锁 (RLock) 避免同一线程内嵌套调用时死锁。
 
 锁保护的方法包括：
 - get_price() - 获取价格数据时的下载操作
 - get_price_robust() - 健壮获取价格数据时的下载操作
 - download_data() - 下载历史数据
 - download_history_data_batch() - 批量下载历史数据
-- 任何内部调用 download_history_data 或 download_history_data2 的方法
+- 任何内部或外部调用 download_history_data 或 download_history_data2 的方法
 
-这样可以确保即使在并发场景下，也能正常工作，不会导致卡死。
+这样可以确保即使在 GUI 多线程、策略并发等场景下，也能正常工作，不会导致卡死。
 """
 import pandas as pd
 from typing import Union, List, Optional, Dict, Any
@@ -38,6 +44,45 @@ try:
     import xtquant.xtdata as xt
     xt_available = True
     print("[OK] QMT (xtquant.xtdata) imported successfully")
+
+    # ============================================================
+    # 全局线程锁 + monkey-patch：保护 xtdata 的下载方法
+    # 如果 easy_xt.__init__ 已经打过补丁，复用它的锁；否则自己创建
+    # ============================================================
+    _patch_already_applied = (
+        hasattr(xt.download_history_data, '__wrapped__') or
+        'locked' in getattr(xt.download_history_data, '__name__', '')
+    )
+
+    if not _patch_already_applied:
+        # 复用 easy_xt.__init__ 中的全局锁（通过 sys.modules 避免循环导入）
+        _easy_xt_mod = sys.modules.get('easy_xt')
+        if _easy_xt_mod and hasattr(_easy_xt_mod, '_download_lock'):
+            _global_download_lock = _easy_xt_mod._download_lock
+        else:
+            _global_download_lock = threading.RLock()
+
+        _original_download_history_data = xt.download_history_data
+        _original_download_history_data2 = xt.download_history_data2
+
+        def _locked_download_history_data(*args, **kwargs):
+            """线程安全的 download_history_data 包装"""
+            with _global_download_lock:
+                return _original_download_history_data(*args, **kwargs)
+
+        def _locked_download_history_data2(*args, **kwargs):
+            """线程安全的 download_history_data2 包装"""
+            with _global_download_lock:
+                return _original_download_history_data2(*args, **kwargs)
+
+        xt.download_history_data = _locked_download_history_data
+        xt.download_history_data2 = _locked_download_history_data2
+        sys.modules['xtquant.xtdata'].download_history_data = _locked_download_history_data
+        sys.modules['xtquant.xtdata'].download_history_data2 = _locked_download_history_data2
+
+        print("[OK] xtdata download functions patched with global thread lock (RLock)")
+    else:
+        print("[OK] xtdata already patched, reusing existing lock")
 except ImportError:
     # QMT不可用是正常的，继续尝试其他数据源
     pass
@@ -356,8 +401,13 @@ def validate_stock_codes(codes: Union[str, List[str]]) -> tuple[bool, str]:
 class DataAPI:
     """数据API封装类 - 支持多数据源自动降级"""
 
-    # 类级别的线程锁，用于保护 xtdata 的下载操作
-    _download_lock = threading.Lock()
+    # 类级别的线程锁，指向全局下载锁（RLock）
+    # 与 __init__.py 的 monkey-patch 共享同一把锁，保证所有调用方互斥
+    _download_lock = (
+        sys.modules['easy_xt']._download_lock
+        if 'easy_xt' in sys.modules and hasattr(sys.modules['easy_xt'], '_download_lock')
+        else threading.RLock()
+    )
 
     def __init__(self):
         self.xt = xt

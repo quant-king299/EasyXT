@@ -6,6 +6,46 @@ EasyXT - xtquant的简化API封装
 __version__ = "1.0.0"
 __author__ = "CodeBuddy"
 
+# ============================================================
+# ⚠️ 线程安全：尽早对 xtdata 下载方法进行 monkey-patch
+# 防止 GUI、策略、工具等任何代码直接调用 xtdata.download_history_data
+# 或 download_history_data2 时因并发导致卡死
+# ============================================================
+import threading
+import sys
+
+_download_lock = threading.RLock()
+
+def _patch_xtdata_download():
+    """对 xtdata 的下载方法进行线程安全包装（RLock 可重入）"""
+    try:
+        import xtquant.xtdata as xtdata
+
+        _orig_download = xtdata.download_history_data
+        _orig_download2 = xtdata.download_history_data2
+
+        def locked_download(*args, **kwargs):
+            with _download_lock:
+                return _orig_download(*args, **kwargs)
+
+        def locked_download2(*args, **kwargs):
+            with _download_lock:
+                return _orig_download2(*args, **kwargs)
+
+        xtdata.download_history_data = locked_download
+        xtdata.download_history_data2 = locked_download2
+
+        # 同时更新 sys.modules，确保后续 import xtquant.xtdata 获取补丁版本
+        sys.modules['xtquant.xtdata'].download_history_data = locked_download
+        sys.modules['xtquant.xtdata'].download_history_data2 = locked_download2
+
+        print("[EasyXT] xtdata download functions patched (global RLock)")
+        return True
+    except ImportError:
+        return False
+
+_patch_applied = _patch_xtdata_download()
+
 # 显示作者信息
 print("作者微信: www_ptqmt_com")
 print("欢迎关注微信公众号: 王者quant")
