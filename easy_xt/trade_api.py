@@ -216,7 +216,7 @@ class TradeAPI:
                 except:
                     session_int = 123456  # 默认session ID
 
-                print(f"🔧 使用session_id: {session_int}")
+                print(f"[OK] 使用session_id: {session_int}")
 
                 # 创建交易对象
                 if _xt_trader:

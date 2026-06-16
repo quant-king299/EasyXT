@@ -108,6 +108,20 @@ class TushareDownloadThread(QThread):
                 self._download_cb_basic()
             elif self.task_type == 'cb_daily':
                 self._download_cb_daily()
+            elif self.task_type == 'etf_basic':
+                self._download_etf_basic()
+            elif self.task_type == 'etf_daily':
+                self._download_etf_daily()
+            elif self.task_type == 'adj_factor':
+                self._download_adj_factor()
+            elif self.task_type == 'stk_limit':
+                self._download_stk_limit()
+            elif self.task_type == 'suspend_info':
+                self._download_suspend_info()
+            elif self.task_type == 'sw_industry':
+                self._download_sw_industry()
+            elif self.task_type == 'basic_all':
+                self._download_basic_all()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -887,6 +901,21 @@ class TushareDownloadThread(QThread):
                 elif task_type == 'market_cap':
                     self._download_market_cap()
                 elif task_type == 'daily':
+                    self._download_daily()
+                elif task_type == 'financial_indicator':
+                    self._download_financial_indicator()
+                elif task_type == 'balancesheet':
+                    self._download_balancesheet()
+                elif task_type == 'cashflow_data':
+                    self._download_cashflow_data()
+                elif task_type == 'adj_factor':
+                    self._download_adj_factor()
+                elif task_type == 'stk_limit':
+                    self._download_stk_limit()
+                elif task_type == 'suspend_info':
+                    self._download_suspend_info()
+                elif task_type == 'sw_industry':
+                    self._download_sw_industry()
                     self._download_daily()
                 elif task_type == 'financial_indicator':
                     self._download_financial_indicator()
@@ -1900,6 +1929,320 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"可转债日行情下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    def _download_etf_basic(self):
+        """下载 ETF 基本信息（etf_basic）"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            self.log_signal.emit("开始下载 ETF 基本信息（etf_basic）")
+            conn = duckdb.connect(db_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS etf_basic (
+                    ts_code VARCHAR PRIMARY KEY,
+                    name VARCHAR,
+                    management VARCHAR,
+                    custodian VARCHAR,
+                    fund_type VARCHAR,
+                    found_date VARCHAR,
+                    due_date VARCHAR,
+                    list_date VARCHAR,
+                    issue_date VARCHAR,
+                    delist_date VARCHAR,
+                    issue_amount DOUBLE,
+                    m_fee DOUBLE,
+                    c_fee DOUBLE,
+                    duration_year DOUBLE,
+                    p_value DOUBLE,
+                    min_amount DOUBLE,
+                    exp_return DOUBLE,
+                    benchmark VARCHAR,
+                    status VARCHAR,
+                    invest_type VARCHAR,
+                    type VARCHAR,
+                    trustee VARCHAR,
+                    purc_startdate VARCHAR,
+                    redm_startdate VARCHAR,
+                    market VARCHAR
+                )
+            """)
+            df = pro.fund_basic(market='E')
+            if df is not None and not df.empty:
+                conn.execute("DELETE FROM etf_basic")
+                cols = [c for c in df.columns if c in [
+                    'ts_code','name','management','custodian','fund_type',
+                    'found_date','due_date','list_date','issue_date','delist_date',
+                    'issue_amount','m_fee','c_fee','duration_year','p_value',
+                    'min_amount','exp_return','benchmark','status','invest_type',
+                    'type','trustee','purc_startdate','redm_startdate','market'
+                ]]
+                df_sub = df[cols]
+                conn.executemany(
+                    f"INSERT INTO etf_basic VALUES ({','.join(['?']*len(cols))})",
+                    [tuple(row) for row in df_sub.itertuples(index=False)]
+                )
+                conn.commit()
+                self.log_signal.emit(f"ETF 基本信息下载完成！共 {len(df_sub)} 只")
+            conn.close()
+            self.finished_signal.emit({'success': True})
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"ETF 基本信息下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_etf_daily(self):
+        """下载 ETF 日行情（etf_daily）"""
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '')
+            end_date = self.kwargs.get('end_date', '')
+            if not start_date:
+                years = self.kwargs.get('years', 3)
+                start_date = f'{datetime.now().year - years}0101'
+            if not end_date:
+                end_date = datetime.now().strftime('%Y%m%d')
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载 ETF 日行情（etf_daily）")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            conn = duckdb.connect(db_path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS etf_daily (
+                    ts_code VARCHAR, trade_date DATE,
+                    open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE,
+                    pre_close DOUBLE, change DOUBLE, pct_chg DOUBLE,
+                    vol DOUBLE, amount DOUBLE,
+                    PRIMARY KEY (ts_code, trade_date)
+                )
+            """)
+
+            # 获取 ETF 列表
+            try:
+                etf_list = conn.execute(
+                    "SELECT ts_code FROM etf_basic WHERE status='L'"
+                ).fetchall()
+                etf_codes = [r[0] for r in etf_list]
+            except Exception:
+                etf_codes = []
+
+            if not etf_codes:
+                self.log_signal.emit("etf_basic 表为空，先从 API 获取...")
+                df_basic = pro.fund_basic(market='E')
+                if df_basic is not None and not df_basic.empty:
+                    etf_codes = df_basic[df_basic['status'] == 'L']['ts_code'].tolist()
+                else:
+                    self.error_signal.emit("无法获取 ETF 列表")
+                    conn.close()
+                    return
+
+            existing_map = self._get_existing_stocks(conn, 'etf_daily', date_col='trade_date', code_col='ts_code')
+            need_download, skipped = self._filter_symbols_for_download(etf_codes, existing_map, end_date)
+            self.log_signal.emit(f"已有数据: {skipped} 只 | 需下载: {len(need_download)} 只")
+
+            if not need_download:
+                self.log_signal.emit("所有 ETF 日行情已是最新")
+                conn.close()
+                self.finished_signal.emit({'success': True, 'skipped': skipped})
+                return
+
+            success_count = 0
+            failed_count = 0
+
+            for i, ts_code in enumerate(need_download, 1):
+                if not self._is_running:
+                    break
+                stock_start = start_date
+                if ts_code in existing_map and existing_map[ts_code]:
+                    next_day = pd.to_datetime(str(existing_map[ts_code])) + timedelta(days=1)
+                    stock_start = next_day.strftime('%Y%m%d')
+
+                for retry in range(3):
+                    try:
+                        df = pro.fund_daily(ts_code=ts_code, start_date=stock_start, end_date=end_date)
+                        if df is not None and not df.empty:
+                            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+                            numeric_cols = [c for c in df.columns if c not in ['ts_code', 'trade_date']]
+                            df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce'))
+                            insert_data = [tuple(row) for row in df.itertuples(index=False)]
+                            conn.executemany(
+                                f"INSERT OR REPLACE INTO etf_daily VALUES ({','.join(['?']*len(df.columns))})",
+                                insert_data
+                            )
+                            conn.commit()
+                            success_count += 1
+                            if i % 50 == 0:
+                                self.log_signal.emit(f"  进度: {i}/{len(need_download)} (成功:{success_count}, 失败:{failed_count})")
+                        break
+                    except Exception:
+                        if retry == 2:
+                            failed_count += 1
+                        else:
+                            time.sleep(1)
+
+            conn.close()
+            self.log_signal.emit(f"\nETF 日行情下载完成！成功: {success_count}, 失败: {failed_count}, 跳过: {skipped}")
+            self.finished_signal.emit({'success': True, 'success_count': success_count, 'skipped': skipped})
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"ETF 日行情下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    # ==================== 基础数据下载（5000分专属） ====================
+
+    def _download_adj_factor(self):
+        """下载复权因子数据"""
+        try:
+            from tushare_manager.download_basic_data import download_adj_factor as _dl_adj
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载复权因子数据")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                if current % 50 == 0 or current == total:
+                    self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_adj(db_path=db_path, start_date=start_date, end_date=end_date,
+                            progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 复权因子下载完成！共 {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'adj_factor', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"复权因子下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_stk_limit(self):
+        """下载涨跌停价格数据"""
+        try:
+            from tushare_manager.download_basic_data import download_stk_limit as _dl_limit
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载涨跌停价格数据")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                if current % 50 == 0 or current == total:
+                    self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_limit(db_path=db_path, start_date=start_date, end_date=end_date,
+                              progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 涨跌停价格下载完成！共 {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'stk_limit', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"涨跌停价格下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_suspend_info(self):
+        """下载停复牌信息"""
+        try:
+            from tushare_manager.download_basic_data import download_suspend as _dl_suspend
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载停复牌信息")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                if current % 50 == 0 or current == total:
+                    self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_suspend(db_path=db_path, start_date=start_date, end_date=end_date,
+                                progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 停复牌信息下载完成！共 {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'suspend_info', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"停复牌信息下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_sw_industry(self):
+        """下载申万行业分类数据"""
+        try:
+            from tushare_manager.download_basic_data import download_sw_industry as _dl_sw
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载申万行业分类数据")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_sw(db_path=db_path, progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 申万行业分类下载完成！{result['classify_count']} 个行业, {result['member_count']:,} 条成分股")
+            self.finished_signal.emit({'success': True, 'type': 'sw_industry', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"申万行业分类下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_basic_all(self):
+        """一键下载全部基础数据"""
+        try:
+            from tushare_manager.download_basic_data import download_all_basic as _dl_all
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("🏗️ 开始一键下载全部基础数据（5000分专属）")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                self.log_signal.emit(f"  {msg}")
+
+            result = _dl_all(db_path=db_path, start_date=start_date, end_date=end_date,
+                            progress_callback=progress_cb)
+
+            self.log_signal.emit("\n✅ 全部基础数据下载完成！")
+            self.finished_signal.emit({'success': True, 'type': 'basic_all', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"基础数据下载失败: {str(e)}\n{traceback.format_exc()}")
+
 class TushareDataWidget(QWidget):
     """Tushare数据下载组件（整合版）"""
 
@@ -2015,9 +2358,17 @@ class TushareDataWidget(QWidget):
         cashflow_tab = self._create_cashflow_tab()
         tab_widget.addTab(cashflow_tab, "💹 现金流量表")
 
+        # 基础数据标签页（5000分专属）
+        basic_data_tab = self._create_basic_data_tab()
+        tab_widget.addTab(basic_data_tab, "🏗️ 基础数据")
+
         # 可转债数据标签页
         cb_data_tab = self._create_cb_data_tab()
         tab_widget.addTab(cb_data_tab, "🔄 可转债数据")
+
+        # ETF 数据标签页
+        etf_data_tab = self._create_etf_data_tab()
+        tab_widget.addTab(etf_data_tab, "📈 ETF数据")
 
         layout.addWidget(tab_widget)
 
@@ -2135,6 +2486,22 @@ class TushareDataWidget(QWidget):
         self.chk_cashflow = QCheckBox("💹 现金流量表")
         self.chk_cashflow.setChecked(False)
         type_layout.addWidget(self.chk_cashflow, 4, 0)
+
+        self.chk_adj_factor = QCheckBox("🔧 复权因子（加速回测必需）")
+        self.chk_adj_factor.setChecked(False)
+        type_layout.addWidget(self.chk_adj_factor, 4, 1)
+
+        self.chk_stk_limit = QCheckBox("🚫 涨跌停价格（打板策略必需）")
+        self.chk_stk_limit.setChecked(False)
+        type_layout.addWidget(self.chk_stk_limit, 5, 0)
+
+        self.chk_suspend = QCheckBox("⏸️ 停复牌信息")
+        self.chk_suspend.setChecked(False)
+        type_layout.addWidget(self.chk_suspend, 5, 1)
+
+        self.chk_sw_industry = QCheckBox("🏷️ 申万行业分类（行业中性化必需）")
+        self.chk_sw_industry.setChecked(False)
+        type_layout.addWidget(self.chk_sw_industry, 6, 0)
 
         layout.addWidget(type_group)
 
@@ -2632,6 +2999,84 @@ class TushareDataWidget(QWidget):
         layout.addStretch()
         return tab
 
+    def _create_etf_data_tab(self):
+        """创建 ETF 数据标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        basic_group = QGroupBox("ETF 基本信息（etf_basic）")
+        basic_layout = QVBoxLayout(basic_group)
+        basic_info = QLabel(
+            "包含：基金代码、名称、管理人、上市日期、类型等。\n"
+            "ETF 日行情下载的前置依赖。"
+        )
+        basic_info.setStyleSheet("color: #666; padding: 5px;")
+        basic_layout.addWidget(basic_info)
+        etf_basic_btn = QPushButton("下载 ETF 基本信息")
+        etf_basic_btn.setFont(QFont("Microsoft YaHei", 10))
+        etf_basic_btn.setStyleSheet(
+            "QPushButton { background-color: #4CAF50; color: white; padding: 8px; border-radius: 5px; }"
+            "QPushButton:hover { background-color: #388E3C; }"
+        )
+        etf_basic_btn.clicked.connect(self.start_download_etf_basic)
+        basic_layout.addWidget(etf_basic_btn)
+        layout.addWidget(basic_group)
+
+        daily_group = QGroupBox("ETF 日行情（etf_daily）")
+        daily_layout = QVBoxLayout(daily_group)
+        config_layout = QFormLayout()
+        self.etf_years_spin = QSpinBox()
+        self.etf_years_spin.setRange(1, 10)
+        self.etf_years_spin.setValue(3)
+        self.etf_years_spin.setSuffix(" 年")
+        config_layout.addRow("数据年份:", self.etf_years_spin)
+        daily_layout.addLayout(config_layout)
+        daily_info = QLabel(
+            "包含：OHLCV 行情数据。\n"
+            "需先下载「ETF 基本信息」再下载日行情。"
+        )
+        daily_info.setStyleSheet("color: #333; padding: 10px; background: #fff3e0; border-radius: 5px;")
+        daily_layout.addWidget(daily_info)
+        etf_daily_btn = QPushButton("下载 ETF 日行情")
+        etf_daily_btn.setFont(QFont("Microsoft YaHei", 10))
+        etf_daily_btn.setStyleSheet(
+            "QPushButton { background-color: #FF9800; color: white; padding: 10px; border-radius: 5px; }"
+            "QPushButton:hover { background-color: #F57C00; }"
+        )
+        etf_daily_btn.clicked.connect(self.start_download_etf_daily)
+        daily_layout.addWidget(etf_daily_btn)
+        layout.addWidget(daily_group)
+
+        layout.addStretch()
+        return tab
+
+    def start_download_etf_basic(self):
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入 Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        thread = TushareDownloadThread('etf_basic', token=token)
+        thread.log_signal.connect(self.log_text.append)
+        thread.error_signal.connect(self.log_text.append)
+        thread.finished_signal.connect(lambda r: self.log_text.append(f"ETF 基本信息下载完成"))
+        self._current_thread = thread
+        thread.start()
+
+    def start_download_etf_daily(self):
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入 Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        years = self.etf_years_spin.value()
+        thread = TushareDownloadThread('etf_daily', token=token, years=years)
+        thread.log_signal.connect(self.log_text.append)
+        thread.error_signal.connect(self.log_text.append)
+        thread.finished_signal.connect(lambda r: self.log_text.append(f"ETF 日行情下载完成"))
+        self._current_thread = thread
+        thread.start()
+
     def start_download_financial_indicator(self):
         """开始下载财务指标数据"""
         token = self.token_edit.text().strip()
@@ -2896,6 +3341,43 @@ class TushareDataWidget(QWidget):
                     'start_date': start_date,
                     'end_date': end_date
                 }
+            })
+
+        if hasattr(self, 'chk_adj_factor') and self.chk_adj_factor.isChecked():
+            task_list.append({
+                'name': '复权因子',
+                'type': 'adj_factor',
+                'params': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            })
+
+        if hasattr(self, 'chk_stk_limit') and self.chk_stk_limit.isChecked():
+            task_list.append({
+                'name': '涨跌停价格',
+                'type': 'stk_limit',
+                'params': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            })
+
+        if hasattr(self, 'chk_suspend') and self.chk_suspend.isChecked():
+            task_list.append({
+                'name': '停复牌信息',
+                'type': 'suspend_info',
+                'params': {
+                    'start_date': start_date,
+                    'end_date': end_date
+                }
+            })
+
+        if hasattr(self, 'chk_sw_industry') and self.chk_sw_industry.isChecked():
+            task_list.append({
+                'name': '申万行业分类',
+                'type': 'sw_industry',
+                'params': {}
             })
 
         if not task_list:
@@ -3203,6 +3685,237 @@ class TushareDataWidget(QWidget):
             end_date=end_date,
             years=years
         )
+        self._start_download_thread(thread)
+
+    # ==================== 基础数据标签页 ====================
+
+    def _create_basic_data_tab(self):
+        """创建基础数据标签页（5000分专属）"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 说明
+        info_label = QLabel(
+            "🏗️ <b>基础数据（5000分专属）</b><br><br>"
+            "以下4类数据是量化策略的基础设施级数据：<br>"
+            "• <b>复权因子</b>：本地快速计算前/后复权价格，加速回测<br>"
+            "• <b>涨跌停价格</b>：打板/连板策略必需数据<br>"
+            "• <b>停复牌信息</b>：过滤停牌股，避免回测虚假信号<br>"
+            "• <b>申万行业分类</b>：行业中性化、行业过滤的标准分类<br><br>"
+            "⚠️ 需要 5000 积分以上权限"
+        )
+        info_label.setStyleSheet("""
+            QLabel {
+                background-color: #e8f5e9;
+                color: #2e7d32;
+                padding: 15px;
+                border-radius: 5px;
+                border: 1px solid #c8e6c9;
+            }
+        """)
+        layout.addWidget(info_label)
+
+        # 日期参数
+        config_group = QGroupBox("📅 日期范围（复权因子/涨跌停/停复牌共用）")
+        config_layout = QFormLayout(config_group)
+
+        self.basic_start_date_edit = QDateEdit()
+        self.basic_start_date_edit.setCalendarPopup(True)
+        self.basic_start_date_edit.setDate(QDate(2020, 1, 1))
+        self.basic_start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        config_layout.addRow("开始日期:", self.basic_start_date_edit)
+
+        self.basic_end_date_edit = QDateEdit()
+        self.basic_end_date_edit.setCalendarPopup(True)
+        self.basic_end_date_edit.setDate(QDate.currentDate())
+        self.basic_end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        config_layout.addRow("结束日期:", self.basic_end_date_edit)
+
+        layout.addWidget(config_group)
+
+        # 快速日期选择
+        quick_group = QGroupBox("⚡ 快速选择")
+        quick_layout = QHBoxLayout(quick_group)
+
+        btn_1y = QPushButton("近1年")
+        btn_1y.clicked.connect(lambda: self._set_basic_date_range(
+            QDate.currentDate().year - 1, 1, 1))
+        quick_layout.addWidget(btn_1y)
+
+        btn_3y = QPushButton("近3年")
+        btn_3y.clicked.connect(lambda: self._set_basic_date_range(
+            QDate.currentDate().year - 3, 1, 1))
+        quick_layout.addWidget(btn_3y)
+
+        btn_5y = QPushButton("近5年")
+        btn_5y.clicked.connect(lambda: self._set_basic_date_range(
+            QDate.currentDate().year - 5, 1, 1))
+        quick_layout.addWidget(btn_5y)
+
+        btn_2020 = QPushButton("2020至今")
+        btn_2020.clicked.connect(lambda: self._set_basic_date_range(2020, 1, 1))
+        quick_layout.addWidget(btn_2020)
+
+        layout.addWidget(quick_group)
+
+        # 下载按钮区
+        btn_group = QGroupBox("📥 单独下载")
+        btn_layout = QGridLayout(btn_group)
+
+        # 复权因子
+        adj_btn = QPushButton("🔧 下载复权因子")
+        adj_btn.setFont(QFont("Microsoft YaHei", 10))
+        adj_btn.setStyleSheet("""
+            QPushButton { background-color: #1976D2; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #1565C0; }
+        """)
+        adj_btn.clicked.connect(self.start_download_adj_factor)
+        btn_layout.addWidget(adj_btn, 0, 0)
+
+        adj_info = QLabel("加速回测，不依赖QMT在线")
+        adj_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(adj_info, 0, 1)
+
+        # 涨跌停价格
+        limit_btn = QPushButton("🚫 下载涨跌停价格")
+        limit_btn.setFont(QFont("Microsoft YaHei", 10))
+        limit_btn.setStyleSheet("""
+            QPushButton { background-color: #E65100; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #BF360C; }
+        """)
+        limit_btn.clicked.connect(self.start_download_stk_limit)
+        btn_layout.addWidget(limit_btn, 1, 0)
+
+        limit_info = QLabel("涨停价/跌停价，打板策略必需")
+        limit_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(limit_info, 1, 1)
+
+        # 停复牌信息
+        suspend_btn = QPushButton("⏸️ 下载停复牌信息")
+        suspend_btn.setFont(QFont("Microsoft YaHei", 10))
+        suspend_btn.setStyleSheet("""
+            QPushButton { background-color: #6A1B9A; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #4A148C; }
+        """)
+        suspend_btn.clicked.connect(self.start_download_suspend_info)
+        btn_layout.addWidget(suspend_btn, 2, 0)
+
+        suspend_info = QLabel("过滤停牌股，避免虚假回测信号")
+        suspend_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(suspend_info, 2, 1)
+
+        # 申万行业分类
+        sw_btn = QPushButton("🏷️ 下载申万行业分类")
+        sw_btn.setFont(QFont("Microsoft YaHei", 10))
+        sw_btn.setStyleSheet("""
+            QPushButton { background-color: #00695C; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #004D40; }
+        """)
+        sw_btn.clicked.connect(self.start_download_sw_industry)
+        btn_layout.addWidget(sw_btn, 3, 0)
+
+        sw_info = QLabel("L1/L2行业分类+成分股（无需选日期）")
+        sw_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(sw_info, 3, 1)
+
+        layout.addWidget(btn_group)
+
+        # 一键全部下载
+        all_btn = QPushButton("🚀 一键下载全部基础数据")
+        all_btn.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        all_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 12px;
+                border-radius: 5px;
+                border: none;
+            }
+            QPushButton:hover { background-color: #388E3C; }
+        """)
+        all_btn.clicked.connect(self.start_download_basic_all)
+        layout.addWidget(all_btn)
+
+        layout.addStretch()
+        return tab
+
+    def _set_basic_date_range(self, year, month, day):
+        """设置基础数据日期范围"""
+        self.basic_start_date_edit.setDate(QDate(year, month, day))
+        self.basic_end_date_edit.setDate(QDate.currentDate())
+
+    def _get_basic_date_range(self):
+        """获取基础数据日期范围"""
+        start = self.basic_start_date_edit.date().toString("yyyyMMdd")
+        end = self.basic_end_date_edit.date().toString("yyyyMMdd")
+        return start, end
+
+    def start_download_adj_factor(self):
+        """开始下载复权因子"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('adj_factor', token=token,
+                                       start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_stk_limit(self):
+        """开始下载涨跌停价格"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('stk_limit', token=token,
+                                       start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_suspend_info(self):
+        """开始下载停复牌信息"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('suspend_info', token=token,
+                                       start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_sw_industry(self):
+        """开始下载申万行业分类"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('sw_industry', token=token)
+        self._start_download_thread(thread)
+
+    def start_download_basic_all(self):
+        """一键下载全部基础数据"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('basic_all', token=token,
+                                       start_date=start_date, end_date=end_date)
         self._start_download_thread(thread)
 
     def _on_log(self, message):
