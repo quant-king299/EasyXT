@@ -128,9 +128,30 @@ class EastmoneyDataProvider(BaseDataProvider):
             bool: 连接是否成功
         """
         try:
-            # 尝试多个测试端点
+            # 尝试多个测试端点（按成功率排序）
             test_endpoints = [
-                # 方法1: 使用新的API格式
+                # 方法1: 备用端点（最稳定，优先尝试）
+                {
+                    'url': 'https://pdfm.eastmoney.com/EM_UBG_PDTI_Fast/apiJS',
+                    'params': {
+                        'type': 'UA',
+                        'sty': 'FCOYTA',
+                        'cmd': '',
+                        'p': '1',
+                        'ps': '1'
+                    }
+                },
+                # 方法2: push2 简单参数
+                {
+                    'url': f"{self.base_url}/api/qt/ulist.np/get",
+                    'params': {
+                        'fltt': '2',
+                        'invt': '2',
+                        'secids': '0.000001',
+                        'fields': 'f12,f14,f2,f3'
+                    }
+                },
+                # 方法3: push2 完整参数
                 {
                     'url': f"{self.base_url}/api/qt/clist/get",
                     'params': {
@@ -146,27 +167,6 @@ class EastmoneyDataProvider(BaseDataProvider):
                         'fields': 'f12,f14'
                     }
                 },
-                # 方法2: 使用更简单的参数
-                {
-                    'url': f"{self.base_url}/api/qt/ulist.np/get",
-                    'params': {
-                        'fltt': '2',
-                        'invt': '2',
-                        'secids': '0.000001',
-                        'fields': 'f12,f14,f2,f3'
-                    }
-                },
-                # 方法3: 备用端点
-                {
-                    'url': 'https://pdfm.eastmoney.com/EM_UBG_PDTI_Fast/apiJS',
-                    'params': {
-                        'type': 'UA',
-                        'sty': 'FCOYTA',
-                        'cmd': '',
-                        'p': '1',
-                        'ps': '1'
-                    }
-                }
             ]
 
             for i, endpoint in enumerate(test_endpoints, 1):
