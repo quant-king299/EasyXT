@@ -7,11 +7,23 @@ Tushare数据管理模块
 
 from .tushare_config import TushareConfig, get_config
 from .tushare_downloader import TushareDownloader
+from .download_basic_data import (
+    download_adj_factor,
+    download_stk_limit,
+    download_suspend,
+    download_sw_industry,
+    download_all_basic,
+)
 
 __all__ = [
     'TushareConfig',
     'get_config',
-    'TushareDownloader'
+    'TushareDownloader',
+    'download_adj_factor',
+    'download_stk_limit',
+    'download_suspend',
+    'download_sw_industry',
+    'download_all_basic',
 ]
 
 __version__ = '1.0.0'

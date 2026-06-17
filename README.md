@@ -62,6 +62,43 @@
 #### 我想自动登录QMT
 → 🔐 **[QMT自动登录](core/auto_login/README.md)** → 一键启动并登录
 
+#### 我想下载/更新基础数据
+→ 📋 **数据下载速查表**（见下方）
+
+### 📋 数据下载速查表
+
+> 前置条件：项目根目录 `.env` 中已配置 `TUSHARE_TOKEN`
+
+#### GUI 方式（推荐）
+
+运行 `python run_gui.py` → 点击「Tushare下载」标签 → 各子标签页下载数据。
+
+#### 命令行方式
+
+```bash
+# 进入项目根目录
+cd /path/to/EasyXT
+
+# ─── 基础数据（5000分专属，优先下载） ───
+# 一键下载全部：复权因子 + 涨跌停价格 + 停复牌 + 申万行业
+python -m tushare_manager.download_basic_data --all
+
+# 单独下载某类（指定起始日期）
+python -m tushare_manager.download_basic_data --adj-factor --start 20200101   # 复权因子
+python -m tushare_manager.download_basic_data --stk-limit --start 20200101    # 涨跌停价格
+python -m tushare_manager.download_basic_data --suspend --start 20200101      # 停复牌信息
+python -m tushare_manager.download_basic_data --sw-industry                   # 申万行业分类
+
+# ─── 常规数据 ───
+# 股票基本信息 + 指数成分股
+python -m tushare_manager.supplement_tables --all
+
+# DuckDB 一键初始化（市值 + 日线）
+python tools/setup_duckdb.py
+```
+
+> 💡 所有下载命令都支持**增量更新**——重复运行只会下载缺失的数据，不会重复下载。
+
 ### 🔧 遇到问题了？
 
 → 🆘 **[疑难问题解答 (FAQ)](docs/assets/TROUBLESHOOTING.md)** ← **点击这里！**

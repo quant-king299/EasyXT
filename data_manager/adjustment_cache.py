@@ -77,10 +77,11 @@ class AdjustmentCache:
 
         降级策略（逐层 fallback）：
         1. 不复权（none）：从DuckDB读取原始数据
-        2. QMT 在线 → xtdata.get_market_data_ex(dividend_type=...)
-        3. QMT 离线 → tushare adj_factor 自行计算（方案B）
-        4. tushare adj_factor 也失败 → tushare pro_bar(adj=...)（方案A）
-        5. 全部失败 → DuckDB 原始数据 + warning
+        2. DuckDB adj_factor 表本地计算（最快，无需任何外部调用）
+        3. QMT 在线 → xtdata.get_market_data_ex(dividend_type=...)
+        4. QMT 离线 → tushare adj_factor 自行计算（方案B）
+        5. tushare adj_factor 也失败 → tushare pro_bar(adj=...)（方案A）
+        6. 全部失败 → DuckDB 原始数据 + warning
 
         Args:
             stock_code: 股票代码
@@ -96,18 +97,23 @@ class AdjustmentCache:
         if adjust_type == 'none':
             return self._get_raw_data(stock_code, start_date, end_date, con)
 
-        # 2. QMT API（主力方案）
+        # 2. DuckDB adj_factor 表本地计算（最高优先级，无需任何API调用）
+        local_data = self._get_from_local_adj_factor(stock_code, start_date, end_date, adjust_type, con)
+        if not local_data.empty:
+            return local_data
+
+        # 3. QMT API（备用方案）
         qmt_data = self._get_from_qmt_api(stock_code, start_date, end_date, adjust_type)
         if not qmt_data.empty:
             return qmt_data
 
-        # 3. tushare 兜底（QMT 离线时）
+        # 4. tushare 兜底（QMT 离线时）
         print(f"  [INFO] QMT 不可用，尝试 tushare 获取复权数据...")
         tushare_data = self._get_from_tushare_api(stock_code, start_date, end_date, adjust_type)
         if not tushare_data.empty:
             return tushare_data
 
-        # 4. 全部失败：降级到原始数据
+        # 5. 全部失败：降级到原始数据
         warnings.warn(
             f"QMT 和 tushare 均无法获取复权数据，降级使用原始数据"
             f"（复权类型：{adjust_type}）"
@@ -151,6 +157,118 @@ class AdjustmentCache:
             df.index.name = 'date'  # 明确命名索引，确保reset_index()后能正确生成列
 
         return df
+
+    def _get_from_local_adj_factor(self,
+                                    stock_code: str,
+                                    start_date: str,
+                                    end_date: str,
+                                    adjust_type: AdjustType,
+                                    con: duckdb.DuckDBPyConnection) -> pd.DataFrame:
+        """
+        从 DuckDB 的 adj_factor 表本地计算复权价格（最高优先级）
+
+        优势：无需任何 API 调用，纯本地计算，速度极快
+
+        前复权公式: adj_price = raw_price × (factor_today / factor_earliest)
+        后复权公式: adj_price = raw_price × (factor_today / factor_latest)
+
+        Args:
+            stock_code: 股票代码
+            start_date: 开始日期
+            end_date: 结束日期
+            adjust_type: 复权类型
+            con: DuckDB 连接
+
+        Returns:
+            复权后的 DataFrame
+        """
+        try:
+            # 检查 adj_factor 表是否存在
+            table_exists = con.execute("""
+                SELECT COUNT(*) FROM information_schema.tables
+                WHERE table_name = 'adj_factor'
+            """).fetchone()[0] > 0
+
+            if not table_exists:
+                return pd.DataFrame()
+
+            # 转换股票代码格式
+            ts_code = self._convert_to_ts_code(stock_code)
+
+            # 格式化日期
+            start_fmt = start_date.replace('-', '')
+            end_fmt = end_date.replace('-', '')
+
+            # 从 DuckDB 获取原始行情
+            df_raw = con.execute(f"""
+                SELECT stock_code, date, open, high, low, close, volume, amount
+                FROM stock_daily
+                WHERE stock_code = '{stock_code}'
+                  AND date >= '{start_date}'
+                  AND date <= '{end_date}'
+                ORDER BY date
+            """).df()
+
+            if df_raw is None or df_raw.empty:
+                return pd.DataFrame()
+
+            # 从 DuckDB 获取复权因子
+            df_adj = con.execute(f"""
+                SELECT trade_date, adj_factor
+                FROM adj_factor
+                WHERE ts_code = '{ts_code}'
+                  AND trade_date >= '{start_fmt}'
+                  AND trade_date <= '{end_fmt}'
+                ORDER BY trade_date
+            """).df()
+
+            if df_adj is None or df_adj.empty:
+                return pd.DataFrame()
+
+            # 合并：将 trade_date 格式化为 date 以便 join
+            df_adj['date'] = pd.to_datetime(df_adj['trade_date'])
+            df_raw['date'] = pd.to_datetime(df_raw['date'])
+
+            df = df_raw.merge(df_adj[['date', 'adj_factor']], on='date', how='left')
+
+            # 如果大部分因子是 NaN，说明数据不足
+            if df['adj_factor'].isna().sum() > len(df) * 0.5:
+                return pd.DataFrame()
+
+            # 前后填充缺失的因子
+            df['adj_factor'] = df['adj_factor'].ffill().bfill()
+
+            if df['adj_factor'].isna().all():
+                return pd.DataFrame()
+
+            # 计算复权价格
+            if adjust_type in ('back', 'geometric_back'):
+                # 后复权：以最新因子为基准
+                base_factor = df['adj_factor'].iloc[-1]
+            else:
+                # 前复权：以最早因子为基准
+                base_factor = df['adj_factor'].iloc[0]
+
+            if base_factor <= 0:
+                return pd.DataFrame()
+
+            ratio = df['adj_factor'] / base_factor
+            for col in ['open', 'high', 'low', 'close']:
+                df[col] = df[col] * ratio
+
+            # 格式化输出（与 _get_raw_data 格式一致）
+            df['stock_code'] = stock_code
+            df = df.set_index('date')
+            df.index.name = 'date'
+
+            result_cols = [c for c in ['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount'] if c in df.columns]
+            print(f"  [OK] 本地 adj_factor 复权成功 {len(df)} 条 [股票:{stock_code}]")
+            return df[result_cols]
+
+        except Exception as e:
+            # 本地计算失败不算严重，静默降级到其他方案
+            print(f"  [DEBUG] 本地 adj_factor 复权失败（将降级到其他方案）: {e}")
+            return pd.DataFrame()
 
     def _get_from_qmt_api(self,
                          stock_code: str,
