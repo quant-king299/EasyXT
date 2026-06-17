@@ -136,10 +136,10 @@ class PathManager:
 
         Examples:
             >>> get_path('config', 'unified_config.json')
-            Path('C:/.../miniqmt扩展/config/unified_config.json')
+            Path('C:/.../EasyXT/config/unified_config.json')
 
             >>> get_path('strategies', 'xueqiu_follow')
-            Path('C:/.../miniqmt扩展/strategies/xueqiu_follow')
+            Path('C:/.../EasyXT/strategies/xueqiu_follow')
         """
         return self.project_root.joinpath(*parts)
 
@@ -260,7 +260,7 @@ def get_project_root() -> Path:
     Examples:
         >>> root = get_project_root()
         >>> print(root)
-        PosixPath('/path/to/miniqmt扩展')
+        PosixPath('/path/to/EasyXT')
     """
     return _get_manager().project_root
 

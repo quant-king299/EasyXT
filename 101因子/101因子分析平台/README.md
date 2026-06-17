@@ -53,7 +53,7 @@ df = pro.daily(ts_code='000001.SZ', start_date='20230101', end_date='20231231')
 ### 方式1：启动增强版UI（推荐）
 
 ```bash
-cd c:\Users\Administrator\Desktop\miniqmt扩展\101因子\101因子分析平台
+cd c:\Users\Administrator\Desktop\EasyXT\101因子\101因子分析平台
 python 启动增强版.py
 ```
 

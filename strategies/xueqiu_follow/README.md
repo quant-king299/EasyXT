@@ -62,7 +62,7 @@
 
 安装本地源码包（可编辑安装，便于开发调试）：
 ```powershell
-cd "c:\Users\Administrator\Desktop\miniqmt扩展"
+cd "c:\Users\Administrator\Desktop\EasyXT"
 pip install -e .\easy_xt
 pip install -e .\jq2qmt_adapter
 ```
@@ -93,7 +93,7 @@ pip install -e .\jq2qmt_adapter
 ### qka 启动方式（推荐）
 
 ```powershell
-cd "c:\Users\Administrator\Desktop\miniqmt扩展"
+cd "c:\Users\Administrator\Desktop\EasyXT"
 python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-path "C:\\Path\\To\\miniQMT" --host 127.0.0.1 --port 8000
 # 如需自定义 Token：追加 --token YOUR_TOKEN
 ```

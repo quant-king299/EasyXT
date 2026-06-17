@@ -5,9 +5,9 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "easy-xt"
 version = "0.1.0"
-description = "Unified helpers and adapters for miniQMT / EasyXT integration"
+description = "Unified helpers and adapters for EasyXT integration"
 readme = "README.md"
-authors = [{ name = "MiniQMT Team", email = "noreply@example.com" }]
+authors = [{ name = "EasyXT Team", email = "noreply@example.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.8"
 classifiers = [

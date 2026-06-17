@@ -155,12 +155,24 @@ class TushareDownloadThread(QThread):
         """将symbols分为需要下载和跳过两组"""
         need_download = []
         skipped = 0
+        # 将 target_end_date 统一转换为 YYYY-MM-DD 格式，与 DuckDB DATE 字段的 str() 输出一致
+        target_date_str = None
+        if target_end_date:
+            if len(target_end_date) == 8:  # YYYYMMDD -> YYYY-MM-DD
+                target_date_str = f"{target_end_date[:4]}-{target_end_date[4:6]}-{target_end_date[6:]}"
+            else:
+                target_date_str = str(target_end_date)[:10]
         for symbol in symbols:
             if symbol in existing_map:
                 max_date = existing_map[symbol]
-                if target_end_date is None or (max_date and str(max_date) >= str(target_end_date)):
+                if target_date_str is None:
                     skipped += 1
                     continue
+                if max_date:
+                    max_date_str = str(max_date)[:10]  # DuckDB DATE -> 'YYYY-MM-DD'
+                    if max_date_str >= target_date_str:
+                        skipped += 1
+                        continue
             need_download.append(symbol)
         return need_download, skipped
 

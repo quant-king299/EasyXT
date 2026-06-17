@@ -537,7 +537,7 @@ ValueError: TUSHARE_TOKEN not found in environment variables
 
 1. 确认 `.env` 文件在项目根目录：
    ```
-   miniqmt扩展/
+   EasyXT/
    ├── .env              ← 这个文件
    ├── easy_xt/
    └── README.md

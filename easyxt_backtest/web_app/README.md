@@ -10,7 +10,7 @@
 
 ```bash
 # 进入项目目录
-cd C:\Users\Administrator\Desktop\miniqmt扩展
+cd C:\Users\Administrator\Desktop\EasyXT
 
 # 运行启动脚本
 python easyxt_backtest\web_app\start_web_app.py

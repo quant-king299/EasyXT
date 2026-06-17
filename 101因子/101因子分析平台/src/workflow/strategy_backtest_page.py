@@ -257,7 +257,7 @@ def run_backtest(start_date, end_date, num_stocks, universe_size, initial_cash):
 
             1️⃣ **启动主GUI**（新窗口）
             ```bash
-            cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+            cd "C:\\Users\\Administrator\\Desktop\\EasyXT"
             python run_gui.py
             ```
 
@@ -662,7 +662,7 @@ def render_strategy_backtest_page():
         #### 步骤：
         1. **启动主GUI**
            ```bash
-           cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+           cd "C:\\Users\\Administrator\\Desktop\\EasyXT"
            python run_gui.py
            ```
 
@@ -720,7 +720,7 @@ def render_strategy_backtest_page():
 
                         1️⃣ **启动主GUI**（如果未打开）
                         ```bash
-                        cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+                        cd "C:\\Users\\Administrator\\Desktop\\EasyXT"
                         python run_gui.py
                         ```
 

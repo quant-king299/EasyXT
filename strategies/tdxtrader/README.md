@@ -115,7 +115,7 @@ block_files = {
 项目提供了完整的集成示例，可以直接运行进行测试：
 
 ```bash
-cd c:\Users\Administrator\Desktop\miniqmt扩展
+cd c:\Users\Administrator\Desktop\EasyXT
 python strategies/tdxtrader/tdxtrader_integration_example.py
 ```
 

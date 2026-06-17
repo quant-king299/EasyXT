@@ -405,7 +405,11 @@ generate_api_coverage_chart.py
 
 # AI助手生成的内容（公众号推文等）
 公众号推文_*.md
+公众号推文-*.md
+公众号文章*.md
 公众号发布指南.md
+docs/公众号推文*.md
+docs/公众号文章*.md
 更新说明_*.md
 交付清单.md
 🎉项目完成总结.md

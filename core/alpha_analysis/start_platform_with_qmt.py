@@ -27,7 +27,7 @@ from factor_correlation import FactorCorrelationAnalyzer
 from layered_backtest import LayeredBacktester
 
 # 配置报告输出目录
-REPORT_DIR = r'C:\Users\Administrator\Desktop\miniqmt扩展\101因子\101因子分析平台\reports'
+REPORT_DIR = r'C:\Users\Administrator\Desktop\EasyXT\101因子\101因子分析平台\reports'
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 

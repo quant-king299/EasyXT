@@ -251,7 +251,7 @@ def lesson_3_practical_demo():
 
         print("\n📥 解决方案：")
         print("  启动主GUI下载市值数据：")
-        print("  cd \"C:\\Users\\Administrator\\Desktop\\miniqmt扩展\"")
+        print("  cd \"C:\\Users\\Administrator\\Desktop\\EasyXT\"")
         print("  python run_gui.py")
         print("  然后进入 '📥 Tushare数据下载' → '💰 市值数据'")
 
@@ -415,7 +415,7 @@ def lesson_5_platform_usage():
 
 步骤：
 1️⃣ 打开文件夹
-   C:\\Users\\Administrator\\Desktop\\miniqmt扩展\\101因子\\101因子分析平台
+   C:\\Users\\Administrator\\Desktop\\EasyXT\\101因子\\101因子分析平台
 
 2️⃣ 双击运行
    启动主应用.bat
@@ -431,11 +431,11 @@ def lesson_5_platform_usage():
 ╚═══════════════════════════════════════════════════════════╝
 
 # Windows 命令行
-cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展\\101因子\\101因子分析平台"
+cd "C:\\Users\\Administrator\\Desktop\\EasyXT\\101因子\\101因子分析平台"
 python main_app.py
 
 # 或使用 Git Bash
-cd /c/Users/Administrator/Desktop/miniqmt扩展/101因子/101因子分析平台
+cd /c/Users/Administrator/Desktop/EasyXT/101因子/101因子分析平台
 python main_app.py
     """)
 
@@ -615,7 +615,7 @@ def lesson_6_data_preparation():
     print("\n方法1：通过主GUI下载（推荐）⭐")
     print("""
 # 1. 启动主GUI
-cd "C:\\Users\\Administrator\\Desktop\\miniqmt扩展"
+cd "C:\\Users\\Administrator\\Desktop\\EasyXT"
 python run_gui.py
 
 # 2. 进入下载页面

@@ -138,7 +138,7 @@ class LocalDataManager:
                 # 尝试导入DataManager作为数据源
                 import sys
                 import json
-                workspace_dir = Path(__file__).parents[4]  # 回到miniqmt扩展目录
+                workspace_dir = Path(__file__).parents[4]  # 回到EasyXT目录
                 if str(workspace_dir) not in sys.path:
                     sys.path.insert(0, str(workspace_dir))
 

@@ -27,7 +27,7 @@
 #### 4️⃣ 配置到系统
 编辑配置文件：
 ```
-C:\Users\Administrator\Desktop\miniqmt扩展\strategies\xueqiu_follow\config\unified_config.json
+C:\Users\Administrator\Desktop\EasyXT\strategies\xueqiu_follow\config\unified_config.json
 ```
 
 找到第199行左右的 `xueqiu_settings.cookie` 字段，替换为：

@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
-    { name = "MiniQMT Team", email = "noreply@example.com" }
+    { name = "EasyXT Team", email = "noreply@example.com" }
 ]
 
 classifiers = [

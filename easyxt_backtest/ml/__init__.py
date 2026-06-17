@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-miniQMT 轻量 ML 模块 — 直接对接 DuckDB
+EasyXT 轻量 ML 模块 — 直接对接 DuckDB
 
 无需 Qlib、无需数据转换。直接用现有因子系统生成特征，
 训练 LightGBM 模型，产出预测信号供 EnhancedBacktestEngine 回测。
