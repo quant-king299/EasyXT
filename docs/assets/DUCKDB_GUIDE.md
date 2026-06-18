@@ -131,7 +131,7 @@ TUSHARE_TOKEN=你的Token
 ```
 
 Token 获取方式：
-1. 访问 https://tushare.pro 注册账号（免费）
+1. 访问 https://tushare.pro/weborder/#/login?reg=344724 注册账号（建议充值到 2000 积分以上以获取更高权限）
 2. 登录后进入「用户中心」→「接口Token」
 3. 复制你的 Token
 

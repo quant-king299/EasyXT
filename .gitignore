@@ -319,9 +319,11 @@ archive/
 # 101因子平台的本地配置文件（不提交）
 101因子/101因子分析平台/config/data_config.yaml
 101因子/101因子分析平台/config/duckdb_config.yaml
-# 注释掉：这两个文件是核心数据管理组件，必须提交
-# 101因子/101因子分析平台/src/data_manager/duckdb_storage.py
-# 101因子/101因子分析平台/src/data_manager/local_data_manager.py
+
+# 发布和备份目录（本地构建产物，不提交）
+app/
+cb_etf_release/
+*_release/
 
 # 根目录下的特定目录
 scripts/
@@ -369,6 +371,9 @@ easyxt_backtest/output/
 gui_app/widgets/README_TUSHARE.md
 strategies/小市值基础策略V2_EasyXT版.py
 strategies/小市值基础策略V2_EasyXT实盘专用版.py
+strategies/converted_strategy.qmt.py
+# 知识星球专属策略（不提交到 GitHub）
+strategies/quant_strategies/
 未来的选题思路.md
 
 # 数据验证和分析脚本（临时文件，不提交）
