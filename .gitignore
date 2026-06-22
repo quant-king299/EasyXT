@@ -280,8 +280,6 @@ easy_xt/realtime_data/config/server_config.json
 !gui_app/widgets/backtest_widget.py
 
 # ==================== 例外规则：重要的启动脚本 ====================
-# 网格回测启动脚本（重要工具，需要提交）
-!launch_grid_backtest.py
 # 数据管理工具（重要）
 !diagnose_grid_trades.py
 # Streamlit页面（重要，包含backtest关键词）
