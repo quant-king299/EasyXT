@@ -69,6 +69,7 @@ from gui_app.widgets.local_data_manager_widget import LocalDataManagerWidget
 from gui_app.widgets.duckdb_local_data_manager_widget import DuckDBLocalDataManagerWidget
 from gui_app.widgets.advanced_data_viewer_widget import AdvancedDataViewerWidget
 from gui_app.widgets.tushare_data_widget import TushareDataWidget
+from gui_app.widgets.multi_strategy_widget import MultiStrategyWidget
 
 
 class MainWindow(QMainWindow):
@@ -154,6 +155,13 @@ class MainWindow(QMainWindow):
         self.tushare_data_widget = TushareDataWidget()
         tushare_data_layout.addWidget(self.tushare_data_widget)
         self.tab_widget.addTab(tushare_data_tab, "📥 Tushare下载")
+
+        # 多策略管理标签页
+        multi_strategy_tab = QWidget()
+        multi_strategy_layout = QVBoxLayout(multi_strategy_tab)
+        self.multi_strategy_widget = MultiStrategyWidget()
+        multi_strategy_layout.addWidget(self.multi_strategy_widget)
+        self.tab_widget.addTab(multi_strategy_tab, "🚀 多策略管理")
 
     def create_status_bar(self):
         """创建状态栏"""

@@ -1,0 +1,121 @@
+{
+  "global_settings": {
+    "strategies_dir": "../quant_strategies",
+    "log_dir": "./logs",
+    "monitor_interval": 30,
+    "auto_restart": true,
+    "max_restart_count": 3
+  },
+  "strategies": {
+    "cb_double_low": {
+      "module_path": "strategies.quant_strategies.cb_double_low",
+      "run_script": "run_cb_double_low.py",
+      "session_id": "cb_double_low",
+      "enabled": false,
+      "priority": 5,
+      "max_capital": 50000,
+      "target_allocation": 0.2,
+      "run_params": {
+        "buy_n": 10,
+        "max_price": 130,
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:35"
+      }
+    },
+    "cb_three_low": {
+      "module_path": "strategies.quant_strategies.cb_three_low",
+      "run_script": "run_cb_three_low.py",
+      "session_id": "cb_three_low",
+      "enabled": false,
+      "priority": 5,
+      "max_capital": 50000,
+      "target_allocation": 0.2,
+      "run_params": {
+        "buy_n": 10,
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:40"
+      }
+    },
+    "cb_factor_rotation": {
+      "module_path": "strategies.quant_strategies.cb_factor_rotation",
+      "run_script": "run_cb_factor_rotation.py",
+      "session_id": "cb_factor_rotation",
+      "enabled": false,
+      "priority": 5,
+      "max_capital": 50000,
+      "target_allocation": 0.2,
+      "run_params": {
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:45"
+      }
+    },
+    "dividend_lowvol": {
+      "module_path": "strategies.quant_strategies.dividend_lowvol",
+      "run_script": "run_dividend_lowvol.py",
+      "session_id": "dividend_lowvol",
+      "enabled": false,
+      "priority": 6,
+      "max_capital": 100000,
+      "target_allocation": 0.3,
+      "run_params": {
+        "buy_n": 15,
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:50"
+      }
+    },
+    "etf_trend": {
+      "module_path": "strategies.quant_strategies.etf_trend",
+      "run_script": "run_etf_trend.py",
+      "session_id": "etf_trend",
+      "enabled": false,
+      "priority": 7,
+      "max_capital": 80000,
+      "target_allocation": 0.25,
+      "run_params": {
+        "buy_n": 5,
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:35"
+      }
+    },
+    "etf_hot_theme": {
+      "module_path": "strategies.quant_strategies.etf_hot_theme",
+      "run_script": "run_etf_hot_theme.py",
+      "session_id": "etf_hot_theme",
+      "enabled": false,
+      "priority": 7,
+      "max_capital": 80000,
+      "target_allocation": 0.25,
+      "run_params": {
+        "buy_n": 3,
+        "continuous_run": false,
+        "schedule_type": "daily",
+        "schedule_daily_time": "09:40"
+      }
+    },
+    "limit_up": {
+      "module_path": "strategies.quant_strategies.limit_up",
+      "run_script": "run_limit_up.py",
+      "session_id": "limit_up",
+      "enabled": false,
+      "priority": 8,
+      "max_capital": 50000,
+      "target_allocation": 0.15,
+      "run_params": {
+        "buy_n": 2,
+        "continuous_run": false,
+        "schedule_type": "interval",
+        "schedule_interval": 5
+      }
+    }
+  },
+  "conflict_rules": {
+    "allow_same_security": false,
+    "max_total_capital": 500000,
+    "reserve_ratio": 0.1
+  }
+}
