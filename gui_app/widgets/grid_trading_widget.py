@@ -178,20 +178,10 @@ class GridTradingWidget(QWidget):
         account_layout.setHorizontalSpacing(15)
         account_layout.setVerticalSpacing(12)
 
-        self.account_id_edit = QLineEdit(_read_env('QMT_ACCOUNT_ID'))
-        self.account_id_edit.setEchoMode(QLineEdit.Password)
-        self.account_id_edit.setToolTip("已从 .env 加载，输入框已遮蔽")
-        self.account_id_edit.setPlaceholderText("从 .env 自动加载")
-        account_layout.addRow("账户ID:", self.account_id_edit)
-
+        # 账户信息已从 .env 自动加载，GUI 不再显示敏感信息
         self.account_type_combo = QComboBox()
         self.account_type_combo.addItems(["STOCK", "CREDIT"])
         account_layout.addRow("账户类型:", self.account_type_combo)
-
-        self.qmt_path_edit = QLineEdit(_read_env('QMT_DATA_DIR'))
-        self.qmt_path_edit.setPlaceholderText("从 .env 自动加载")
-        self.qmt_path_edit.setToolTip("已从 .env 加载")
-        account_layout.addRow("QMT路径:", self.qmt_path_edit)
 
         # 添加测试模式选项
         self.test_mode_check = QCheckBox("测试模式（不保存日志）")
@@ -579,10 +569,8 @@ class GridTradingWidget(QWidget):
 
     def apply_config(self, config: dict):
         """应用配置到界面"""
-        # 设置账户信息
-        self.account_id_edit.setText(config.get('账户ID', ''))
+        # 账户ID和QMT路径已从 .env 自动加载，不再从配置文件读取
         self.account_type_combo.setCurrentText(config.get('账户类型', 'STOCK'))
-        self.qmt_path_edit.setText(config.get('QMT路径', ''))
 
         # 设置股票池
         stock_pool = config.get('股票池', [])
@@ -600,9 +588,9 @@ class GridTradingWidget(QWidget):
     def get_config(self) -> dict:
         """获取当前配置"""
         config = {
-            '账户ID': self.account_id_edit.text(),
+            '账户ID': _read_env('QMT_ACCOUNT_ID'),
             '账户类型': self.account_type_combo.currentText(),
-            'QMT路径': self.qmt_path_edit.text(),
+            'QMT路径': _read_env('QMT_DATA_DIR'),
             '股票池': [s.strip() for s in self.stock_pool_edit.text().split(',')],
             '价格模式': 5,  # 最新价
             '交易时间段': 8,  # 工作日
