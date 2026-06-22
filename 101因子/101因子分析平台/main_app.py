@@ -285,7 +285,7 @@ def main():
                 "📝 配置编辑器",
                 "📁 配置管理",
                 "🎯 策略回测",
-                "🔄 可转债回测",
+                "📊 策略回测",
                 "🔧 技术指标回测",
                 "📊 结果分析",
                 "💻 实盘代码生成",
@@ -830,12 +830,12 @@ def main():
             import traceback
             st.code(traceback.format_exc())
 
-    elif page == "🔄 可转债回测":
+    elif page == "📊 策略回测":
         try:
             from src.workflow.cb_backtest_page import page as cb_page
             cb_page()
         except Exception as e:
-            st.error(f"加载可转债回测失败: {e}")
+            st.error(f"加载策略回测失败: {e}")
             import traceback
             st.code(traceback.format_exc())
 
