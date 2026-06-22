@@ -179,6 +179,9 @@ class GridTradingWidget(QWidget):
         account_layout.setVerticalSpacing(12)
 
         self.account_id_edit = QLineEdit(_read_env('QMT_ACCOUNT_ID'))
+        self.account_id_edit.setEchoMode(QLineEdit.Password)
+        self.account_id_edit.setToolTip("已从 .env 加载，输入框已遮蔽")
+        self.account_id_edit.setPlaceholderText("从 .env 自动加载")
         account_layout.addRow("账户ID:", self.account_id_edit)
 
         self.account_type_combo = QComboBox()
@@ -186,6 +189,8 @@ class GridTradingWidget(QWidget):
         account_layout.addRow("账户类型:", self.account_type_combo)
 
         self.qmt_path_edit = QLineEdit(_read_env('QMT_DATA_DIR'))
+        self.qmt_path_edit.setPlaceholderText("从 .env 自动加载")
+        self.qmt_path_edit.setToolTip("已从 .env 加载")
         account_layout.addRow("QMT路径:", self.qmt_path_edit)
 
         # 添加测试模式选项
