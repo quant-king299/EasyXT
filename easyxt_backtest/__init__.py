@@ -23,14 +23,14 @@ from .performance import PerformanceAnalyzer
 
 # API
 from .api import (
-    TechnicalBacktestEngine,
-    SelectionBacktestEngine,
     GridBacktestEngine,
-    backtest_dual_ma,
     backtest_grid_fixed,
     backtest_grid_adaptive,
     backtest_grid_atr
 )
+
+# 函数策略适配器
+from .simple_strategy_adapter import adapt, SimpleFunctionAdapter
 
 # 策略示例
 from .strategies.small_cap_strategy import SmallCapStrategy
@@ -53,16 +53,17 @@ __all__ = [
 
     # 回测引擎
     'BacktestEngine',            # 默认：增强回测引擎
-    'EnhancedBacktestEngine',    # 增强回测引擎（自研框架）
+    'EnhancedBacktestEngine',    # 增强回测引擎
 
     # API
-    'TechnicalBacktestEngine',   # 技术指标策略引擎
-    'SelectionBacktestEngine',   # 选股策略引擎
     'GridBacktestEngine',        # 网格交易策略引擎
-    'backtest_dual_ma',          # 双均线快速回测
     'backtest_grid_fixed',       # 固定网格快速回测
     'backtest_grid_adaptive',    # 自适应网格快速回测
     'backtest_grid_atr',         # ATR网格快速回测
+
+    # 函数适配器
+    'adapt',
+    'SimpleFunctionAdapter',
 
     # 性能分析
     'PerformanceAnalyzer',
