@@ -218,6 +218,9 @@ comprehensive_*.py
 !strategies/jq2qmt/qmt_signal_client.py
 !strategies/jq2qmt/qmt_client_mini.py
 
+# 回测框架核心文件
+!easyxt_backtest/simple_strategy_adapter.py
+
 # QMT相关核心文件（不忽略！）
 !core/data_manager/sources/qmt_source.py
 !easy_xt/qmt_paths.py
