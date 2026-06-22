@@ -76,3 +76,7 @@ Thumbs.db
 # 配置文件（如果包含敏感信息）
 config/secrets.yaml
 config/*_local.yaml
+
+# 用户策略文件（星球专属，不提交）
+src/strategies/backtest_wrappers.py
+src/strategies/user_*.py

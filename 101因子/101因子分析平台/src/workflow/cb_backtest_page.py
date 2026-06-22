@@ -19,7 +19,8 @@ if src_path not in sys.path:
 
 from cb_backtest.cb_data_manager import CBDataManager
 from cb_backtest.cb_backtest_engine import CBBactestEngine
-from cb_backtest.cb_strategies import STRATEGY_REGISTRY
+from cb_backtest.cb_strategies import STRATEGY_REGISTRY as BUILTIN_CB_REGISTRY
+from strategies import get_merged_registry
 
 
 def page():
@@ -55,6 +56,7 @@ def page():
 
     with col1:
         st.subheader("策略与持仓")
+        STRATEGY_REGISTRY = get_merged_registry(BUILTIN_CB_REGISTRY)
         strategy_options = {f"{info['name']} - {info['desc']}": key
                            for key, info in STRATEGY_REGISTRY.items()}
         strategy_label = st.selectbox("策略", list(strategy_options.keys()), index=0)
