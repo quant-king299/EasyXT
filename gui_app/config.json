@@ -5,10 +5,11 @@
         "description": "整合所有01-10学习案例，项目管理功能和TodoList引擎v2.5"
     },
     "qmt": {
-        "default_path": "D:/国金证券QMT交易端",
-        "userdata_path": "D:/国金证券QMT交易端/userdata_mini",
+        "default_path": "",
+        "userdata_path": "",
         "auto_connect": true,
-        "connection_timeout": 30
+        "connection_timeout": 30,
+        "_comment": "userdata_path 和 default_path 请通过项目根目录 .env 文件配置，不要在此提交真实路径"
     },
     "learning_cases": {
         "auto_load": true,

@@ -24,8 +24,24 @@ from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QMutex, QWaitCo
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon, QTextCursor
 
 # 添加项目路径
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'strategies'))
+PROJECT_ROOT = os.path.join(os.path.dirname(__file__), '..', '..')
+sys.path.append(PROJECT_ROOT)
+sys.path.append(os.path.join(PROJECT_ROOT, 'strategies'))
+
+
+def _read_env(key: str, default: str = '') -> str:
+    """从项目根目录 .env 文件读取配置"""
+    try:
+        env_file = os.path.join(PROJECT_ROOT, '.env')
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
+                for line in f:
+                    line = line.strip()
+                    if line.startswith(f'{key}='):
+                        return line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    return default
 
 try:
     import easy_xt
@@ -162,14 +178,14 @@ class GridTradingWidget(QWidget):
         account_layout.setHorizontalSpacing(15)
         account_layout.setVerticalSpacing(12)
 
-        self.account_id_edit = QLineEdit("39020958")
+        self.account_id_edit = QLineEdit(_read_env('QMT_ACCOUNT_ID'))
         account_layout.addRow("账户ID:", self.account_id_edit)
 
         self.account_type_combo = QComboBox()
         self.account_type_combo.addItems(["STOCK", "CREDIT"])
         account_layout.addRow("账户类型:", self.account_type_combo)
 
-        self.qmt_path_edit = QLineEdit("D:\\国金QMT交易端模拟\\userdata_mini")
+        self.qmt_path_edit = QLineEdit(_read_env('QMT_DATA_DIR'))
         account_layout.addRow("QMT路径:", self.qmt_path_edit)
 
         # 添加测试模式选项
