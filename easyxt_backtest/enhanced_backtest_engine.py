@@ -143,9 +143,6 @@ class EnhancedBacktestEngine:
         self.data_manager = data_manager
         self.adjust = adjust
 
-        # 复权数据接口（延迟初始化）
-        self._unified_interface = None
-
         # 新增：仓位管理器
         self.position_manager = PositionManager(initial_cash)
 
@@ -156,18 +153,6 @@ class EnhancedBacktestEngine:
         self.positions_history: Dict[datetime, Dict[str, float]] = {}
         self.trades_history: Dict[datetime, List[TradeRecord]] = {}
         self.prices_history: Dict[datetime, Dict[str, float]] = {}
-
-    def _get_unified_interface(self):
-        """延迟初始化 UnifiedDataInterface（支持复权的数据接口）"""
-        if self._unified_interface is None:
-            try:
-                from data_manager.unified_data_interface import UnifiedDataInterface
-                self._unified_interface = UnifiedDataInterface()
-                print(f"[OK] 回测引擎已接入复权数据接口 (adjust={self.adjust})")
-            except ImportError:
-                print("[WARN] UnifiedDataInterface 不可用，回测将使用不复权数据")
-                self._unified_interface = None
-        return self._unified_interface
 
     def run_backtest(self,
                      strategy,
@@ -190,6 +175,9 @@ class EnhancedBacktestEngine:
         Returns:
             回测结果字典
         """
+        # 保存策略引用，供 _get_current_prices / _load_daily_prices 使用
+        self._active_strategy = strategy
+
         print(f"\n{'='*80}")
         print(f"  增强回测引擎")
         print(f"{'='*80}")
@@ -445,6 +433,7 @@ class EnhancedBacktestEngine:
                 'trading_pnl': [],
                 'total_pnl': [],
                 'net_pnl': [],
+                'return': [],
             }
 
             for idx, row in portfolio_df.iterrows():
@@ -454,6 +443,7 @@ class EnhancedBacktestEngine:
                 daily_pnl_data['commission'].append(0)
                 daily_pnl_data['holding_pnl'].append(0)
                 daily_pnl_data['trading_pnl'].append(0)
+                daily_pnl_data['return'].append(row.get('daily_return', 0))
 
                 # 用净值变化计算 net_pnl
                 if idx == 0:
@@ -493,7 +483,7 @@ class EnhancedBacktestEngine:
         performance = {
             'total_return': statistics.get('total_return', 0) / 100,
             'annual_return': statistics.get('annual_return', 0) / 100,
-            'max_drawdown': statistics.get('max_drawdown', 0) / self.initial_cash,
+            'max_drawdown': statistics.get('max_ddpercent', 0) / 100,
             'sharpe_ratio': statistics.get('sharpe_ratio', 0),
             'initial_cash': self.initial_cash,
             'final_value': statistics.get('end_balance', 0),
@@ -637,68 +627,37 @@ class EnhancedBacktestEngine:
     def _get_current_prices(self, symbols: List[str], date: str,
                             max_days_back: int = 10) -> Dict[str, float]:
         """
-        获取当前价格（支持复权 + 非交易日自动回退）
+        获取当前价格
 
-        优先使用 UnifiedDataInterface（带复权），不可用时 fallback 到 data_manager
-
-        Args:
-            symbols: 股票代码列表
-            date: 日期 (YYYYMMDD)
-            max_days_back: 非交易日最大回退天数
+        优先使用策略自带的 price 查询，不可用时 fallback 到 data_manager
         """
         prices = {}
 
-        # 优先走复权接口
-        if self.adjust != 'none':
-            unified = self._get_unified_interface()
-            if unified is not None:
-                date_fmt = f"{date[:4]}-{date[4:6]}-{date[6:]}"
+        # 优先使用策略自带的 price 查询（CB/ETF 直接查缓存，不走 UnifiedDataInterface）
+        strategy = getattr(self, '_active_strategy', None)
+        if strategy is not None:
+            # 最优：批量查询（一次向量化过滤），速度接近旧版引擎
+            if hasattr(strategy, 'get_prices_for_date'):
+                try:
+                    batch = strategy.get_prices_for_date(symbols, date)
+                    if batch:
+                        prices.update(batch)
+                        return prices
+                except Exception:
+                    pass
+            # 次优：逐个查询
+            if hasattr(strategy, 'get_price'):
                 for symbol in symbols:
                     try:
-                        df = unified.get_stock_data(
-                            stock_code=symbol,
-                            start_date=date_fmt,
-                            end_date=date_fmt,
-                            period='1d',
-                            adjust=self.adjust,
-                            local_only=True  # 优先本地，避免回测时触发在线下载
-                        )
-                        if df is not None and not df.empty and 'close' in df.columns:
-                            prices[symbol] = float(df['close'].iloc[-1])
+                        p = strategy.get_price(symbol, date)
+                        if p is not None and p > 0:
+                            prices[symbol] = float(p)
                     except Exception:
                         pass
-
                 if prices:
                     return prices
 
-                # 复权接口失败，尝试向后回退几天
-                if len(prices) < len(symbols):
-                    dt_obj = datetime.strptime(date, '%Y%m%d')
-                    for days_back in range(1, max_days_back + 1):
-                        prev_date = (dt_obj - __import__('datetime').timedelta(days=days_back)).strftime('%Y%m%d')
-                        prev_fmt = f"{prev_date[:4]}-{prev_date[4:6]}-{prev_date[6:]}"
-                        missing = [s for s in symbols if s not in prices]
-                        for symbol in missing:
-                            try:
-                                df = unified.get_stock_data(
-                                    stock_code=symbol,
-                                    start_date=prev_fmt,
-                                    end_date=prev_fmt,
-                                    period='1d',
-                                    adjust=self.adjust,
-                                    local_only=True
-                                )
-                                if df is not None and not df.empty and 'close' in df.columns:
-                                    prices[symbol] = float(df['close'].iloc[-1])
-                            except Exception:
-                                pass
-                        if len(prices) == len(symbols):
-                            return prices
-
-                if prices:
-                    return prices
-                # 复权接口全失败，fallthrough 到原始逻辑
-
+        # 策略未提供数据时，尝试 data_manager
         if not self.data_manager:
             return prices
 
@@ -813,56 +772,26 @@ class EnhancedBacktestEngine:
     def _load_daily_prices(self, symbols: List[str],
                            start_date: str, end_date: str) -> Dict[str, pd.DataFrame]:
         """
-        批量加载所有股票在整个回测期间的日线价格数据
+        批量加载所有标的在整个回测期间的日线价格数据
 
-        优先使用 UnifiedDataInterface（带复权），不可用时 fallback 到 data_manager
-
-        Args:
-            symbols: 股票代码列表
-            start_date: 开始日期 (YYYYMMDD)
-            end_date: 结束日期 (YYYYMMDD)
-
-        Returns:
-            {symbol: DataFrame(index=date, columns=[open,close,...])}
+        优先使用策略自带的价格查询，不可用时 fallback 到 data_manager
         """
         if not symbols:
             return {}
 
-        # 优先走复权接口
-        if self.adjust != 'none':
-            unified = self._get_unified_interface()
-            if unified is not None:
-                start_fmt = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
-                end_fmt = f"{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}"
-                all_price_data = {}
-                for symbol in symbols:
-                    try:
-                        df = unified.get_stock_data(
-                            stock_code=symbol,
-                            start_date=start_fmt,
-                            end_date=end_fmt,
-                            period='1d',
-                            adjust=self.adjust,
-                            local_only=True
-                        )
-                        if df is not None and not df.empty:
-                            df_copy = df.copy()
-                            # 统一索引为 YYYYMMDD 字符串
-                            if not isinstance(df_copy.index, str):
-                                try:
-                                    df_copy.index = pd.to_datetime(df_copy.index).strftime('%Y%m%d')
-                                except Exception:
-                                    pass
-                            all_price_data[symbol] = df_copy
-                    except Exception:
-                        pass
+        # 优先使用策略自带的批量价格查询（CB/ETF 直接查缓存，不走 UnifiedDataInterface）
+        strategy = getattr(self, '_active_strategy', None)
+        if strategy is not None and hasattr(strategy, 'get_prices_batch'):
+            try:
+                batch_result = strategy.get_prices_batch(symbols, start_date, end_date)
+                if batch_result:
+                    print(f"[OK] 通过策略缓存加载 {len(batch_result)} 只标的日线数据"
+                          f" [{getattr(strategy, 'category', 'unknown')}]")
+                    return batch_result
+            except Exception:
+                pass
 
-                if all_price_data:
-                    print(f"[OK] 通过复权接口加载 {len(all_price_data)} 只股票日线数据 (adjust={self.adjust})")
-                    return all_price_data
-                # 复权接口全失败，fallthrough 到原始逻辑
-                print(f"[WARN] 复权接口加载失败，降级到原始数据接口")
-
+        # 策略未提供数据时，尝试 data_manager
         if not self.data_manager:
             return {}
 

@@ -11,21 +11,34 @@ import pandas as pd
 def strategy_low_premium(df: pd.DataFrame, top_n: int = 20) -> list:
     """低溢价率策略"""
     if 'cb_over_rate' not in df.columns:
-        return df.nsmallest(top_n, 'close')['ts_code'].tolist()
-    return df.dropna(subset=['cb_over_rate']).nsmallest(top_n, 'cb_over_rate')['ts_code'].tolist()
+        return []
+    d = df.dropna(subset=['cb_over_rate'])
+    if d.empty:
+        return []
+    return d.nsmallest(top_n, 'cb_over_rate')['ts_code'].tolist()
 
 
 def strategy_dual_low(df: pd.DataFrame, top_n: int = 20) -> list:
-    """双低策略（转债价格 + 转股溢价率 * 100）"""
-    d = df.copy()
-    d['dual_low'] = d['close'] + d['cb_over_rate'].fillna(0)
+    """双低策略（转债价格 + 转股溢价率）"""
+    if 'cb_over_rate' not in df.columns:
+        return []
+    d = df.dropna(subset=['cb_over_rate', 'close'])
+    if d.empty:
+        return []
+    d = d.copy()
+    d['dual_low'] = d['close'] + d['cb_over_rate']
     return d.nsmallest(top_n, 'dual_low')['ts_code'].tolist()
 
 
 def strategy_low_price_premium(df: pd.DataFrame, top_n: int = 20,
                                price_weight: float = 0.5) -> list:
     """价格+溢价率加权策略"""
-    d = df.copy()
+    if 'cb_over_rate' not in df.columns:
+        return []
+    d = df.dropna(subset=['cb_over_rate', 'close'])
+    if d.empty:
+        return []
+    d = d.copy()
     d['price_rank'] = d['close'].rank(ascending=True)
     d['premium_rank'] = d['cb_over_rate'].rank(ascending=True)
     d['score'] = price_weight * d['price_rank'] + (1 - price_weight) * d['premium_rank']

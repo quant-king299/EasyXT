@@ -76,12 +76,13 @@ class AdjustmentCache:
         获取复权数据
 
         降级策略（逐层 fallback）：
-        1. 不复权（none）：从DuckDB读取原始数据
-        2. DuckDB adj_factor 表本地计算（最快，无需任何外部调用）
-        3. QMT 在线 → xtdata.get_market_data_ex(dividend_type=...)
-        4. QMT 离线 → tushare adj_factor 自行计算（方案B）
-        5. tushare adj_factor 也失败 → tushare pro_bar(adj=...)（方案A）
-        6. 全部失败 → DuckDB 原始数据 + warning
+        1. 可转债：跳过复权，直接返回原始数据
+        2. 不复权（none）：从DuckDB读取原始数据
+        3. DuckDB adj_factor 表本地计算（最快，无需任何外部调用）
+        4. QMT 在线 → xtdata.get_market_data_ex(dividend_type=...)
+        5. QMT 离线 → tushare adj_factor 自行计算（方案B）
+        6. tushare adj_factor 也失败 → tushare pro_bar(adj=...)（方案A）
+        7. 全部失败 → DuckDB 原始数据 + warning
 
         Args:
             stock_code: 股票代码
@@ -93,6 +94,31 @@ class AdjustmentCache:
         Returns:
             复权后的数据
         """
+        # 检测是否为可转债或基金（这两类都不需要复权）
+        # 可转债代码格式：
+        # - 上海：11xxxxx.SH, 12xxxxx.SH
+        # - 深圳：12xxxxx.SZ, 123xxx.SZ
+        # 基金代码格式：
+        # - ETF：15xxxxx.SZ, 16xxxxx.SZ, 50xxxxx.SH, 56xxxxx.SH, 58xxxxx.SH
+        # - LOF：16xxxxx.SZ, 50xxxxx.SH
+        is_skip_adjust = (
+            # 可转债
+            stock_code.startswith('11') or  # 上海转债
+            stock_code.startswith('12') or  # 上海/深圳转债
+            stock_code.startswith('123') or  # 深圳创业板转债
+            # 基金（ETF/LOF等）
+            stock_code.startswith('15') or  # 深圳ETF
+            stock_code.startswith('16') or  # 深圳LOF
+            stock_code.startswith('50') or  # 上海ETF/LOF
+            stock_code.startswith('56') or  # 上海ETF
+            stock_code.startswith('58')      # 上海基金
+        )
+
+        # 可转债和基金跳过复权处理
+        if is_skip_adjust:
+            print(f"  [INFO] 检测到可转债 {stock_code}，跳过复权处理")
+            return self._get_raw_data(stock_code, start_date, end_date, con)
+
         # 1. 不复权：直接返回原始数据
         if adjust_type == 'none':
             return self._get_raw_data(stock_code, start_date, end_date, con)
@@ -330,10 +356,15 @@ class AdjustmentCache:
             print(f"  [OK] QMT API返回 {len(df)} 条数据 [股票:{stock_code}]")
 
             # 格式化数据
-            return self._format_qmt_data(df, stock_code)
+            result = self._format_qmt_data(df, stock_code)
+            if result.empty:
+                print(f"  [WARN] _format_qmt_data 返回空数据 [股票:{stock_code}]")
+            else:
+                print(f"  [OK] _format_qmt_data 成功，返回 {len(result)} 条数据 [股票:{stock_code}]")
+            return result
 
         except Exception as e:
-            warnings.warn(f"QMT API调用失败: {e}")
+            print(f"  [ERROR] QMT API调用失败 [股票:{stock_code}]: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
@@ -502,71 +533,81 @@ class AdjustmentCache:
 
         QMT返回的数据格式需要转换为我们统一的格式
         """
-        if data.empty:
+        try:
+            if data.empty:
+                print(f"  [DEBUG] _format_qmt_data: 输入数据为空 [股票:{stock_code}]")
+                return pd.DataFrame()
+
+            print(f"  [DEBUG] _format_qmt_data: 输入数据形状={data.shape}, 列={list(data.columns)[:5]}...")
+
+            # 重置索引（如果有多级索引）
+            if isinstance(data.index, pd.MultiIndex):
+                data = data.reset_index()
+
+            # 确保列名统一
+            column_mapping = {
+                'time': 'date',
+                'trade_time': 'date',
+                'open': 'open',
+                'high': 'high',
+                'low': 'low',
+                'close': 'close',
+                'volume': 'volume',
+                'amount': 'amount',
+                'code': 'stock_code'
+            }
+
+            # 重命名列
+            data = data.rename(columns=column_mapping)
+
+            # 转换时间戳为日期格式
+            if 'date' in data.columns:
+                # 检查date列是否为时间戳（大整数）
+                if data['date'].dtype in ['int64', 'int32']:
+                    # 将毫秒时间戳转换为datetime（修复时区问题）
+                    # 关键：先转换为UTC时间戳，再转为本地时间，避免时区偏移导致的日期错误
+                    data['date'] = pd.to_datetime(data['date'], unit='ms', utc=True)
+                    # 转换为本地时区（中国时区UTC+8）
+                    data['date'] = data['date'].dt.tz_convert('Asia/Shanghai')
+                    # 转换为日期格式（去掉时分秒）
+                    data['date'] = data['date'].dt.date
+
+            # 确保有stock_code列（强制覆盖，防止QMT返回错误的数据）
+            data['stock_code'] = stock_code
+            print(f"  [DEBUG] _format_qmt_data: 设置stock_code={stock_code}, 行数={len(data)}")
+
+            # 确保有period列
+            if 'period' not in data.columns:
+                data['period'] = '1d'
+
+            # 选择需要的列
+            required_columns = [
+                'stock_code', 'date', 'period',
+                'open', 'high', 'low', 'close', 'volume', 'amount'
+            ]
+
+            # 只保留存在的列
+            available_columns = [col for col in required_columns if col in data.columns]
+            data = data[available_columns]
+
+            # 输出数据样本用于调试
+            if not data.empty and 'close' in data.columns:
+                sample_close = data['close'].iloc[0] if len(data) > 0 else 'N/A'
+                print(f"  [DEBUG] _format_qmt_data: 股票={stock_code}, 行数={len(data)}, 首日收盘={sample_close:.2f}")
+
+            # 设置date为索引（确保索引类型一致）
+            if 'date' in data.columns:
+                data['date'] = pd.to_datetime(data['date'])
+                data = data.set_index('date')
+                data.index.name = 'date'  # 明确命名索引，确保reset_index()后能正确生成列
+
+            return data
+
+        except Exception as e:
+            print(f"  [ERROR] _format_qmt_data 失败 [股票:{stock_code}]: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
-
-        # 重置索引（如果有多级索引）
-        if isinstance(data.index, pd.MultiIndex):
-            data = data.reset_index()
-
-        # 确保列名统一
-        column_mapping = {
-            'time': 'date',
-            'trade_time': 'date',
-            'open': 'open',
-            'high': 'high',
-            'low': 'low',
-            'close': 'close',
-            'volume': 'volume',
-            'amount': 'amount',
-            'code': 'stock_code'
-        }
-
-        # 重命名列
-        data = data.rename(columns=column_mapping)
-
-        # 转换时间戳为日期格式
-        if 'date' in data.columns:
-            # 检查date列是否为时间戳（大整数）
-            if data['date'].dtype in ['int64', 'int32']:
-                # 将毫秒时间戳转换为datetime（修复时区问题）
-                # 关键：先转换为UTC时间戳，再转为本地时间，避免时区偏移导致的日期错误
-                data['date'] = pd.to_datetime(data['date'], unit='ms', utc=True)
-                # 转换为本地时区（中国时区UTC+8）
-                data['date'] = data['date'].dt.tz_convert('Asia/Shanghai')
-                # 转换为日期格式（去掉时分秒）
-                data['date'] = data['date'].dt.date
-
-        # 确保有stock_code列（强制覆盖，防止QMT返回错误的数据）
-        data['stock_code'] = stock_code
-        print(f"  [DEBUG] _format_qmt_data: 设置stock_code={stock_code}, 行数={len(data)}")
-
-        # 确保有period列
-        if 'period' not in data.columns:
-            data['period'] = '1d'
-
-        # 选择需要的列
-        required_columns = [
-            'stock_code', 'date', 'period',
-            'open', 'high', 'low', 'close', 'volume', 'amount'
-        ]
-
-        # 只保留存在的列
-        available_columns = [col for col in required_columns if col in data.columns]
-        data = data[available_columns]
-
-        # 输出数据样本用于调试
-        if not data.empty and 'close' in data.columns:
-            sample_close = data['close'].iloc[0] if len(data) > 0 else 'N/A'
-            print(f"  [DEBUG] _format_qmt_data: 股票={stock_code}, 行数={len(data)}, 首日收盘={sample_close:.2f}")
-
-        # 设置date为索引（确保索引类型一致）
-        if 'date' in data.columns:
-            data['date'] = pd.to_datetime(data['date'])
-            data = data.set_index('date')
-            data.index.name = 'date'  # 明确命名索引，确保reset_index()后能正确生成列
-
-        return data
 
     def invalidate_cache(self, stock_code: str, con: duckdb.DuckDBPyConnection):
         """

@@ -89,11 +89,9 @@ class UnifiedDataInterface:
             # 确保目录存在
             Path(self.duckdb_path).parent.mkdir(parents=True, exist_ok=True)
 
-            # 直接创建连接（实际使用时会配合连接池的写锁）
-            if read_only and self._tables_initialized:
-                self.con = duckdb.connect(self.duckdb_path, read_only=True)
-            else:
-                self.con = duckdb.connect(self.duckdb_path)
+            # 修复：统一使用 read_only=True 连接，避免配置冲突
+            # 如果需要写操作，使用连接池的写连接
+            self.con = duckdb.connect(self.duckdb_path, read_only=True)
 
             # 配置性能
             self.con.execute("PRAGMA threads=4")
@@ -109,100 +107,15 @@ class UnifiedDataInterface:
     def _ensure_tables_exist(self):
         """确保所有必需的表都存在
 
-        修复：首次使用时自动创建表，避免"Table does not exist"错误
+        修复：只读模式下跳过创建表，假设表已存在
         """
         if not self.con or self._tables_initialized:
             return
 
-        try:
-            # 创建 stock_daily 表（日线）
-            self.con.execute("""
-                CREATE TABLE IF NOT EXISTS stock_daily (
-                    stock_code VARCHAR NOT NULL,
-                    symbol_type VARCHAR NOT NULL,
-                    date DATE NOT NULL,
-                    period VARCHAR NOT NULL,
-                    open DECIMAL(18, 6),
-                    high DECIMAL(18, 6),
-                    low DECIMAL(18, 6),
-                    close DECIMAL(18, 6),
-                    volume BIGINT,
-                    amount DECIMAL(18, 6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, date, period)
-                )
-            """)
-
-            # 创建 stock_1m 表（1分钟线）
-            self.con.execute("""
-                CREATE TABLE IF NOT EXISTS stock_1m (
-                    stock_code VARCHAR NOT NULL,
-                    symbol_type VARCHAR NOT NULL,
-                    datetime TIMESTAMP NOT NULL,
-                    period VARCHAR NOT NULL,
-                    open DECIMAL(18, 6),
-                    high DECIMAL(18, 6),
-                    low DECIMAL(18, 6),
-                    close DECIMAL(18, 6),
-                    volume BIGINT,
-                    amount DECIMAL(18, 6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period)
-                )
-            """)
-
-            # 创建 stock_5m 表（5分钟线）
-            self.con.execute("""
-                CREATE TABLE IF NOT EXISTS stock_5m (
-                    stock_code VARCHAR NOT NULL,
-                    symbol_type VARCHAR NOT NULL,
-                    datetime TIMESTAMP NOT NULL,
-                    period VARCHAR NOT NULL,
-                    open DECIMAL(18, 6),
-                    high DECIMAL(18, 6),
-                    low DECIMAL(18, 6),
-                    close DECIMAL(18, 6),
-                    volume BIGINT,
-                    amount DECIMAL(18, 6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period)
-                )
-            """)
-
-            # 创建 stock_tick 表（tick数据）
-            self.con.execute("""
-                CREATE TABLE IF NOT EXISTS stock_tick (
-                    stock_code VARCHAR NOT NULL,
-                    symbol_type VARCHAR NOT NULL,
-                    datetime TIMESTAMP NOT NULL,
-                    period VARCHAR NOT NULL,
-                    open DECIMAL(18, 6),
-                    high DECIMAL(18, 6),
-                    low DECIMAL(18, 6),
-                    close DECIMAL(18, 6),
-                    volume BIGINT,
-                    amount DECIMAL(18, 6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, datetime, period)
-                )
-            """)
-
-            # 创建索引
-            try:
-                self.con.execute("CREATE INDEX IF NOT EXISTS idx_stock_code_daily ON stock_daily (stock_code)")
-                self.con.execute("CREATE INDEX IF NOT EXISTS idx_date_daily ON stock_daily (date)")
-            except:
-                pass  # 索引可能已存在
-
-            self._tables_initialized = True
-            print("[INFO] 数据表检查完成")
-
-        except Exception as e:
-            print(f"[WARNING] 创建表失败: {e}")
+        # 只读模式下不能创建表，跳过并标记为已初始化
+        # 假设表已经通过其他方式创建
+        self._tables_initialized = True
+        return
 
     def get_stock_data(
         self,
@@ -933,29 +846,12 @@ class UnifiedDataInterface:
             traceback.print_exc()
 
     def _ensure_tables_exist_with_con(self, con):
-        """确保所有必需的表都存在（使用指定连接）"""
-        try:
-            # 创建 stock_daily 表
-            con.execute("""
-                CREATE TABLE IF NOT EXISTS stock_daily (
-                    stock_code VARCHAR NOT NULL,
-                    symbol_type VARCHAR NOT NULL,
-                    date DATE NOT NULL,
-                    period VARCHAR NOT NULL,
-                    open DECIMAL(18, 6),
-                    high DECIMAL(18, 6),
-                    low DECIMAL(18, 6),
-                    close DECIMAL(18, 6),
-                    volume BIGINT,
-                    amount DECIMAL(18, 6),
-                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    PRIMARY KEY (stock_code, date, period)
-                )
-            """)
-            print("[DEBUG] 表检查完成")
-        except Exception as e:
-            print(f"[WARNING] 创建表失败: {e}")
+        """确保所有必需的表都存在（使用指定连接）
+
+        修复：只读模式下跳过创建表
+        """
+        # 只读模式下不能创建表，假设表已存在
+        return
     def _apply_adjustment(
         self,
         data: pd.DataFrame,
