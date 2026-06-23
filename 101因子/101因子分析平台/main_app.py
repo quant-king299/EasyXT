@@ -166,6 +166,22 @@ def main():
         initial_sidebar_state="expanded"
     )
 
+    # QMT 自动启动并登录（仅尝试一次）
+    if 'qmt_login_attempted' not in st.session_state:
+        st.session_state.qmt_login_attempted = True
+        try:
+            sys.path.insert(0, str(main_project_root))
+            from core.auto_login import QMTAutoLogin
+            login = QMTAutoLogin()
+            st.toast("🔐 正在启动 QMT 并自动登录...", icon="⏳")
+            success = login.login(restart=False, timeout=60)
+            if success:
+                st.toast("✅ QMT 登录成功", icon="✅")
+            else:
+                st.warning("⚠️ QMT 自动登录失败，请检查 .env 或手动启动 QMT")
+        except Exception as e:
+            st.warning(f"⚠️ QMT 启动异常: {e}")
+
     # 初始化session state
     if 'config' not in st.session_state:
         st.session_state.config = None
@@ -286,7 +302,6 @@ def main():
                 "📁 配置管理",
                 "📊 策略回测",
                 "🔄 网格回测",
-                "📊 结果分析",
                 "💻 实盘代码生成"
             ],
             index=0,
@@ -375,15 +390,6 @@ def main():
     # 原 "🎯 策略回测" (YAML配置回测) 和 "🔧 技术指标回测" 的旧实现已删除
     # 相关代码请参见 git history
     # ---- 结束 ----
-
-    elif page == "📊 结果分析":
-        try:
-            from easyxt_backtest.web_app.streamlit_app import page_analysis
-            page_analysis()
-        except Exception as e:
-            st.error(f"导入结果分析失败: {e}")
-            import traceback
-            st.code(traceback.format_exc())
 
     elif page == "💻 实盘代码生成":
         try:

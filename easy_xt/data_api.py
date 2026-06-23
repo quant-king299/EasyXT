@@ -487,19 +487,50 @@ class DataAPI:
         return True
 
     def _connect_qmt(self) -> bool:
-        """连接QMT数据源"""
+        """连接QMT数据源（失败时自动尝试启动QMT）"""
         if not self.xt:
-            return False
+            # xtdata 未导入，尝试自动启动 QMT 后再导入
+            if not getattr(self, '_qmt_recovery_attempted', False):
+                self._qmt_recovery_attempted = True
+                print("[INFO] xtdata 不可用，尝试自动启动 QMT...")
+                try:
+                    from core.auto_login import QMTAutoLogin
+                    if QMTAutoLogin().login(restart=False, timeout=60):
+                        import xtquant.xtdata as xtdata
+                        self.xt = xtdata
+                        print("[OK] QMT 启动成功，xtdata 已加载")
+                except Exception as e:
+                    print(f"[WARN] QMT 启动失败: {e}")
+            if not self.xt:
+                return False
 
         try:
             client = self.xt.get_client()
             connected = client.is_connected() if client else False
             if connected:
-                self._connected = True  # ✓ 设置连接状态
-            return connected
-        except Exception as e:
-            print(f"  [INFO] QMT connection failed: {e}")
-            return False
+                self._connected = True
+                return True
+        except Exception:
+            pass
+
+        # 连接失败，尝试自动启动 QMT
+        if not getattr(self, '_qmt_recovery_attempted', False):
+            self._qmt_recovery_attempted = True
+            print("[INFO] QMT 未连接，尝试自动启动...")
+            try:
+                from core.auto_login import QMTAutoLogin
+                if QMTAutoLogin().login(restart=False, timeout=60):
+                    import xtquant.xtdata as xtdata
+                    self.xt = xtdata
+                    client = xtdata.get_client()
+                    if client and client.is_connected():
+                        self._connected = True
+                        print("[OK] QMT 已自动恢复连接")
+                        return True
+            except Exception as e:
+                print(f"[WARN] QMT 自动启动失败: {e}")
+
+        return False
 
     def _connect_xqshare(self) -> bool:
         """连接xqshare数据源（远程xtquant代理）"""

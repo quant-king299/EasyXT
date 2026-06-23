@@ -62,6 +62,39 @@ class UnifiedDataInterface:
             self.qmt_available = False
             print("[WARNING] QMT xtdata 不可用")
 
+        # 自动恢复标记（避免无限重试）
+        self._qmt_recovery_attempted = False
+
+    def _ensure_qmt_alive(self) -> bool:
+        """确保 QMT 可用，不可用时自动启动并登录"""
+        if self.qmt_available:
+            # 探测是否真的能连通
+            try:
+                from xtquant import xtdata
+                xtdata.get_trading_dates('SH', '', '', count=1)
+                return True
+            except Exception:
+                self.qmt_available = False
+
+        # 已经尝试过恢复，不再重试
+        if self._qmt_recovery_attempted:
+            return False
+
+        self._qmt_recovery_attempted = True
+        print("[INFO] QMT 未连接，尝试自动启动...")
+        try:
+            from core.auto_login import QMTAutoLogin
+            login = QMTAutoLogin()
+            if login.login(restart=False, timeout=60):
+                from xtquant import xtdata
+                self.qmt_available = True
+                print("[OK] QMT 已自动恢复")
+                return True
+        except Exception as e:
+            print(f"[WARN] QMT 自动启动失败: {e}")
+
+        return False
+
     def connect(self, read_only: bool = False):
         """
         连接DuckDB数据库（使用连接池管理器）
@@ -219,7 +252,7 @@ class UnifiedDataInterface:
                 print(f"  [INFO] local_only=True，跳过在线获取，仅返回本地已有数据")
                 return data if data is not None else pd.DataFrame()
 
-            if not self.qmt_available:
+            if not self.qmt_available and not self._ensure_qmt_alive():
                 print(f"  [ERROR] QMT 不可用，无法获取在线数据")
                 return data if data is not None else pd.DataFrame()
 
