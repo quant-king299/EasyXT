@@ -2,7 +2,7 @@
 
 > 📖 **本指南补充 INSTALL.md，提供针对不同场景的详细配置说明**
 >
-> ❓ **遇到问题？** 查看 **[TROUBLESHOOTING.md](docs/assets/TROUBLESHOOTING.md)** 疑难问题解答
+> ❓ **遇到问题？** 查看 **[TROUBLESHOOTING.md](assets/TROUBLESHOOTING.md)** 疑难问题解答
 
 ---
 
@@ -345,7 +345,7 @@ Eastmoney（东方财富）
    # 正常使用 EasyXT，会自动检测并使用 xqshare
    ```
 
-详细说明：见 [README.md 跨平台支持章节](README.md#-跨平台支持)
+详细说明：见 [README.md 跨平台支持章节](../README.md#-跨平台支持)
 
 #### DuckDB 数据库配置
 
@@ -798,9 +798,9 @@ python -c "from easy_xt import get_api; api = get_api(); data = api.get_price(['
 ### 自助资源
 
 - 📖 **[完整安装指南](INSTALL.md)** - 安装步骤和故障排查
-- ❓ **[疑难问题解答](docs/assets/TROUBLESHOOTING.md)** - 常见问题 FAQ
+- ❓ **[疑难问题解答](assets/TROUBLESHOOTING.md)** - 常见问题 FAQ
 - 📐 **[系统架构文档](ARCHITECTURE.md)** - 项目架构说明
-- 📖 **[项目 README](README.md)** - 项目说明和快速导航
+- 📖 **[项目 README](../README.md)** - 项目说明和快速导航
 
 ### 诊断工具
 
@@ -830,4 +830,4 @@ https://github.com/quant-king299/EasyXT/issues
 
 **祝你配置顺利！** 🎉
 
-如有任何问题，请先查看 [TROUBLESHOOTING.md](docs/assets/TROUBLESHOOTING.md)
+如有任何问题，请先查看 [TROUBLESHOOTING.md](assets/TROUBLESHOOTING.md)

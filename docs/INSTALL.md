@@ -2,7 +2,7 @@
 
 本文档提供 EasyXT 项目的完整安装说明，包括环境准备、安装步骤、常见问题排查等内容。
 
-> 🆕 **新手推荐**：如果你遇到配置问题（如 `cannot import name 'datacenter' from 'xtquant'`），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)**，包含针对不同场景的详细配置说明。
+> 🆕 **新手推荐**：如果你遇到配置问题（如 `cannot import name 'datacenter' from 'xtquant'`），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)（同目录）**，包含针对不同场景的详细配置说明。
 
 ## 📋 目录
 
@@ -55,7 +55,7 @@ pip install -r requirements_realtime.txt
   - ✅ **自动降级** - 当QMT数据不可用时自动切换到通达信数据源
 
 **安装建议**：
-- 如果需要使用GUI界面（run_gui.py），请使用**方式2**
+- 如果需要使用GUI界面（main_app.py（101因子平台）），请使用**方式2**
 - 如果需要**实时数据推送**或**通达信数据源**（推荐），额外安装**方式3**
 - 完整安装：方式2 + 方式3
 
@@ -66,7 +66,7 @@ pip install -r requirements_realtime.txt
 python -c "from easy_xt import get_api; print('easy_xt OK')"
 
 # 测试 easyxt_backtest
-python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK')"
+python -c "from easyxt_backtest import EnhancedBacktestEngine; print('easyxt_backtest OK')"
 ```
 
 **成功输出**：
@@ -141,7 +141,7 @@ python easy_xt/check_xtquant.py
 
 ### 详细配置说明
 
-如果需要更详细的配置说明（包括 IDE 配置、数据源配置等），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)**。
+如果需要更详细的配置说明（包括 IDE 配置、数据源配置等），请查看 **[📖 增强版配置指南](SETUP_GUIDE.md)（同目录）**。
 
 ---
 
@@ -257,7 +257,7 @@ pip install -e ./easyxt_backtest
 
 **验证安装**：
 ```powershell
-python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK')"
+python -c "from easyxt_backtest import EnhancedBacktestEngine; print('easyxt_backtest OK')"
 ```
 
 #### 方式B：自动安装脚本（可选）
@@ -414,7 +414,7 @@ python -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 OK')"
 **说明**：
 - ✅ `pip install -e ./easy_xt` - 只安装核心库，适合命令行使用
 - ✅ `pip install -e .` - 完整安装，包含 GUI 界面、回测框架等
-- 如果需要使用 `run_gui.py`，必须使用**完整安装**
+- 如果需要使用 `main_app.py（101因子平台）`，必须使用**完整安装**
 
 ---
 
@@ -615,7 +615,7 @@ install.bat
 **症状**：
 ```powershell
 $env:PYTHONPATH = "D:\EasyXT"
-python -c "from easyxt_backtest import BacktestEngine"
+python -c "from easyxt_backtest import EnhancedBacktestEngine"
 # 还是报错
 ```
 
@@ -688,7 +688,7 @@ git reset --hard origin/main
 python -c "from easy_xt import get_api; print('easy_xt OK')"
 
 # 2. 验证 easyxt_backtest
-python -c "from easyxt_backtest import BacktestEngine; print('easyxt_backtest OK')"
+python -c "from easyxt_backtest import EnhancedBacktestEngine; print('easyxt_backtest OK')"
 
 # 3. 验证实时数据推送功能（如果安装了）
 python -c "import pytdx; print('pytdx OK')"
@@ -708,17 +708,16 @@ print(f'获取到 {len(data)} 条数据')
 
 # 测试回测引擎
 python -c "
-from easyxt_backtest import BacktestEngine, DataManager
-from easyxt_backtest.strategies import SmallCapStrategy
+from easyxt_backtest import EnhancedBacktestEngine
+from easyxt_backtest.simple_strategy_adapter import adapt
 
-# 创建回测引擎
-data_manager = DataManager()
-engine = BacktestEngine(initial_cash=1000000, data_manager=data_manager)
+def my_strategy(df, top_n=5):
+    return df.nsmallest(top_n, 'close')['ts_code'].tolist()
 
-# 创建策略
-strategy = SmallCapStrategy(select_num=3)
-result = engine.run_backtest(strategy, '20230101', '20231231')
-result.print_summary()
+adapter = adapt(my_strategy, top_n=5, category='stock')
+engine = EnhancedBacktestEngine(initial_cash=100000)
+result = engine.run_backtest(adapter, '20240101', '20240630')
+print(f'总收益率: {result.performance[chr(34)]total_return[chr(34)]:.2%}')
 "
 ```
 
@@ -790,7 +789,7 @@ pip install -e ./easyxt_backtest
 pip install -r requirements_realtime.txt
 
 # 5. 验证安装
-python -c "from easyxt_backtest import BacktestEngine; print('安装成功！')"
+python -c "from easyxt_backtest import EnhancedBacktestEngine; print('安装成功！')"
 ```
 
 ### 开发者
@@ -868,9 +867,8 @@ code .
 
 ### 文档资源
 
-- 📖 [快速开始指南](QUICK_START.md)
+- 📖 [增强版配置指南](SETUP_GUIDE.md)
 - 📖 [架构设计文档](ARCHITECTURE.md)
-- ❓ [疑难问题解答](docs/assets/TROUBLESHOOTING.md)
 - 📝 [API 文档](API文档.md)
 
 ### 获取帮助
@@ -885,4 +883,4 @@ code .
 
 **祝你安装顺利！** 🎉
 
-如有问题，请查看 [FAQ](docs/assets/TROUBLESHOOTING.md) 或提 Issue。
+如有问题，请查看 [FAQ](assets/TROUBLESHOOTING.md) 或提 Issue。
