@@ -204,7 +204,7 @@ class FixedRealTradingQStockStrategy:
                     start_date = (datetime.now() - timedelta(days=count*2)).strftime('%Y-%m-%d')
                     try:
                         data = qs.get_data(stock_code, start=start_date, end=end_date)
-                    except:
+                    except (ValueError, TypeError):
                         data = qs.get_data(stock_code)
                 
                 # 验证数据

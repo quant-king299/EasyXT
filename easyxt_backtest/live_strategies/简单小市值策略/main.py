@@ -306,7 +306,7 @@ class 简单小市值策略StrategyLive:
         try:
             asset = self.api.get_account_asset(self.account_id) if self.is_connected else None
             total_asset = asset.get('total_asset', 1000000) if asset else 1000000
-        except:
+        except Exception:
             total_asset = 1000000
 
         # 1. 卖出不在目标组合中的股票

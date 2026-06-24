@@ -446,7 +446,7 @@ class StopLossConditionOrderManager:
                     order['status'] = '已过期'
                     print(f"⏰ 条件单已过期: {order['id']}")
                     continue
-            except:
+            except (ValueError, TypeError):
                 pass
 
             # 获取当前价格
@@ -467,7 +467,7 @@ class StopLossConditionOrderManager:
                         order['today_open_price'] = float(tick_info['open'])
                     if 'lastClose' in tick_info:
                         order['yesterday_close_price'] = float(tick_info['lastClose'])
-            except:
+            except (ValueError, TypeError):
                 pass
 
             # 检查策略

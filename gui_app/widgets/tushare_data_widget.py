@@ -971,8 +971,7 @@ class TushareDownloadThread(QThread):
             # 确保表存在
             try:
                 conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
-            except:
-                conn.execute("""
+            except Exception:                conn.execute("""
                     CREATE TABLE stock_daily (
                         stock_code VARCHAR,
                         symbol_type VARCHAR DEFAULT 'stock',
@@ -1891,12 +1890,21 @@ class TushareDownloadThread(QThread):
                             numeric_cols = [c for c in df.columns if c not in ['ts_code', 'trade_date']]
                             df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce'))
 
+                            # 确保列顺序与表结构定义一致，避免字段错位
+                            expected_columns = ['ts_code', 'trade_date', 'pre_close', 'open', 'high', 'low',
+                                              'close', 'change', 'pct_chg', 'vol', 'amount',
+                                              'bond_value', 'bond_over_rate', 'cb_value', 'cb_over_rate']
+                            columns_to_insert = [col for col in expected_columns if col in df.columns]
+                            df_ordered = df[columns_to_insert].copy()
+
                             insert_data = [
                                 tuple(None if pd.isna(v) else v for v in row)
-                                for row in df.itertuples(index=False, name=None)
+                                for row in df_ordered.itertuples(index=False, name=None)
                             ]
+                            columns_str = ','.join(columns_to_insert)
+                            placeholders = ','.join(['?'] * len(columns_to_insert))
                             conn.executemany(
-                                "INSERT OR REPLACE INTO cb_daily VALUES (" + ",".join(["?"] * len(df.columns)) + ")",
+                                f"INSERT OR REPLACE INTO cb_daily ({columns_str}) VALUES ({placeholders})",
                                 insert_data
                             )
                             total_inserted += len(df)
@@ -2076,9 +2084,20 @@ class TushareDownloadThread(QThread):
                             df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
                             numeric_cols = [c for c in df.columns if c not in ['ts_code', 'trade_date']]
                             df[numeric_cols] = df[numeric_cols].apply(lambda x: pd.to_numeric(x, errors='coerce'))
-                            insert_data = [tuple(row) for row in df.itertuples(index=False)]
+
+                            # 确保列顺序与表结构定义一致，避免字段错位
+                            # 表结构: ts_code, trade_date, open, high, low, close, pre_close, change, pct_chg, vol, amount
+                            expected_columns = ['ts_code', 'trade_date', 'open', 'high', 'low', 'close',
+                                              'pre_close', 'change', 'pct_chg', 'vol', 'amount']
+                            # 只保留存在的列
+                            columns_to_insert = [col for col in expected_columns if col in df.columns]
+                            df_ordered = df[columns_to_insert].copy()
+
+                            insert_data = [tuple(row) for row in df_ordered.itertuples(index=False)]
+                            columns_str = ','.join(columns_to_insert)
+                            placeholders = ','.join(['?'] * len(columns_to_insert))
                             conn.executemany(
-                                f"INSERT OR REPLACE INTO etf_daily VALUES ({','.join(['?']*len(df.columns))})",
+                                f"INSERT OR REPLACE INTO etf_daily ({columns_str}) VALUES ({placeholders})",
                                 insert_data
                             )
                             conn.commit()

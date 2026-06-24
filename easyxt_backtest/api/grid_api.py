@@ -284,7 +284,7 @@ class GridBacktestEngine:
                     # 尝试直接转换
                     try:
                         df['date'] = pd.to_datetime(df['date'])
-                    except:
+                    except (ValueError, TypeError):
                         pass
 
                 # 设置date为索引
@@ -332,7 +332,7 @@ class GridBacktestEngine:
             if not isinstance(df.index, pd.DatetimeIndex):
                 try:
                     df.index = pd.to_datetime(df.index)
-                except:
+                except (ValueError, TypeError):
                     raise ValueError(f"无法将索引转换为DatetimeIndex，当前类型: {type(df.index)}")
 
             print(f"[数据加载] 成功加载 {len(df)} 条数据")
@@ -376,7 +376,7 @@ class GridBacktestEngine:
                     for analyzer in strat_result.analyzers:
                         analyzer_names.append(analyzer.alias)
                     print(f"[分析器] 可用的分析器: {analyzer_names}")
-                except:
+                except (ValueError, TypeError):
                     print(f"[分析器] 无法获取分析器名称列表")
             else:
                 print(f"[WARNING] 策略没有analyzers属性")

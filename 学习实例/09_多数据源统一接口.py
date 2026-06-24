@@ -1650,9 +1650,9 @@ def main():
                 if hasattr(provider, 'disconnect'):
                     try:
                         provider.disconnect()
-                    except:
+                    except Exception:
                         pass
-        except:
+        except Exception:
             pass
         print("👋 程序结束，感谢您的学习！")
 

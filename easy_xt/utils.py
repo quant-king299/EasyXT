@@ -118,7 +118,7 @@ class TimeUtils:
                 try:
                     dt = pd.to_datetime(date_input)
                     return dt.strftime('%Y%m%d')
-                except:
+                except (ValueError, TypeError):
                     return ''
         
         elif isinstance(date_input, datetime):
@@ -176,7 +176,7 @@ class DataUtils:
         for col in numeric_columns:
             try:
                 df[col] = pd.to_numeric(df[col], errors='ignore')
-            except:
+            except (ValueError, TypeError):
                 pass
         
         return df

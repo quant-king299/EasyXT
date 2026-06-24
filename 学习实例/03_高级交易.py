@@ -24,7 +24,7 @@ try:
     exec(open(os.path.join(parent_dir, 'mock_trade_functions.py')).read())
     mock_mode = True
     print("🔄 模拟数据和交易模式已启用")
-except:
+except (ValueError, TypeError):
     mock_mode = False
 
 # 尝试导入高级交易API
@@ -134,7 +134,7 @@ class MockAdvancedTradeAPI:
                 return self.api.buy(account_id, code, volume, price, price_type)
             else:
                 return self.api.sell(account_id, code, volume, price, price_type)
-        except:
+        except Exception:
             return 12345  # 模拟订单号
     
     def async_order(self, account_id: str, code: str, order_type: str, volume: int,
@@ -167,7 +167,7 @@ class MockAdvancedTradeAPI:
         """同步撤单"""
         try:
             return self.api.cancel_order(account_id, order_id)
-        except:
+        except Exception:
             return True  # 模拟撤单成功
     
     def batch_cancel_orders(self, account_id: str, order_ids: list) -> list:
@@ -182,7 +182,7 @@ class MockAdvancedTradeAPI:
                 asset['profit_loss'] = 1000.0  # 模拟浮动盈亏
                 asset['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 return asset
-        except:
+        except (ValueError, TypeError):
             pass
         
         # 模拟数据
@@ -207,7 +207,7 @@ class MockAdvancedTradeAPI:
                 positions['profit_loss_ratio'] = 0.05
                 positions['update_time'] = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             return positions
-        except:
+        except (ValueError, TypeError):
             return pd.DataFrame()
     
     def get_today_orders(self, account_id: str, cancelable_only: bool = False):
@@ -244,7 +244,7 @@ class MockAdvancedTradeAPI:
         """获取当日成交"""
         try:
             return self.api.get_trades(account_id)
-        except:
+        except Exception:
             return pd.DataFrame()
     
     def subscribe_realtime_data(self, codes, period='tick', callback=None) -> bool:
@@ -261,7 +261,7 @@ class MockAdvancedTradeAPI:
         """获取本地数据"""
         try:
             return self.api.get_history_data(codes, period, count=count)
-        except:
+        except Exception:
             # 模拟数据
             import numpy as np
             dates = pd.date_range(end=datetime.now(), periods=count, freq='D')
@@ -314,19 +314,19 @@ def lesson_01_advanced_setup():
     def order_callback(order):
         try:
             print(f"📋 委托回调: {getattr(order, 'stock_code', 'N/A')} {getattr(order, 'order_type', 'N/A')} {getattr(order, 'order_volume', 0)}股 状态:{getattr(order, 'order_status', 'N/A')}")
-        except:
+        except (ValueError, TypeError):
             print(f"📋 委托回调: {order}")
     
     def trade_callback(trade):
         try:
             print(f"💰 成交回调: {getattr(trade, 'stock_code', 'N/A')} {getattr(trade, 'traded_volume', 0)}股 价格:{getattr(trade, 'traded_price', 0)}")
-        except:
+        except (ValueError, TypeError):
             print(f"💰 成交回调: {trade}")
     
     def error_callback(error):
         try:
             print(f"❌ 错误回调: {getattr(error, 'error_msg', str(error))}")
-        except:
+        except (ValueError, TypeError):
             print(f"❌ 错误回调: {error}")
     
     advanced_api.set_callbacks(

@@ -1064,8 +1064,7 @@ ID: {order['id']}
                         self.log(f"条件单已过期: {order['id']}")
                         self.update_order_table()
                         continue
-                except:
-                    pass
+                except Exception:                    pass
 
                 # 根据条件单类型进行监控
                 order_type = order['type']
@@ -1173,8 +1172,7 @@ ID: {order['id']}
             # 这里简化处理，假设基准价格已存储
             # 实际需要根据reference_price_combo获取
             return False
-        except:
-            return False
+        except Exception:            return False
 
     def _check_time_condition(self, order: dict) -> bool:
         """检查时间条件"""
@@ -1187,8 +1185,7 @@ ID: {order['id']}
                 trigger_time = datetime.strptime(match.group(1), "%Y-%m-%d %H:%M:%S")
                 return datetime.now() >= trigger_time
             return False
-        except:
-            return False
+        except (ValueError, TypeError):            return False
 
     def _check_stop_condition(self, order: dict, current_price: float) -> bool:
         """检查止盈止损条件"""
@@ -1214,8 +1211,7 @@ ID: {order['id']}
                         return True
 
             return False
-        except:
-            return False
+        except (ValueError, TypeError):            return False
 
     def _check_advanced_stop_loss_condition(self, order: dict, current_price: float) -> bool:
         """检查高级止盈止损策略条件"""
@@ -1250,8 +1246,7 @@ ID: {order['id']}
                         state['today_open_price'] = float(tick_info['open'])
                     if 'lastClose' in tick_info:
                         state['yesterday_close_price'] = float(tick_info['lastClose'])
-            except:
-                pass
+            except (ValueError, TypeError):                pass
 
             # 获取策略参数（从订单中获取，如果没有则使用默认值）
             params = order.get('strategy_params', {})

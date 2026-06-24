@@ -57,7 +57,7 @@ class ReportGenerator:
             factor_info = get_factor_info(factor_name)
             formula = factor_info.get('formula', '')
             description = factor_info.get('description', '')
-        except:
+        except (ImportError, AttributeError):
             formula = ''
             description = ''
 
@@ -760,7 +760,7 @@ class ReportGenerator:
         try:
             from src.factor_engine.factor_metadata import get_factor_info
             factor_info = get_factor_info(factor_name)
-        except:
+        except (ImportError, AttributeError):
             factor_info = {
                 'name': factor_name,
                 'formula': '因子公式无法获取',

@@ -688,8 +688,7 @@ class tq:
                 for v in row.iloc[1:]:
                     try:
                         vals.append(float(v))
-                    except:
-                        vals.append(str(v) if pd.notna(v) else "")
+                    except (ValueError, TypeError):                        vals.append(str(v) if pd.notna(v) else "")
                 data_rows.append([date_str] + vals)
             
             # 写入JSON
@@ -1045,8 +1044,7 @@ class tq:
                                     if not np.isnan(v):
                                         indices.append(ts_to_idx[ts])
                                         vals.append(v)
-                                except:
-                                    pass
+                                except (ValueError, TypeError):                                    pass
                     
                     if indices:
                         data_arr[indices, s_idx] = vals
@@ -1106,8 +1104,7 @@ class tq:
                         if field in stock_data:
                             try:
                                 arr[field] = pd.to_numeric(stock_data[field], errors='coerce')
-                            except:
-                                pass
+                            except (ValueError, TypeError):                                pass
                     
                     result[stock] = arr
 

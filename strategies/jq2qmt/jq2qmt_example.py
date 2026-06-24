@@ -492,8 +492,7 @@ def before_market_open(context):
             # 尝试获取股票信息来验证是否存在
             get_current_data()[stock]
             available_stocks.append(stock)
-        except:
-            log.info('股票 %s 不存在或无法获取数据，跳过' % stock)
+        except Exception:            log.info('股票 %s 不存在或无法获取数据，跳过' % stock)
             continue
     
     if available_stocks:
@@ -531,8 +530,7 @@ def market_open(context):
             # 安全获取持仓数量
             try:
                 position_amount = context.portfolio.positions[security].total_amount
-            except:
-                position_amount = 0
+            except Exception:                position_amount = 0
             
             # 更敏感的交易条件（0.2%的价格波动就触发交易）
             # 价格上涨0.2%以上且有资金则测试买入

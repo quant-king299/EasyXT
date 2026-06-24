@@ -423,7 +423,7 @@ class DuckDBDataManager:
             # 清理临时表
             try:
                 self.storage.con.unregister('temp_dividends')
-            except:
+            except (ValueError, TypeError):
                 pass
 
     def close(self):

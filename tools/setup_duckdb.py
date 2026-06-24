@@ -49,8 +49,7 @@ if not token:
                             break
                 if token:
                     break
-    except:
-        pass
+    except Exception:        pass
 
 if not token:
     print("未找到 TUSHARE_TOKEN 环境变量或 .env 文件")
@@ -191,8 +190,7 @@ try:
     # 确保表存在
     try:
         conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
-    except:
-        conn.execute("""
+    except Exception:        conn.execute("""
             CREATE TABLE stock_daily (
                 stock_code VARCHAR, symbol_type VARCHAR DEFAULT 'stock', date DATE,
                 period VARCHAR DEFAULT '1d', open DOUBLE, high DOUBLE, low DOUBLE,
@@ -334,8 +332,7 @@ try:
             """).df()
             print(f"  日线数据：{df['min_date'].iloc[0]} ~ {df['max_date'].iloc[0]}")
             print(f"  交易日数：{df['trading_days'].iloc[0]:,} 天")
-        except:
-            print("  日线数据表不存在或为空")
+        except (ValueError, TypeError):            print("  日线数据表不存在或为空")
 
         try:
             df = con.execute("""
@@ -347,8 +344,7 @@ try:
             """).df()
             print(f"  市值数据：{df['min_date'].iloc[0]} ~ {df['max_date'].iloc[0]}")
             print(f"  数据天数：{df['dates'].iloc[0]:,} 天")
-        except:
-            print("  市值数据表不存在或为空")
+        except (ValueError, TypeError):            print("  市值数据表不存在或为空")
 
         con.close()
 

@@ -213,7 +213,7 @@ class TradeAPI:
                 try:
                     # 使用时间戳作为session_id以确保唯一性
                     session_int = int(time.time() * 1000) % 1000000
-                except:
+                except (ValueError, TypeError):
                     session_int = 123456  # 默认session ID
 
                 print(f"[OK] 使用session_id: {session_int}")
@@ -642,7 +642,7 @@ class TradeAPI:
             # 异常时也尝试从委托推断
             try:
                 return self.get_trades_from_orders(account_id)
-            except:
+            except Exception:
                 return pd.DataFrame()
     
     def _process_trades_data(self, trades) -> pd.DataFrame:

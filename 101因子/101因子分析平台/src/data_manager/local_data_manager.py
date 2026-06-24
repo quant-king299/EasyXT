@@ -660,7 +660,7 @@ class LocalDataManager:
             # 初始化数据服务
             try:
                 api.init_data()
-            except:
+            except Exception:
                 pass
 
             print(f"🔍 尝试从QMT获取A股列表...")
@@ -820,7 +820,7 @@ class LocalDataManager:
             # 初始化数据服务
             try:
                 api.init_data()
-            except:
+            except Exception:
                 pass
 
             print(f"🔍 尝试从QMT获取可转债列表...")

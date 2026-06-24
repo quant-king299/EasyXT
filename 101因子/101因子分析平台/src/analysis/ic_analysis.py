@@ -144,7 +144,7 @@ class ICAnalysis:
                             if factor_is_valid and return_is_valid:
                                 factor_vals.append(factor_val)
                                 return_vals.append(return_val)
-                        except:
+                        except Exception:
                             # 如果出现类型错误，跳过这个数据点
                             continue
                 

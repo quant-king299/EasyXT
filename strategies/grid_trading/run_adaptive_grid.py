@@ -224,8 +224,7 @@ class 自适应网格测试器:
                             if pos['持仓量'] >= 10:
                                 position_info = f"{pos['持仓量']}股 " \
                                              f"(可用{pos['可用数量']}股)"
-                    except:
-                        pass
+                    except Exception:                        pass
 
                 # 打印行情
                 print(f"{stock_code} ({self.config['股票名称'][i]})")

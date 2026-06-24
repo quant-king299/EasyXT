@@ -261,13 +261,13 @@ class QStockEasyXTIntegration:
                 end_date = datetime.now().strftime('%Y-%m-%d')
                 start_date = (datetime.now() - timedelta(days=period)).strftime('%Y-%m-%d')
                 kline_data = qs.get_data(symbol, start=start_date, end=end_date)
-            except:
+            except (ValueError, TypeError):
                 try:
                     # 方法2: 使用默认参数获取数据
                     kline_data = qs.get_data(symbol)
                     if kline_data is not None and not kline_data.empty and len(kline_data) > period:
                         kline_data = kline_data.tail(period)  # 取最近的数据
-                except:
+                except Exception:
                     kline_data = None
             
             if kline_data is not None and not kline_data.empty:
@@ -569,7 +569,7 @@ class QStockEasyXTIntegration:
                     # Williams %R
                     data['WILLR'] = talib.WILLR(data['high'].values, data['low'].values, data['close'].values, timeperiod=14)
                     print("  ✅ TA-Lib高级指标计算完成")
-                except:
+                except (ValueError, TypeError):
                     print("  ⚠️ TA-Lib指标计算失败")
             
             print(f"✅ 技术指标计算完成，共 {len([col for col in data.columns if col not in ['open', 'high', 'low', 'close', 'volume']])} 个指标")
@@ -1181,7 +1181,7 @@ class QStockEasyXTIntegration:
             if QSTOCK_AVAILABLE:
                 try:
                     historical_data = qs.get_data(symbol, start=start_date, end=end_date)
-                except:
+                except (ValueError, TypeError):
                     try:
                         # 如果带参数失败，尝试不带参数
                         historical_data = qs.get_data(symbol)
@@ -1191,7 +1191,7 @@ class QStockEasyXTIntegration:
                             start_dt = pd.to_datetime(start_date)
                             end_dt = pd.to_datetime(end_date)
                             historical_data = historical_data[(historical_data.index >= start_dt) & (historical_data.index <= end_dt)]
-                    except:
+                    except (ValueError, TypeError):
                         historical_data = None
             else:
                 print("❌ qstock不可用，无法进行回测")

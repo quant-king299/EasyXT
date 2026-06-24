@@ -640,7 +640,7 @@ def page_backtest():
                     weekdays = {'Monday': '周一', 'Tuesday': '周二', 'Wednesday': '周三',
                                'Thursday': '周四', 'Friday': '周五', 'Saturday': '周六', 'Sunday': '周日'}
                     portfolio_df['weekday_cn'] = portfolio_df['weekday'].map(weekdays)
-                except:
+                except (ValueError, TypeError):
                     portfolio_df['date_display'] = portfolio_df['date']
                     portfolio_df['weekday_cn'] = ''
 
@@ -682,7 +682,7 @@ def page_backtest():
                             weekdays = {'Monday': '周一', 'Tuesday': '周二', 'Wednesday': '周三',
                                        'Thursday': '周四', 'Friday': '周五', 'Saturday': '周六', 'Sunday': '周日'}
                             weekday_display = weekdays.get(weekday, weekday)
-                        except:
+                        except (ValueError, TypeError):
                             date_display = row['date']
                             weekday_display = ''
 
@@ -790,7 +790,7 @@ def page_analysis():
                     weekdays = {'Monday': '周一', 'Tuesday': '周二', 'Wednesday': '周三',
                                'Thursday': '周四', 'Friday': '周五', 'Saturday': '周六', 'Sunday': '周日'}
                     weekday_display = weekdays.get(weekday, weekday)
-                except:
+                except (ValueError, TypeError):
                     date_display = row['date']
                     weekday_display = ''
 

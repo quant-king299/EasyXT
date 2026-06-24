@@ -255,7 +255,7 @@ class PerformanceAnalysisNode(AnalysisNode):
                 monthly_returns = returns_data.resample('M').apply(lambda x: (1+x).prod() - 1)
                 additional_metrics['avg_monthly_return'] = float(monthly_returns.mean())
                 additional_metrics['monthly_volatility'] = float(monthly_returns.std())
-            except:
+            except (ValueError, TypeError):
                 additional_metrics['avg_monthly_return'] = 0.0
                 additional_metrics['monthly_volatility'] = 0.0
             
@@ -264,7 +264,7 @@ class PerformanceAnalysisNode(AnalysisNode):
                 yearly_returns = returns_data.resample('Y').apply(lambda x: (1+x).prod() - 1)
                 additional_metrics['avg_yearly_return'] = float(yearly_returns.mean())
                 additional_metrics['yearly_volatility'] = float(yearly_returns.std())
-            except:
+            except (ValueError, TypeError):
                 additional_metrics['avg_yearly_return'] = 0.0
                 additional_metrics['yearly_volatility'] = 0.0
         
@@ -420,7 +420,7 @@ class RiskAnalysisNode(AnalysisNode):
                 'r_squared': float(r_squared),
                 'factor_exposure': float(aligned_factors.mean())
             }
-        except:
+        except (ValueError, TypeError):
             return {}
 
 
@@ -535,7 +535,7 @@ class SignalAnalysisNode(AnalysisNode):
                 'group_returns': group_returns.to_dict() if not group_returns.empty else {},
                 'predictive_power': abs(correlation) if not pd.isna(correlation) else 0.0
             }
-        except:
+        except Exception:
             return {}
 
 

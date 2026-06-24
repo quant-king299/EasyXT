@@ -183,7 +183,7 @@ class EasyXTDataLoader:
                 test_fields = fields.copy()
                 test_fields.append('total_mv')  # 总市值
                 fields = test_fields
-            except:
+            except Exception:
                 pass
 
         # 策略1: 优先从DuckDB缓存加载（如果启用且可用）

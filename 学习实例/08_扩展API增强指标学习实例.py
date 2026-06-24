@@ -169,7 +169,7 @@ class DataManager:
                         df.index = pd.to_datetime(time_col)
                     
                     df = df.drop('time', axis=1)
-                except:
+                except (ValueError, TypeError):
                     pass  # 时间转换失败不影响数据使用
             
             # 2. 移除无效价格数据

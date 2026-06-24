@@ -91,8 +91,7 @@ class StrategyThread(QThread):
         if hasattr(self.strategy, 'stop'):
             try:
                 self.strategy.stop()
-            except:
-                pass
+            except Exception:                pass
         # 终止线程
         self.quit()
         self.wait(max(1000, 3000))  # 最多等待3秒

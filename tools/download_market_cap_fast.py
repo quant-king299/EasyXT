@@ -89,8 +89,7 @@ def get_tushare_token():
                                 break
                     if token:
                         break
-        except:
-            pass
+        except Exception:            pass
     return token
 
 
@@ -140,8 +139,7 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             WHERE date BETWEEN '{start_fmt}' AND '{end_fmt}'
         """).fetchone()
         print(f"已有数据: {existing[0]} 个交易日")
-    except:
-        print("已有数据: 0 个交易日")
+    except (ValueError, TypeError):        print("已有数据: 0 个交易日")
         existing = (0,)
 
     # 获取交易日历
@@ -170,8 +168,7 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             print("所有数据已存在！无需下载")
             conn.close()
             return {'total_inserted': 0, 'total_days': 0, 'elapsed': 0}
-    except:
-        missing_dates = all_dates
+    except (ValueError, TypeError):        missing_dates = all_dates
         print(f"需要下载: {len(missing_dates)} 个交易日")
 
     # 开始下载

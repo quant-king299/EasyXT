@@ -451,7 +451,7 @@ class WorkflowEngine:
                                 returns_data = result['returns']
                                 print(f"[DEBUG] IC分析使用已计算的returns列: {returns_data.shape}")
                                 break
-                            except:
+                            except (ValueError, TypeError):
                                 pass
                         # 其次使用close列计算（但优先级低）
                         elif 'close' in result.columns:
@@ -460,7 +460,7 @@ class WorkflowEngine:
                                 returns_data = result.groupby(level=1)['close'].pct_change()
                                 print(f"[DEBUG] IC分析从close计算收益率: {returns_data.shape}")
                                 break
-                            except:
+                            except (ValueError, TypeError):
                                 pass
                     elif isinstance(result, dict):
                         # 如果结果是字典，检查是否包含returns或price_data
@@ -479,7 +479,7 @@ class WorkflowEngine:
                                     returns_data = price_data.groupby(level=1)['close'].pct_change()
                                     print(f"[DEBUG] IC分析从price_data的close计算收益率: {returns_data.shape}")
                                     break
-                                except:
+                                except (ValueError, TypeError):
                                     pass
         
         # 如果仍然没有收益率数据，尝试从因子数据的同源数据计算
@@ -499,7 +499,7 @@ class WorkflowEngine:
                                 if not filtered_price_data.empty:
                                     returns_data = filtered_price_data.groupby(level=1)['close'].pct_change()
                                     break
-                            except:
+                            except Exception:
                                 pass
         
         if factor_data is not None and hasattr(factor_data, 'empty') and not factor_data.empty and \

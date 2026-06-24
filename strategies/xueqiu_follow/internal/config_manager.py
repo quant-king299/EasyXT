@@ -486,8 +486,7 @@ class ConfigManager:
                 if Path(temp_file).exists():
                     try:
                         Path(temp_file).unlink()
-                    except:
-                        pass
+                    except Exception:                        pass
                 raise
     
     def save_portfolios(self):
@@ -672,8 +671,7 @@ class ConfigManager:
                 with open(unified_config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
                 return config_data.get('version', 'unknown')
-            except:
-                pass
+            except Exception:                pass
         return 'unknown'
     
     def get_all_portfolios(self) -> List[Dict[str, Any]]:

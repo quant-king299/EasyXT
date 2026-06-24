@@ -315,7 +315,7 @@ class DataDownloadManager:
         try:
             import os
             table_size = os.path.getsize(self.db_manager.db_path) / (1024 * 1024)  # MB
-        except:
+        except (ImportError, AttributeError):
             table_size = 0
 
         summary = {

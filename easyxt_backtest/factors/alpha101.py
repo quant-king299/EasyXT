@@ -104,7 +104,7 @@ class Alpha101Factor(BaseFactor):
                         if bars is not None and not bars.empty:
                             bars['symbol'] = stock
                             all_data.append(bars)
-                    except:
+                    except Exception:
                         continue
 
                 if all_data:

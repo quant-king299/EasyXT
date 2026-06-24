@@ -54,8 +54,7 @@ def parse_zxg_blk(zxg_file):
                         i += 7
                     else:
                         i += 1
-                except:
-                    i += 1
+                except Exception:                    i += 1
 
     except Exception as e:
         print(f"  [错误] 解析失败: {e}")

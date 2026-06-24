@@ -204,7 +204,7 @@ class DuckDBStorage:
             # 清理临时表
             try:
                 self.con.unregister('temp_data')
-            except:
+            except Exception:
                 pass
 
     def load_data(self, stock_code: str, period: str = '1d',
@@ -558,14 +558,14 @@ class DuckDBStorage:
                                 file_path = os.path.join(root, file)
                                 try:
                                     total_size += os.path.getsize(file_path)
-                                except:
+                                except Exception:
                                     continue
                         stats['db_size_mb'] = total_size / (1024 * 1024)
                     except Exception as e:
                         # 如果计算失败，尝试直接获取目录大小
                         try:
                             stats['db_size_mb'] = self.db_path.stat().st_size / (1024 * 1024)
-                        except:
+                        except Exception:
                             stats['db_size_mb'] = 0
 
         except Exception as e:

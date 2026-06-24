@@ -968,7 +968,7 @@ class DataAPI:
                         count = min(days * 4, 1000)  # 小时：每天约4条
 
                     print(f"[INFO] TDX不支持指定日期范围，已自动转换为获取最近{count}条数据")
-                except:
+                except (ValueError, TypeError):
                     pass  # 使用默认count=1000
 
         # 对于分钟数据，调整end_date为明天，避免因数据延迟导致过滤失败
@@ -977,7 +977,7 @@ class DataAPI:
                 end_dt = datetime.strptime(end_date, '%Y%m%d')
                 end_dt += timedelta(days=1)  # 加1天
                 end_date_adjusted = end_dt.strftime('%Y%m%d')
-            except:
+            except Exception:
                 end_date_adjusted = end_date
         else:
             end_date_adjusted = end_date
@@ -1424,7 +1424,7 @@ class DataAPI:
                 for code in codes:
                     try:
                         self.xt.subscribe_quote(code, period='tick')
-                    except:
+                    except Exception:
                         pass
 
                 # 再次获取完整tick

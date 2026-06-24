@@ -356,5 +356,5 @@ class FactorAnalysisNode(TransformNode):
             
             avg_turnover = np.mean(factor_changes) if factor_changes else 0.0
             return {'turnover_rate': avg_turnover}
-        except:
+        except (ValueError, TypeError):
             return {'turnover_rate': 0.0}

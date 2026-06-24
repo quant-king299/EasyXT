@@ -23,7 +23,7 @@ try:
     exec(open(os.path.join(parent_dir, 'mock_trade_functions.py')).read())
     mock_mode = True
     print("🔄 模拟数据和交易模式已启用")
-except:
+except (ValueError, TypeError):
     mock_mode = False
 
 # 配置信息（请根据实际情况修改）

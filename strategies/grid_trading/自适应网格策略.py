@@ -351,8 +351,7 @@ class 自适应网格策略(BaseStrategy):
                     stock_data = price_df[price_df['code'] == stock_code]
                     if not stock_data.empty:
                         return stock_data.iloc[0]['pre_close']
-            except:
-                pass
+            except Exception:                pass
             return None
 
         # 查找该股票的最新触发记录
@@ -366,8 +365,7 @@ class 自适应网格策略(BaseStrategy):
                     stock_data = price_df[price_df['code'] == stock_code]
                     if not stock_data.empty:
                         return stock_data.iloc[0]['pre_close']
-            except:
-                pass
+            except Exception:                pass
             return None
 
         # 返回最新触发价格
@@ -702,8 +700,7 @@ class 自适应网格策略(BaseStrategy):
                         if stock_data.empty:
                             continue
                         current_price = stock_data.iloc[0]['price']
-                    except:
-                        continue
+                    except Exception:                        continue
 
                     # 根据信号执行交易
                     if signal == 'sell':

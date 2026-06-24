@@ -200,7 +200,7 @@ class PerformanceAnalyzer:
             ic_analyzer = ICAnalysis()
             ic_series = ic_analyzer.calculate_ic(factor_data, returns_data)
             ic_stats = ic_analyzer.calculate_ic_stats(ic_series)
-        except:
+        except (ImportError, AttributeError):
             ic_stats = {
                 'ic_mean': 0.0,
                 'ic_std': 0.0,
@@ -250,7 +250,7 @@ class PerformanceAnalyzer:
             
             turnover_rate = np.mean(factor_changes) if factor_changes else 0.0
             return float(turnover_rate)
-        except:
+        except (ValueError, TypeError):
             return 0.0
     
     def _assess_monotonicity(self, factor_data: pd.Series, returns_data: pd.Series) -> float:
@@ -273,7 +273,7 @@ class PerformanceAnalyzer:
                     quintiles = pd.qcut(current_factors, q=5, labels=False, duplicates='drop')
                     if len(set(quintiles)) < 5:
                         continue
-                except:
+                except Exception:
                     continue
                 
                 # 计算每层的平均收益率
@@ -293,7 +293,7 @@ class PerformanceAnalyzer:
             
             monotonicity = np.mean(monotonicity_measures) if monotonicity_measures else 0.0
             return float(monotonicity)
-        except:
+        except (ValueError, TypeError):
             return 0.0
 
 

@@ -826,8 +826,7 @@ class DataDownloadThread(QThread):
                                 start_time=need_start,
                                 end_time=need_end
                             )
-                        except:
-                            pass  # 忽略单个股票下载失败
+                        except Exception:                            pass  # 忽略单个股票下载失败
 
                     # 批量读取数据
                     batch_data = xtdata.get_market_data_ex(
@@ -2268,8 +2267,7 @@ class LocalDataManagerWidget(QWidget):
                         count = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
                         if count:
                             minute_records += count[0]
-                    except:
-                        pass
+                    except Exception:                        pass
             finally:
                 con.close()
 
@@ -2415,28 +2413,24 @@ class LocalDataManagerWidget(QWidget):
                 all_stocks = xtdata.get_stock_list_in_sector('沪深A股')
                 stock_list = all_stocks[:100]  # 限制前100只，避免太多
                 QMessageBox.information(self, "提示", f"为避免下载时间过长，限制为前100只股票")
-            except:
-                QMessageBox.warning(self, "错误", "获取股票列表失败")
+            except (ImportError, AttributeError):                QMessageBox.warning(self, "错误", "获取股票列表失败")
                 return
         elif "沪深300" in stock_selection:
             # 获取沪深300成分股
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('沪深300')
-            except:
-                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
         elif "中证500" in stock_selection:
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('中证500')
-            except:
-                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
         elif "中证1000" in stock_selection:
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('中证1000')
-            except:
-                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
         else:
             stock_list = ["000001.SZ", "600519.SH", "511380.SH"]
 
@@ -2519,20 +2513,17 @@ class LocalDataManagerWidget(QWidget):
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('沪深300')
-            except:
-                stock_list = ["000001.SZ", "600519.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH"]
         elif "中证500" in stock_selection:
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('中证500')
-            except:
-                stock_list = ["000001.SZ", "600519.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH"]
         elif "中证1000" in stock_selection:
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('中证1000')
-            except:
-                stock_list = ["000001.SZ", "600519.SH"]
+            except (ImportError, AttributeError):                stock_list = ["000001.SZ", "600519.SH"]
         elif "全部A股" in stock_selection:
             reply = QMessageBox.question(
                 self, "确认保存",
@@ -2545,8 +2536,7 @@ class LocalDataManagerWidget(QWidget):
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('沪深A股')
-            except:
-                QMessageBox.warning(self, "错误", "获取股票列表失败")
+            except (ImportError, AttributeError):                QMessageBox.warning(self, "错误", "获取股票列表失败")
                 return
         else:
             stock_list = ["000001.SZ", "600519.SH"]

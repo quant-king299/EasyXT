@@ -686,7 +686,7 @@ class DataCleaner:
                     try:
                         dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
                         normalized_item['timestamp'] = dt.timestamp()
-                    except:
+                    except (ValueError, TypeError):
                         logger.warning(f"无法解析时间戳: {timestamp}")
                 elif isinstance(timestamp, datetime):
                     normalized_item['timestamp'] = timestamp.timestamp()
