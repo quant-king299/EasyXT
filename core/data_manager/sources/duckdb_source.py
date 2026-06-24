@@ -41,19 +41,31 @@ class DuckDBSource(BaseDataSource):
             bool: 连接是否成功
         """
         import duckdb
+        import time
 
         if not self.db_path:
             return False
 
-        try:
-            self.connection = duckdb.connect(self.db_path, read_only=True)
-            # 测试连接
-            test_query = "SELECT COUNT(*) FROM stock_daily LIMIT 1"
-            self.connection.execute(test_query)
-            return True
-        except Exception as e:
-            logger.info(f"[DuckDBSource] 连接失败: {e}")
-            return False
+        max_retries = 5
+        retry_delay = 0.5
+
+        for attempt in range(max_retries):
+            try:
+                self.connection = duckdb.connect(self.db_path, read_only=True)
+                # 测试连接
+                test_query = "SELECT COUNT(*) FROM stock_daily LIMIT 1"
+                self.connection.execute(test_query)
+                return True
+            except Exception as e:
+                err_str = str(e).lower()
+                if "lock" in err_str or "already open" in err_str or "另一个程序" in err_str:
+                    if attempt < max_retries - 1:
+                        logger.warning(f"[DuckDBSource] 数据库被占用，重试 {attempt + 1}/{max_retries}...")
+                        time.sleep(retry_delay * (attempt + 1))
+                        continue
+                logger.info(f"[DuckDBSource] 连接失败: {e}")
+                self.connection = None
+                return False
 
     def is_available(self) -> bool:
         """检查数据源是否可用"""
