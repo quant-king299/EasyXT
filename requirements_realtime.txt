@@ -1,0 +1,6 @@
+# 实时数据推送功能依赖
+# 通达信数据源、异步 HTTP 和 WebSocket 推送支持
+pytdx>=1.72
+aiohttp>=3.8.0
+aiohttp-cors>=0.7.0
+websockets>=10.0,<14.0
