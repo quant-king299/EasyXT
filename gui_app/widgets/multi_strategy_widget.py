@@ -182,6 +182,36 @@ class ProcessManager:
             logger.info(f"启动调度器失败 ({name}): {e}")
             return None
 
+    def _start_coordinator(self, names: list, run_mode: str,
+                          schedule_type: str = "daily") -> Optional[subprocess.Popen]:
+        """单进程协调器，多策略订单去重"""
+        script = str(PROJECT_ROOT / "strategies" / "strategy_coordinator.py")
+        cmd = [sys.executable, script, "--strategies"] + names + ["--mode", run_mode, "--schedule", schedule_type]
+        if schedule_type == "daily":
+            cmd += ["--daily-time", "09:35"]
+        try:
+            env = os.environ.copy()
+            env['PYTHONIOENCODING'] = 'utf-8'
+            proc = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                encoding='utf-8',
+                errors='replace',
+                bufsize=1,
+                env=env,
+                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+                if sys.platform == "win32" else 0,
+            )
+            main_name = "_".join(sorted(names))
+            self._processes[main_name] = proc
+            self.write_pid_file(main_name, proc.pid, run_mode, "coordinated")
+            return proc
+        except Exception as e:
+            logger.info(f"启动协调器失败: {e}")
+            return None
+
+
     def _start_one_shot(self, name: str, run_mode: str) -> Optional[subprocess.Popen]:
         """启动一次性执行，返回进程对象"""
         strategy_dir = PROJECT_ROOT / "strategies" / "quant_strategies"
@@ -610,14 +640,27 @@ class MultiStrategyWidget(QWidget):
         self.refresh_status()
 
     def start_all(self):
-        """启动所有策略"""
+        """启动所有策略（单进程协调器，订单去重）"""
         names = list(self._strategy_rows.keys())
-        self._log(f"========== 全部启动 ({len(names)} 个策略) ==========")
+        self._log(f"========== 协调启动 ({len(names)} 个策略) ==========")
 
-        for name in sorted(names,
-                          key=lambda n: STRATEGY_INFO[n][1], reverse=True):
-            self.start_strategy(name)
-            time.sleep(0.5)  # 避免同时启动
+        if len(names) <= 1:
+            for name in names:
+                self.start_strategy(name)
+        else:
+            run_mode = 'live' if self.rb_live.isChecked() else 'dry_run'
+            if self.cb_continuous.isChecked():
+                proc = self.pm._start_coordinator(names, run_mode, "daily")
+            else:
+                proc = None
+                for name in names:
+                    proc = self.pm._start_one_shot(name, run_mode)
+            if proc:
+                reader = StdoutReader("协调器", proc)
+                reader.line_signal.connect(self._log)
+                reader.start()
+                self._readers.append(reader)
+                self._log(f"✅ 协调器已启动 (PID={proc.pid})")
 
         self.refresh_status()
 

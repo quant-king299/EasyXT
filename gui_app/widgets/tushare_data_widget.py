@@ -148,7 +148,8 @@ class TushareDownloadThread(QThread):
                 GROUP BY {code_col}
             """).fetchall()
             return dict(result)
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[{table_name}] 查询已有数据失败: {e}")
             return {}
 
     def _filter_symbols_for_download(self, symbols, existing_map, target_end_date=None):
