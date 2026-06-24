@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 基本面过滤器
 
@@ -89,7 +92,7 @@ class FundamentalFilter(BaseFilter):
             else:
                 raise ValueError(f"不支持的条件类型: {condition}")
         except Exception as e:
-            print(f"⚠️ 检查条件时出错: {e}, value={value}")
+            logger.info(f"⚠️ 检查条件时出错: {e}, value={value}")
             return False
 
     def _get_fundamental_data(self, stock_pool: List[str], date: str, field: str):
@@ -119,5 +122,5 @@ class FundamentalFilter(BaseFilter):
             else:
                 return None
         except Exception as e:
-            print(f"⚠️ 获取基本面数据失败 [{field}]: {e}")
+            logger.info(f"⚠️ 获取基本面数据失败 [{field}]: {e}")
             return None

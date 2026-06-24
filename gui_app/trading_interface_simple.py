@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 简洁交易界面 - 基于您喜欢的UI设计
 模仿专业交易软件的简洁风格
@@ -27,7 +30,7 @@ try:
     EASYXT_AVAILABLE = True
 except ImportError:
     EASYXT_AVAILABLE = False
-    print("EasyXT模块未找到，将使用模拟模式")
+    logger.info("EasyXT模块未找到，将使用模拟模式")
 
 
 class TradingInterface(QMainWindow):
@@ -377,7 +380,7 @@ class TradingInterface(QMainWindow):
                     self.update_position_display(positions)
                     
         except Exception as e:
-            print(f"刷新账户信息失败: {e}")
+            logger.info(f"刷新账户信息失败: {e}")
             
     def load_demo_data(self):
         """加载演示数据"""

@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 固定网格策略 - 优化版
 在固定价格区间内设置网格，低买高卖
@@ -102,7 +105,7 @@ class 固定网格策略优化版:
     def log(self, message):
         """日志输出"""
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        print(f"[{timestamp}] {message}")
+        logger.info(f"[{timestamp}] {message}")
 
     def initialize(self):
         """策略初始化"""

@@ -59,12 +59,12 @@ class SmallCapStrategy(StrategyBase):
         self.universe_size = universe_size
         self.rebalance_freq = rebalance_freq
 
-        print(f"\n[小市值策略] 参数配置:")
-        print(f"  指数代码: {index_code}")
-        print(f"  选股数量: {select_num}")
+        logger.info(f"\n[小市值策略] 参数配置:")
+        logger.info(f"  指数代码: {index_code}")
+        logger.info(f"  选股数量: {select_num}")
         if universe_size:
-            print(f"  股票池大小: {universe_size} 只")
-        print(f"  调仓频率: {rebalance_freq}")
+            logger.info(f"  股票池大小: {universe_size} 只")
+        logger.info(f"  调仓频率: {rebalance_freq}")
 
     def select_stocks(self, date: str) -> List[str]:
         """
@@ -88,7 +88,7 @@ class SmallCapStrategy(StrategyBase):
         if not self.data_manager:
             raise ValueError("需要提供data_manager")
 
-        print(f"\n  [选股] {date}")
+        logger.info(f"\n  [选股] {date}")
 
         # 1. 获取股票池（全市场或指数成分股）
         universe = None
@@ -97,14 +97,14 @@ class SmallCapStrategy(StrategyBase):
             index_cons = self.data_manager.get_index_components(self.index_code, date)
 
             if not index_cons:
-                print(f"    [INFO] 未获取到指数成分股，使用全市场股票")
+                logger.info(f"    [INFO] 未获取到指数成分股，使用全市场股票")
                 universe = None
             else:
                 print(f"    指数成分股: {len(index_cons)} 只")
                 universe = index_cons
 
         except Exception as e:
-            print(f"    [INFO] 获取指数成分股失败: {e}，使用全市场股票")
+            logger.info(f"    [INFO] 获取指数成分股失败: {e}，使用全市场股票")
             universe = None
 
         # 2. 获取市值数据
@@ -115,7 +115,7 @@ class SmallCapStrategy(StrategyBase):
                     date=date,
                     fields=['circ_mv']
                 )
-                print(f"    从数据源获取全市场市值数据")
+                logger.info(f"    从数据源获取全市场市值数据")
             else:
                 df_mv = self.data_manager.get_fundamentals(
                     codes=universe,
@@ -124,20 +124,20 @@ class SmallCapStrategy(StrategyBase):
                 )
 
             if df_mv is None or df_mv.empty:
-                print(f"    [WARNING] 未获取到市值数据")
+                logger.info(f"    [WARNING] 未获取到市值数据")
                 return []
 
             # 过滤掉市值数据为空的
             df_mv = df_mv.dropna(subset=['circ_mv'])
 
             if df_mv.empty:
-                print(f"    [WARNING] 过滤后无有效市值数据")
+                logger.info(f"    [WARNING] 过滤后无有效市值数据")
                 return []
 
             print(f"    获取市值数据: {len(df_mv)} 只")
 
         except Exception as e:
-            print(f"    [ERROR] 获取市值数据失败: {e}")
+            logger.info(f"    [ERROR] 获取市值数据失败: {e}")
             return []
 
         # 3. 按市值排序
@@ -158,7 +158,7 @@ class SmallCapStrategy(StrategyBase):
         print(f"    [结果] 最终选中: {len(selected)} 只")
         for i, stock in enumerate(selected, 1):
             mv = df_mv_sorted.loc[stock, 'circ_mv']
-            print(f"      {i}. {stock} - 市值: {mv:,.0f} 万元")
+            logger.info(f"      {i}. {stock} - 市值: {mv:,.0f} 万元")
 
         return selected
 
@@ -183,7 +183,7 @@ class SmallCapStrategy(StrategyBase):
 
         weights = {stock: weight for stock in selected_stocks}
 
-        print(f"  [权重] 等权重配置，每只股票 {weight:.2%}")
+        logger.info(f"  [权重] 等权重配置，每只股票 {weight:.2%}")
 
         return weights
 
@@ -246,8 +246,8 @@ class SmallCapStrategyV2(SmallCapStrategy):
         super().__init__(index_code, select_num, rebalance_freq, data_manager)
         self.min_turnover = min_turnover
 
-        print(f"\n[小市值策略V2] 增强配置:")
-        print(f"  最小换手率: {min_turnover:.2%}")
+        logger.info(f"\n[小市值策略V2] 增强配置:")
+        logger.info(f"  最小换手率: {min_turnover:.2%}")
 
     def select_stocks(self, date: str) -> List[str]:
         """
@@ -256,20 +256,20 @@ class SmallCapStrategyV2(SmallCapStrategy):
         if not self.data_manager:
             raise ValueError("需要提供data_manager")
 
-        print(f"\n  [选股] {date}")
+        logger.info(f"\n  [选股] {date}")
 
         # 1. 获取指数成分股
         try:
             index_cons = self.data_manager.get_index_components(self.index_code, date)
 
             if not index_cons:
-                print(f"    [WARNING] 未获取到指数成分股")
+                logger.info(f"    [WARNING] 未获取到指数成分股")
                 return []
 
             print(f"    指数成分股: {len(index_cons)} 只")
 
         except Exception as e:
-            print(f"    [ERROR] 获取指数成分股失败: {e}")
+            logger.info(f"    [ERROR] 获取指数成分股失败: {e}")
             return []
 
         # 2. 获取市值和换手率数据
@@ -281,7 +281,7 @@ class SmallCapStrategyV2(SmallCapStrategy):
             )
 
             if df_mv.empty:
-                print(f"    [WARNING] 未获取到基本面数据")
+                logger.info(f"    [WARNING] 未获取到基本面数据")
                 return []
 
             # 过滤空值
@@ -293,11 +293,11 @@ class SmallCapStrategyV2(SmallCapStrategy):
                 print(f"    过滤后（换手率>={self.min_turnover:.2%}): {len(df_mv)} 只")
 
             if df_mv.empty:
-                print(f"    [WARNING] 过滤后无有效数据")
+                logger.info(f"    [WARNING] 过滤后无有效数据")
                 return []
 
         except Exception as e:
-            print(f"    [ERROR] 获取基本面数据失败: {e}")
+            logger.info(f"    [ERROR] 获取基本面数据失败: {e}")
             return []
 
         # 3. 按市值排序，选择最小的N只
@@ -308,7 +308,7 @@ class SmallCapStrategyV2(SmallCapStrategy):
         print(f"    选中股票: {len(selected)} 只")
         for i, stock in enumerate(selected, 1):
             mv = df_mv_sorted.loc[stock, 'circ_mv']
-            print(f"      {i}. {stock} - 市值: {mv:,.0f} 万元")
+            logger.info(f"      {i}. {stock} - 市值: {mv:,.0f} 万元")
 
         return selected
 

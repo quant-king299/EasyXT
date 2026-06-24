@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 交易执行模块
 负责执行交易指令，处理交易结果，管理订单状态
@@ -564,7 +567,7 @@ async def main():
     try:
         # 初始化
         if not await executor.initialize():
-            print("初始化失败")
+            logger.info("初始化失败")
             return
         
         # 测试单个订单
@@ -577,11 +580,11 @@ async def main():
         }
         
         result = await executor.execute_order(test_order)
-        print(f"订单执行结果: {result}")
+        logger.info(f"订单执行结果: {result}")
         
         # 获取统计信息
         stats = executor.get_execution_stats()
-        print(f"执行统计: {stats}")
+        logger.info(f"执行统计: {stats}")
         
     finally:
         await executor.close()

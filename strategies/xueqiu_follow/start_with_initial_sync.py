@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 雪球跟单系统 - 带初始同步的启动脚本
 启动时立即根据雪球组合当前持仓进行调仓，然后监控变化
@@ -38,10 +41,10 @@ def setup_logging():
 
 def print_banner():
     """显示启动横幅"""
-    print("=" * 80)
-    print("🚀 雪球跟单系统 - 初始同步版")
-    print("🔄 启动时立即根据雪球组合当前持仓进行调仓")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("🚀 雪球跟单系统 - 初始同步版")
+    logger.info("🔄 启动时立即根据雪球组合当前持仓进行调仓")
+    logger.info("=" * 80)
     
     # 先加载配置获取组合信息
     config = load_config()
@@ -53,8 +56,8 @@ def print_banner():
         config_manager.load_all_configs()  # 确保加载所有配置
         
         # 调试信息 - 检查_portfolios内容
-        print(f"DEBUG: _portfolios类型: {type(config_manager._portfolios)}")
-        print(f"DEBUG: _portfolios内容: {config_manager._portfolios}")
+        logger.info(f"DEBUG: _portfolios类型: {type(config_manager._portfolios)}")
+        logger.info(f"DEBUG: _portfolios内容: {config_manager._portfolios}")
         
         # 正确获取组合列表：从_portfolios字典中获取portfolios键的值
         if isinstance(config_manager._portfolios, dict) and 'portfolios' in config_manager._portfolios:
@@ -66,63 +69,63 @@ def print_banner():
         enabled_portfolios = [p for p in all_portfolios if p.get('enabled', False)]
         
         # 调试信息
-        print(f"DEBUG: 获取到的启用组合数量: {len(enabled_portfolios)}")
+        logger.info(f"DEBUG: 获取到的启用组合数量: {len(enabled_portfolios)}")
         for i, portfolio in enumerate(enabled_portfolios):
-            print(f"DEBUG: 组合 {i}: {portfolio}")
+            logger.info(f"DEBUG: 组合 {i}: {portfolio}")
         
         if enabled_portfolios:
             portfolio = enabled_portfolios[0]
             portfolio_code = portfolio.get('code', portfolio.get('symbol', '未知'))
             account_id = config.get('settings', {}).get('account', {}).get('account_id', '未配置') if config else '未配置'
             
-            print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"📊 跟单组合: {portfolio_code}")
-            print(f"🏦 交易账号: {account_id}")
+            logger.info(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"📊 跟单组合: {portfolio_code}")
+            logger.info(f"🏦 交易账号: {account_id}")
         else:
-            print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-            print(f"📊 跟单组合: 未配置")
-            print(f"🏦 交易账号: 未配置")
+            logger.info(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            logger.info(f"📊 跟单组合: 未配置")
+            logger.info(f"🏦 交易账号: 未配置")
     except Exception as e:
-        print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"📊 跟单组合: ZH3368671")
-        print(f"🏦 交易账号: 39020958")
-        print(f"⚠️ 配置加载警告: {e}")
+        logger.info(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info(f"📊 跟单组合: ZH3368671")
+        logger.info(f"🏦 交易账号: 39020958")
+        logger.info(f"⚠️ 配置加载警告: {e}")
     
-    print(f"💰 交易模式: 真实交易模式")
-    print(f"🔧 交易接口: EasyXT (高级封装)")
-    print("=" * 80)
+    logger.info(f"💰 交易模式: 真实交易模式")
+    logger.info(f"🔧 交易接口: EasyXT (高级封装)")
+    logger.info("=" * 80)
 
 def safety_confirmation():
     """安全确认流程"""
-    print("\n⚠️" + "⚠️" * 19)
-    print("重要安全提醒")
-    print("⚠️" + "⚠️" * 19)
-    print("此版本将执行真实交易操作！")
-    print("- 系统启动时会立即根据雪球组合进行调仓")
-    print("- 会使用您的真实资金进行买卖")
-    print("- 存在盈亏风险")
-    print("- 请确保您了解相关风险")
-    print("⚠️" + "⚠️" * 19)
+    logger.info("\n⚠️" + "⚠️" * 19)
+    logger.info("重要安全提醒")
+    logger.info("⚠️" + "⚠️" * 19)
+    logger.info("此版本将执行真实交易操作！")
+    logger.info("- 系统启动时会立即根据雪球组合进行调仓")
+    logger.info("- 会使用您的真实资金进行买卖")
+    logger.info("- 存在盈亏风险")
+    logger.info("- 请确保您了解相关风险")
+    logger.info("⚠️" + "⚠️" * 19)
     
     # 第一重确认
     confirm1 = input("\n🔐 第一重确认 - 输入 'YES' 确认启动真实交易: ").strip()
     if confirm1 != "YES":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
     # 第二重确认
     confirm2 = input("🔐 第二重确认 - 输入 'SYNC' 确认立即同步调仓: ").strip()
     if confirm2 != "SYNC":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
     # 第三重确认
     confirm3 = input("🔐 第三重确认 - 输入 'START' 最终确认: ").strip()
     if confirm3 != "START":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
-    print("✅ 安全确认完成")
+    logger.info("✅ 安全确认完成")
     return True
 
 def load_config():
@@ -145,10 +148,10 @@ def load_config():
         
         config['settings']['trading']['trade_mode'] = 'real'
         
-        print("✅ 真实交易配置加载成功")
+        logger.info("✅ 真实交易配置加载成功")
         return config
     except Exception as e:
-        print(f"❌ 真实交易配置加载失败: {e}")
+        logger.info(f"❌ 真实交易配置加载失败: {e}")
         return None
 
 def export_holdings_to_excel(holdings, portfolio_code, export_dir=None):
@@ -173,7 +176,7 @@ def export_holdings_to_excel(holdings, portfolio_code, export_dir=None):
             pass
 
         if not export_enabled:
-            print("ℹ️ 导出开关关闭（settings.export_holdings/导出持仓），跳过Excel导出")
+            logger.info("ℹ️ 导出开关关闭（settings.export_holdings/导出持仓），跳过Excel导出")
             return None
 
         # 导出目录
@@ -217,17 +220,17 @@ def export_holdings_to_excel(holdings, portfolio_code, export_dir=None):
             }
             pd.DataFrame(summary_data).to_excel(writer, sheet_name='汇总信息', index=False)
 
-        print(f"✅ 持仓数据已导出到: {filepath}（覆盖写）")
+        logger.info(f"✅ 持仓数据已导出到: {filepath}（覆盖写）")
         return filepath
 
     except Exception as e:
-        print(f"❌ Excel导出失败: {e}")
+        logger.info(f"❌ Excel导出失败: {e}")
         return None
 
 def test_easyxt_connection(config):
     """测试 easy_xt 连接"""
     try:
-        print("\n🔧 测试 EasyXT 交易API连接...")
+        logger.info("\n🔧 测试 EasyXT 交易API连接...")
         
         # 先尝试导入 xtquant
         try:
@@ -237,9 +240,9 @@ def test_easyxt_connection(config):
                 sys.path.insert(0, str(xtquant_path))
             
             import xtquant.xttrader as xt
-            print("xtquant高级交易模块导入成功")
+            logger.info("xtquant高级交易模块导入成功")
         except ImportError as e:
-            print(f"⚠️ xtquant高级交易模块导入失败: {e}")
+            logger.info(f"⚠️ xtquant高级交易模块导入失败: {e}")
         
         # 导入 easy_xt
         from easy_xt.advanced_trade_api import AdvancedTradeAPI
@@ -250,76 +253,76 @@ def test_easyxt_connection(config):
         
         # 检查QMT路径是否存在
         if not qmt_path:
-            print("❌ EasyXT 连接测试失败: 'qmt_path'")
+            logger.info("❌ EasyXT 连接测试失败: 'qmt_path'")
             return False
             
         if not os.path.exists(qmt_path):
-            print(f"❌ QMT路径不存在: {qmt_path}")
-            print("💡 请检查配置文件中的QMT路径设置")
+            logger.info(f"❌ QMT路径不存在: {qmt_path}")
+            logger.info("💡 请检查配置文件中的QMT路径设置")
             return False
         
-        print(f"📁 QMT路径: {qmt_path}")
-        print(f"🏦 交易账号: {account_id}")
+        logger.info(f"📁 QMT路径: {qmt_path}")
+        logger.info(f"🏦 交易账号: {account_id}")
         
         # 创建高级交易API
         session_id = f"xueqiu_test_{int(time.time())}"
         api = AdvancedTradeAPI()
         
         # 连接交易服务
-        print("🚀 连接交易服务...")
+        logger.info("🚀 连接交易服务...")
         result = api.connect(qmt_path, session_id)
         
         if not result:
-            print("❌ EasyXT 连接失败")
+            logger.info("❌ EasyXT 连接失败")
             return False
         
-        print("✅ EasyXT 连接成功")
+        logger.info("✅ EasyXT 连接成功")
         
         # 添加账户
-        print("📡 添加交易账户...")
+        logger.info("📡 添加交易账户...")
         account_result = api.add_account(account_id)
         
         if not account_result:
-            print("❌ 添加账户失败")
+            logger.info("❌ 添加账户失败")
             api.disconnect()
             return False
         
-        print("✅ 账户添加成功")
+        logger.info("✅ 账户添加成功")
         
         # 测试账户查询
         try:
-            print("💰 查询账户资产...")
+            logger.info("💰 查询账户资产...")
             asset_info = api.get_account_asset_detailed(account_id)
             if asset_info:
-                print("✅ 账户查询成功")
+                logger.info("✅ 账户查询成功")
                 total_asset = getattr(asset_info, 'total_asset', 0)
                 cash = getattr(asset_info, 'cash', 0)
-                print(f"💰 总资产: {total_asset:.2f}")
-                print(f"💵 可用资金: {cash:.2f}")
+                logger.info(f"💰 总资产: {total_asset:.2f}")
+                logger.info(f"💵 可用资金: {cash:.2f}")
             else:
-                print("⚠️ 账户查询返回空数据")
+                logger.info("⚠️ 账户查询返回空数据")
         except Exception as e:
-            print(f"⚠️ 账户查询失败: {e}")
+            logger.info(f"⚠️ 账户查询失败: {e}")
         
         # 断开连接
         api.disconnect()
         return True
         
     except ImportError as e:
-        print(f"❌ EasyXT 模块导入失败: {e}")
+        logger.info(f"❌ EasyXT 模块导入失败: {e}")
         return False
     except Exception as e:
-        print(f"❌ EasyXT 连接测试失败: {e}")
+        logger.info(f"❌ EasyXT 连接测试失败: {e}")
         return False
 
 async def test_portfolio_data():
     """测试模式：直接获取组合持仓数据"""
-    print("🔧 测试模式：直接获取组合持仓数据")
+    logger.info("🔧 测试模式：直接获取组合持仓数据")
     
     # 加载配置
     config = load_config()
     if not config:
-        print("❌ 配置加载失败")
+        logger.info("❌ 配置加载失败")
         return
     
     # 获取启用组合
@@ -330,42 +333,42 @@ async def test_portfolio_data():
         enabled_portfolios = config_manager.get_enabled_portfolios()
         
         if not enabled_portfolios:
-            print("❌ 没有启用的组合")
+            logger.info("❌ 没有启用的组合")
             return
         
         portfolio = enabled_portfolios[0]
         portfolio_code = portfolio.get('code', portfolio.get('symbol', '未知'))
-        print(f"📊 测试组合: {portfolio['name']} ({portfolio_code})")
+        logger.info(f"📊 测试组合: {portfolio['name']} ({portfolio_code})")
         
         # 初始化数据采集器
-        print("🚀 初始化数据采集器...")
+        logger.info("🚀 初始化数据采集器...")
         from strategies.xueqiu_follow.internal.xueqiu_collector_real import XueqiuCollectorReal
         collector = XueqiuCollectorReal()
         
         # 初始化采集器
-        print("🔧 初始化HTTP会话...")
+        logger.info("🔧 初始化HTTP会话...")
         if not await collector.initialize():
-            print("❌ 数据采集器初始化失败")
+            logger.info("❌ 数据采集器初始化失败")
             return
         
         # 测试获取组合持仓
-        print("📡 尝试获取组合持仓数据...")
+        logger.info("📡 尝试获取组合持仓数据...")
         holdings = await collector.get_portfolio_holdings(portfolio_code)
         
         if holdings:
-            print(f"✅ 成功获取到 {len(holdings)} 个持仓")
+            logger.info(f"✅ 成功获取到 {len(holdings)} 个持仓")
             for i, holding in enumerate(holdings[:5]):  # 只显示前5个
                 stock_name = holding.get('stock_name', 'N/A')
                 stock_symbol = holding.get('stock_symbol', 'N/A')
                 weight = holding.get('weight', 0)
-                print(f"  {i+1}. {stock_name} ({stock_symbol}) - {weight:.2%}")
+                logger.info(f"  {i+1}. {stock_name} ({stock_symbol}) - {weight:.2%}")
             if len(holdings) > 5:
-                print(f"  ... 还有 {len(holdings) - 5} 个持仓")
+                logger.info(f"  ... 还有 {len(holdings) - 5} 个持仓")
         else:
-            print("❌ 未能获取到持仓数据")
+            logger.info("❌ 未能获取到持仓数据")
             
     except Exception as e:
-        print(f"❌ 测试失败: {e}")
+        logger.info(f"❌ 测试失败: {e}")
         import traceback
         traceback.print_exc()
 
@@ -388,15 +391,15 @@ async def main():
             return
         
         # 显示配置信息
-        print("\n📋 真实交易配置:")
+        logger.info("\n📋 真实交易配置:")
         account_settings = config['settings'].get('account', {})
         trading_settings = config['settings'].get('trading', {})
 
         account_id = account_settings.get('account_id', '未配置')
         qmt_path = account_settings.get('qmt_path', '未配置')
 
-        print(f"   🏦 交易账号: {account_id}")
-        print(f"   📁 QMT路径: {qmt_path}")
+        logger.info(f"   🏦 交易账号: {account_id}")
+        logger.info(f"   📁 QMT路径: {qmt_path}")
 
         # 获取启用的组合（使用配置管理器）
         try:
@@ -411,13 +414,13 @@ async def main():
                 if enabled_list:
                     portfolio = enabled_list[0]
                     portfolio_code = portfolio.get('code', portfolio.get('symbol', '未知'))
-                    print(f"   📊 跟单组合: {portfolio.get('url', f'https://xueqiu.com/P/{portfolio_code}')}")
+                    logger.info(f"   📊 跟单组合: {portfolio.get('url', f'https://xueqiu.com/P/{portfolio_code}')}")
                     follow_ratio = portfolio.get('follow_ratio')
                     if follow_ratio is not None:
-                        print(f"   📈 跟随比例: {follow_ratio:.1%}")
-                    print(f"   💰 最大仓位: {portfolio.get('max_position', 8000)}元")
+                        logger.info(f"   📈 跟随比例: {follow_ratio:.1%}")
+                    logger.info(f"   💰 最大仓位: {portfolio.get('max_position', 8000)}元")
         except Exception as e:
-            print(f"⚠️ 组合配置加载警告: {e}")
+            logger.info(f"⚠️ 组合配置加载警告: {e}")
             # 回退到直接读取配置
             enabled_portfolios = []
             for portfolio_code, portfolio_config in config.get('portfolios', {}).items():
@@ -426,22 +429,22 @@ async def main():
             
             if enabled_portfolios:
                 portfolio_code, portfolio = enabled_portfolios[0]
-                print(f"   📊 跟单组合: {portfolio.get('url', f'https://xueqiu.com/P/{portfolio_code}')}")
+                logger.info(f"   📊 跟单组合: {portfolio.get('url', f'https://xueqiu.com/P/{portfolio_code}')}")
                 follow_ratio = portfolio.get('follow_ratio')
                 if follow_ratio is not None:
-                    print(f"   📈 跟随比例: {follow_ratio:.1%}")
-                print(f"   💰 最大仓位: {portfolio.get('max_position', 8000)}元")
+                    logger.info(f"   📈 跟随比例: {follow_ratio:.1%}")
+                logger.info(f"   💰 最大仓位: {portfolio.get('max_position', 8000)}元")
 
-        print(f"   💸 最大单笔: {trading_settings.get('max_single_amount', 5000)}元")
-        print(f"   💰 最小交易: {trading_settings.get('min_trade_amount', 100)}元")
+        logger.info(f"   💸 最大单笔: {trading_settings.get('max_single_amount', 5000)}元")
+        logger.info(f"   💰 最小交易: {trading_settings.get('min_trade_amount', 100)}元")
 
         
         # 测试 EasyXT 连接
         if not test_easyxt_connection(config):
-            print("❌ EasyXT 连接测试失败，无法启动真实交易")
+            logger.info("❌ EasyXT 连接测试失败，无法启动真实交易")
             return
         
-        print("\n🚀 启动雪球跟单系统...")
+        logger.info("\n🚀 启动雪球跟单系统...")
 
         # 初始化配置管理器，使用真实交易配置
         from strategies.xueqiu_follow.internal.config_manager import ConfigManager
@@ -458,13 +461,13 @@ async def main():
         strategy_engine = StrategyEngine(config_manager)
         
         # 初始化策略引擎
-        print("🔧 初始化策略引擎...")
+        logger.info("🔧 初始化策略引擎...")
         if not await strategy_engine.initialize():
-            print("❌ 策略引擎初始化失败")
+            logger.info("❌ 策略引擎初始化失败")
             return
         
-        print("✅ 策略引擎初始化成功")
-        print("\n🔄 系统将首先执行初始同步调仓，然后开始监控组合变化...")
+        logger.info("✅ 策略引擎初始化成功")
+        logger.info("\n🔄 系统将首先执行初始同步调仓，然后开始监控组合变化...")
         # 获取启用的组合代码（使用配置管理器）
         portfolio_code = None
         try:
@@ -480,12 +483,12 @@ async def main():
             if enabled_portfolios:
                 portfolio = enabled_portfolios[0]
                 portfolio_code = portfolio.get('code', portfolio.get('symbol', None))
-                print(f"✅ 使用组合: {portfolio.get('name', '未知')} ({portfolio_code})")
+                logger.info(f"✅ 使用组合: {portfolio.get('name', '未知')} ({portfolio_code})")
             else:
                 portfolio_code = None
-                print("❌ 没有启用的组合")
+                logger.info("❌ 没有启用的组合")
         except Exception as e:
-            print(f"⚠️ 组合配置加载警告: {e}")
+            logger.info(f"⚠️ 组合配置加载警告: {e}")
             # 回退到直接读取配置
             for code, portfolio_config in config.get('portfolios', {}).items():
                 if portfolio_config.get('enabled', False):
@@ -493,24 +496,24 @@ async def main():
                     break
         
         if not portfolio_code:
-            print("❌ 没有启用的组合")
+            logger.info("❌ 没有启用的组合")
             return
         
-        print(f"📊 正在获取雪球组合 {portfolio_code} 的当前持仓...")
+        logger.info(f"📊 正在获取雪球组合 {portfolio_code} 的当前持仓...")
         
         # 启动策略（包含初始同步）
-        print("\n🎯 开始执行策略...")
+        logger.info("\n🎯 开始执行策略...")
         await strategy_engine.start()
         
     except KeyboardInterrupt:
-        print(f"\n\n⚠️ 收到停止信号，正在安全关闭系统...")
+        logger.info(f"\n\n⚠️ 收到停止信号，正在安全关闭系统...")
         if 'strategy_engine' in locals():
             await strategy_engine.stop()
-        print("👋 系统已安全关闭")
+        logger.info("👋 系统已安全关闭")
         
     except Exception as e:
         logger.error(f"系统运行异常: {e}")
-        print(f"❌ 系统异常: {e}")
+        logger.info(f"❌ 系统异常: {e}")
         import traceback
         traceback.print_exc()
 

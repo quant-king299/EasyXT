@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 DuckDB数据加载优化
 
@@ -51,17 +54,17 @@ class DuckDBDataOptimizer:
 
         # 1. 尝试从缓存加载
         if use_cache and cache_path.exists():
-            print(f"[INFO] 从缓存加载数据: {cache_path}")
+            logger.info(f"[INFO] 从缓存加载数据: {cache_path}")
             try:
                 with open(cache_path, 'rb') as f:
                     return pickle.load(f)
             except Exception as e:
-                print(f"[WARN] 缓存加载失败: {e}")
+                logger.warning(f"[WARN] 缓存加载失败: {e}")
 
         # 2. 从DuckDB批量查询
-        print(f"[INFO] 从DuckDB批量查询...")
-        print(f"[INFO] 查询范围: {start_date} - {end_date}")
-        print(f"[INFO] 股票数量: {len(stock_pool)} 只")
+        logger.info(f"[INFO] 从DuckDB批量查询...")
+        logger.info(f"[INFO] 查询范围: {start_date} - {end_date}")
+        logger.info(f"[INFO] 股票数量: {len(stock_pool)} 只")
 
         # 格式化日期
         start_formatted = f"{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}"
@@ -119,7 +122,7 @@ class DuckDBDataOptimizer:
         df = conn.execute(query).fetchdf()
 
         elapsed = time.time() - start_time
-        print(f"[OK] 查询完成: {elapsed:.2f}秒 - {len(df)} 行")
+        logger.info(f"[OK] 查询完成: {elapsed:.2f}秒 - {len(df)} 行")
 
         # 按股票分组
         result = {}
@@ -130,17 +133,17 @@ class DuckDBDataOptimizer:
                 stock_df.index = pd.to_datetime(stock_df.index)
                 result[stock_code] = stock_df
 
-        print(f"[OK] 成功加载: {len(result)}/{len(stock_pool)} 只股票")
+        logger.info(f"[OK] 成功加载: {len(result)}/{len(stock_pool)} 只股票")
 
         # 3. 保存到缓存
         if use_cache:
-            print(f"[INFO] 保存到缓存: {cache_path}")
+            logger.info(f"[INFO] 保存到缓存: {cache_path}")
             try:
                 with open(cache_path, 'wb') as f:
                     pickle.dump(result, f)
-                print(f"[OK] 缓存保存完成")
+                logger.info(f"[OK] 缓存保存完成")
             except Exception as e:
-                print(f"[WARN] 缓存保存失败: {e}")
+                logger.warning(f"[WARN] 缓存保存失败: {e}")
 
         return result
 
@@ -166,7 +169,7 @@ class DuckDBDataOptimizer:
         total_days = len(trading_days_df)
         conn.close()
 
-        print(f"[INFO] 交易日数量: {total_days} 天")
+        logger.info(f"[INFO] 交易日数量: {total_days} 天")
 
         # 批量加载数据
         all_data = self.load_data_fast(stock_pool, start_date, end_date, use_cache=True)
@@ -192,7 +195,7 @@ class DuckDBDataOptimizer:
 
             filtered_stocks.append(stock_code)
 
-        print(f"[INFO] 筛选后股票池: {len(filtered_stocks)} 只")
+        logger.info(f"[INFO] 筛选后股票池: {len(filtered_stocks)} 只")
 
         # 返回筛选后的数据
         return {s: all_data[s] for s in filtered_stocks}
@@ -203,19 +206,19 @@ class DuckDBDataOptimizer:
             cache_path = self.get_cache_path(start_date, end_date)
             if cache_path.exists():
                 cache_path.unlink()
-                print(f"[OK] 已清除缓存: {cache_path}")
+                logger.info(f"[OK] 已清除缓存: {cache_path}")
         else:
             # 清除所有缓存
             for cache_file in self.cache_dir.glob("*.pkl"):
                 cache_file.unlink()
-            print(f"[OK] 已清除所有缓存: {len(list(self.cache_dir.glob('*.pkl')))} 个文件")
+            logger.info(f"[OK] 已清除所有缓存: {len(list(self.cache_dir.glob('*.pkl')))} 个文件")
 
 
 def test_performance():
     """测试性能"""
-    print("="*70)
-    print("  DuckDB数据加载性能测试")
-    print("="*70)
+    logger.info("="*70)
+    logger.info("  DuckDB数据加载性能测试")
+    logger.info("="*70)
 
     import os
     from dotenv import load_dotenv
@@ -223,7 +226,7 @@ def test_performance():
     duckdb_path = os.getenv('DUCKDB_PATH')
 
     if not duckdb_path or not os.path.exists(duckdb_path):
-        print("[ERROR] DuckDB路径不存在")
+        logger.error("[ERROR] DuckDB路径不存在")
         return
 
     optimizer = DuckDBDataOptimizer(duckdb_path)
@@ -232,46 +235,46 @@ def test_performance():
     test_stocks = ['000001.SZ', '000002.SZ', '000004.SZ'] * 100
     test_stocks = test_stocks[:300]  # 300只股票
 
-    print(f"\n[测试配置]")
-    print(f"  股票数量: {len(test_stocks)}")
-    print(f"  测试期间: 20240101 - 20240331 (3个月)")
+    logger.info(f"\n[测试配置]")
+    logger.info(f"  股票数量: {len(test_stocks)}")
+    logger.info(f"  测试期间: 20240101 - 20240331 (3个月)")
 
     # 清除缓存
-    print(f"\n[STEP 1] 清除旧缓存...")
+    logger.info(f"\n[STEP 1] 清除旧缓存...")
     optimizer.clear_cache('20240101', '20240331')
 
     # 第一次加载（无缓存）
-    print(f"\n[STEP 2] 第一次加载（无缓存）...")
+    logger.info(f"\n[STEP 2] 第一次加载（无缓存）...")
     import time
     start = time.time()
     data = optimizer.load_data_fast(test_stocks, '20240101', '20240331', use_cache=False)
     elapsed_no_cache = time.time() - start
-    print(f"  耗时: {elapsed_no_cache:.2f}秒")
-    print(f"  成功: {len(data)} 只")
+    logger.info(f"  耗时: {elapsed_no_cache:.2f}秒")
+    logger.info(f"  成功: {len(data)} 只")
 
     # 第二次加载（有缓存）
-    print(f"\n[STEP 3] 第二次加载（有缓存）...")
+    logger.info(f"\n[STEP 3] 第二次加载（有缓存）...")
     start = time.time()
     data = optimizer.load_data_fast(test_stocks, '20240101', '20240331', use_cache=True)
     elapsed_with_cache = time.time() - start
-    print(f"  耗时: {elapsed_with_cache:.2f}秒")
-    print(f"  成功: {len(data)} 只")
+    logger.info(f"  耗时: {elapsed_with_cache:.2f}秒")
+    logger.info(f"  成功: {len(data)} 只")
 
     # 性能对比
-    print(f"\n[性能对比]")
-    print(f"  无缓存: {elapsed_no_cache:.2f}秒")
-    print(f"  有缓存: {elapsed_with_cache:.2f}秒")
+    logger.info(f"\n[性能对比]")
+    logger.info(f"  无缓存: {elapsed_no_cache:.2f}秒")
+    logger.info(f"  有缓存: {elapsed_with_cache:.2f}秒")
     if elapsed_no_cache > 0:
         speedup = elapsed_no_cache / elapsed_with_cache
-        print(f"  加速比: {speedup:.1f}x")
+        logger.info(f"  加速比: {speedup:.1f}x")
 
-    print("\n" + "="*70)
-    print("  建议")
-    print("="*70)
-    print("1. 启用数据缓存（第一次慢，后续快）")
-    print("2. 降低覆盖率要求（80% -> 30%）")
-    print("3. 使用批量查询（一次查询所有股票）")
-    print("4. 缓存文件保存在: .cache/stock_data/")
+    logger.info("\n" + "="*70)
+    logger.info("  建议")
+    logger.info("="*70)
+    logger.info("1. 启用数据缓存（第一次慢，后续快）")
+    logger.info("2. 降低覆盖率要求（80% -> 30%）")
+    logger.info("3. 使用批量查询（一次查询所有股票）")
+    logger.info("4. 缓存文件保存在: .cache/stock_data/")
 
 
 if __name__ == "__main__":

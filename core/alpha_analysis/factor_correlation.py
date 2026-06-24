@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 因子相关性分析模块
 用于分析多个因子之间的相关性，识别重复因子
@@ -257,7 +260,7 @@ class FactorCorrelationAnalyzer:
         )
 
         if not high_corr_pairs:
-            print(f"没有发现相关性超过{threshold}的因子对")
+            logger.info(f"没有发现相关性超过{threshold}的因子对")
             self.removal_suggestions = {}
             return self.removal_suggestions
 
@@ -332,7 +335,7 @@ class FactorCorrelationAnalyzer:
             })
 
         if not report_data:
-            print("没有发现高相关性因子对")
+            logger.info("没有发现高相关性因子对")
             return pd.DataFrame()
 
         report = pd.DataFrame(report_data)
@@ -348,59 +351,59 @@ class FactorCorrelationAnalyzer:
         threshold : float
             相关系数阈值
         """
-        print("=" * 100)
-        print("因子相关性分析报告")
-        print("=" * 100)
+        logger.info("=" * 100)
+        logger.info("因子相关性分析报告")
+        logger.info("=" * 100)
 
         # 计算相关性矩阵
         if self.correlation_matrix is None:
             self.calculate_correlation()
 
-        print(f"\n因子数量: {len(self.factor_names)}")
-        print(f"共同日期范围: {self.common_dates[0]} 至 {self.common_dates[-1]}")
-        print(f"共同股票数量: {len(self.common_stocks)}")
+        logger.info(f"\n因子数量: {len(self.factor_names)}")
+        logger.info(f"共同日期范围: {self.common_dates[0]} 至 {self.common_dates[-1]}")
+        logger.info(f"共同股票数量: {len(self.common_stocks)}")
 
         # 找出高相关性因子对
         high_corr_pairs = self.find_high_correlation_pairs(threshold=threshold)
 
         if not high_corr_pairs:
-            print(f"\n[OK] 没有发现相关性超过{threshold}的因子对，所有因子都是独立的！")
+            logger.info(f"\n[OK] 没有发现相关性超过{threshold}的因子对，所有因子都是独立的！")
         else:
-            print(f"\n发现 {len(high_corr_pairs)} 对高相关性因子：\n")
-            print(f"{'因子1':<25} {'因子2':<25} {'相关系数':<15} {'相关强度':<15}")
-            print("-" * 100)
+            logger.info(f"\n发现 {len(high_corr_pairs)} 对高相关性因子：\n")
+            logger.info(f"{'因子1':<25} {'因子2':<25} {'相关系数':<15} {'相关强度':<15}")
+            logger.info("-" * 100)
 
             for factor1, factor2, corr in high_corr_pairs:
                 strength = self._get_correlation_strength(corr)
-                print(f"{factor1:<25} {factor2:<25} {corr:>14.4f}     {strength:<15}")
+                logger.info(f"{factor1:<25} {factor2:<25} {corr:>14.4f}     {strength:<15}")
 
         # 生成去重建议
         suggestions = self.generate_removal_suggestions(threshold=threshold)
 
         if suggestions:
-            print("\n" + "=" * 100)
-            print("去重建议：")
-            print("=" * 100)
+            logger.info("\n" + "=" * 100)
+            logger.info("去重建议：")
+            logger.info("=" * 100)
 
             for keep_factor, remove_factors in suggestions.items():
-                print(f"\n保留因子: {keep_factor}")
-                print(f"  建议删除: {', '.join(remove_factors)}")
+                logger.info(f"\n保留因子: {keep_factor}")
+                logger.info(f"  建议删除: {', '.join(remove_factors)}")
         else:
-            print("\n[OK] 无需去重")
+            logger.info("\n[OK] 无需去重")
 
         # 聚类分析
-        print("\n" + "=" * 100)
-        print("层次聚类分析：")
-        print("=" * 100)
+        logger.info("\n" + "=" * 100)
+        logger.info("层次聚类分析：")
+        logger.info("=" * 100)
 
         cluster_result = self.hierarchical_clustering()
 
-        print("\n因子分组：")
+        logger.info("\n因子分组：")
         for cluster_id in sorted(cluster_result.unique()):
             factors_in_cluster = cluster_result[cluster_result == cluster_id].index.tolist()
-            print(f"  簇 {cluster_id}: {', '.join(factors_in_cluster)}")
+            logger.info(f"  簇 {cluster_id}: {', '.join(factors_in_cluster)}")
 
-        print("=" * 100)
+        logger.info("=" * 100)
 
     def _get_correlation_strength(self, corr: float) -> str:
         """获取相关性强度描述"""
@@ -422,13 +425,13 @@ class FactorCorrelationAnalyzer:
             self.calculate_correlation()
 
         self.correlation_matrix.to_csv(filepath)
-        print(f"相关系数矩阵已保存到: {filepath}")
+        logger.info(f"相关系数矩阵已保存到: {filepath}")
 
     def save_report(self, filepath: str, threshold: float = 0.7):
         """保存分析报告到文件"""
         report = self.generate_report()
         report.to_csv(filepath, index=False, encoding='utf-8-sig')
-        print(f"相关性分析报告已保存到: {filepath}")
+        logger.info(f"相关性分析报告已保存到: {filepath}")
 
 
 # 使用示例

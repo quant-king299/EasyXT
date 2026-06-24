@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 策略逻辑模块
 
@@ -53,8 +56,8 @@ class 简单小市值策略Strategy:
                 return self.data_manager.get_index_components(index_code, date)
             else:
                 # 模拟模式：返回空列表
-                print(f"[WARN] 未配置data_manager，无法获取指数成分股: {index_code}")
-                print(f"       模拟模式：使用空股票池")
+                logger.warning(f"[WARN] 未配置data_manager，无法获取指数成分股: {index_code}")
+                logger.info(f"       模拟模式：使用空股票池")
                 return []
 
         return universe_config.get('codes', [])
@@ -106,13 +109,13 @@ class 简单小市值策略Strategy:
                             # 没有市值数据的股票，给一个很低的得分
                             scores[stock] = -float('inf')
                 else:
-                    print("[WARN] 无法获取基本面数据，使用随机得分")
+                    logger.warning("[WARN] 无法获取基本面数据，使用随机得分")
                     scores = {stock: 0.0 for stock in stock_pool}
             except Exception as e:
-                print(f"[WARN] 计算市值因子失败: {e}")
+                logger.warning(f"[WARN] 计算市值因子失败: {e}")
                 scores = {stock: 0.0 for stock in stock_pool}
         else:
-            print("[WARN] data_manager未配置，无法计算市值因子")
+            logger.warning("[WARN] data_manager未配置，无法计算市值因子")
             scores = {stock: 0.0 for stock in stock_pool}
 
         return scores

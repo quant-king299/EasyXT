@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 高级交易API模块
 提供更丰富的交易功能和回调机制
@@ -24,9 +27,9 @@ try:
     import xtquant.xttype as xt_type
     import xtquant.xtconstant as xt_const
     from xtquant import xtdata
-    print("xtquant高级交易模块导入成功")
+    logger.info("xtquant高级交易模块导入成功")
 except ImportError as e:
-    print(f"[WARNING] xtquant高级交易模块导入失败: {e}")
+    logger.warning(f"[WARNING] xtquant高级交易模块导入失败: {e}")
     xt_trader = None
     xt_type = None
     xt_const = None
@@ -68,12 +71,12 @@ class AdvancedCallback:
     def on_connected(self):
         """连接成功"""
         self.connected = True
-        print("高级交易连接成功")
+        logger.info("高级交易连接成功")
     
     def on_disconnected(self):
         """连接断开"""
         self.connected = False
-        print("高级交易连接断开")
+        logger.info("高级交易连接断开")
     
     def on_stock_order(self, order):
         """委托回调"""
@@ -85,7 +88,7 @@ class AdvancedCallback:
             try:
                 self.order_callback(order)
             except Exception as e:
-                print(f"用户委托回调异常: {e}")
+                logger.info(f"用户委托回调异常: {e}")
         
     def on_stock_trade(self, trade):
         """成交回调"""
@@ -97,7 +100,7 @@ class AdvancedCallback:
             try:
                 self.trade_callback(trade)
             except Exception as e:
-                print(f"用户成交回调异常: {e}")
+                logger.info(f"用户成交回调异常: {e}")
         
     def on_stock_position(self, position):
         """持仓回调"""
@@ -111,14 +114,14 @@ class AdvancedCallback:
     def on_order_error(self, order_error):
         """委托错误回调"""
         self.errors.append(order_error)
-        print(f"委托错误: {order_error.error_msg}")
+        logger.info(f"委托错误: {order_error.error_msg}")
         
         # 调用用户回调
         if self.error_callback:
             try:
                 self.error_callback(order_error)
             except Exception as e:
-                print(f"用户错误回调异常: {e}")
+                logger.info(f"用户错误回调异常: {e}")
 
 class AdvancedTradeAPI:
     """高级交易API类"""
@@ -174,7 +177,7 @@ class AdvancedTradeAPI:
             # 连接
             result = self.trader.connect()
             if result == 0:
-                print("高级交易服务连接成功")
+                logger.info("高级交易服务连接成功")
                 return True
             else:
                 ErrorHandler.log_error(f"高级交易服务连接失败，错误码: {result}")
@@ -188,9 +191,9 @@ class AdvancedTradeAPI:
         """设置回调函数"""
         if self.callback:
             self.callback.set_callbacks(order_callback, trade_callback, error_callback)
-            print("高级交易回调函数设置完成")
+            logger.info("高级交易回调函数设置完成")
         else:
-            print("[WARNING] 回调对象未初始化")
+            logger.warning("[WARNING] 回调对象未初始化")
     
     def add_account(self, account_id: str, account_type: str = 'STOCK') -> bool:
         """添加交易账户"""
@@ -211,7 +214,7 @@ class AdvancedTradeAPI:
             result = self.trader.subscribe(account)
             if result == 0:
                 self.accounts[account_id] = account
-                print(f"高级交易账户 {account_id} 添加成功")
+                logger.info(f"高级交易账户 {account_id} 添加成功")
                 return True
             else:
                 ErrorHandler.log_error(f"订阅高级交易账户失败，错误码: {result}")
@@ -228,7 +231,7 @@ class AdvancedTradeAPI:
             'max_single_order_amount': max_single_order_amount,
             'slippage': slippage
         })
-        print(f"风险参数设置完成")
+        logger.info(f"风险参数设置完成")
     
     def check_trading_time(self) -> bool:
         """检查交易时间"""
@@ -291,7 +294,7 @@ class AdvancedTradeAPI:
             )
             
             if order_id > 0:
-                print(f"同步{order_type}委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
+                logger.info(f"同步{order_type}委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
                 ErrorHandler.log_error("同步下单失败")
@@ -337,7 +340,7 @@ class AdvancedTradeAPI:
             )
             
             # 立即返回True表示请求已发送（不表示执行成功）
-            print(f"异步下单请求已发送: {code}, 数量: {volume}, 序列号: {order_id}")
+            logger.info(f"异步下单请求已发送: {code}, 数量: {volume}, 序列号: {order_id}")
             return True
             
         except Exception as e:
@@ -398,7 +401,7 @@ class AdvancedTradeAPI:
             try:
                 tick_data = xtdata.get_full_tick([normalized_code])
             except Exception as e:
-                print(f"获取实时行情失败: {str(e)}")
+                logger.info(f"获取实时行情失败: {str(e)}")
                 tick_data = None
             
             current_price = 0
@@ -427,14 +430,14 @@ class AdvancedTradeAPI:
                             elif hasattr(first_item, '__getitem__') and 'lastPrice' in first_item.dtype.names if hasattr(first_item, 'dtype') and hasattr(first_item.dtype, 'names') else False:
                                 current_price = float(first_item['lastPrice'])
                 except Exception as e:
-                    print(f"获取tick数据失败: {str(e)}")
+                    logger.info(f"获取tick数据失败: {str(e)}")
                     current_price = 0
             
             if current_price == 0:
-                print(f"无法获取{code}的当前价格，条件单设置失败")
+                logger.info(f"无法获取{code}的当前价格，条件单设置失败")
                 return False
             
-            print(f"{code} 当前价格: {current_price}, 触发价格: {trigger_price}")
+            logger.info(f"{code} 当前价格: {current_price}, 触发价格: {trigger_price}")
             
             # 启动条件单监控线程
             thread = Thread(
@@ -444,11 +447,11 @@ class AdvancedTradeAPI:
             )
             thread.start()
             
-            print(f"条件单设置成功: {code}, 类型: {condition_type}, 触发价: {trigger_price}")
+            logger.info(f"条件单设置成功: {code}, 类型: {condition_type}, 触发价: {trigger_price}")
             return True
             
         except Exception as e:
-            print(f"条件单设置失败: {str(e)}")
+            logger.info(f"条件单设置失败: {str(e)}")
             return False
     
     def _monitor_condition_order(self, account_id: str, code: str, condition_type: str,
@@ -479,10 +482,10 @@ class AdvancedTradeAPI:
             # 止盈：当价格涨过触发价时卖出
             trigger_condition = lambda current, trigger: current >= trigger
         else:
-            print(f"不支持的条件单类型: {condition_type}")
+            logger.info(f"不支持的条件单类型: {condition_type}")
             return
         
-        print(f"开始监控条件单: {code}, {condition_type}, 触发价: {trigger_price}")
+        logger.info(f"开始监控条件单: {code}, {condition_type}, 触发价: {trigger_price}")
         
         # 持续监控价格
         while True:
@@ -498,7 +501,7 @@ class AdvancedTradeAPI:
                         elif tick_info and 'price' in tick_info:
                             current_price = float(tick_info['price'])
                 except Exception as e:
-                    print(f"获取实时tick数据失败: {str(e)}")
+                    logger.info(f"获取实时tick数据失败: {str(e)}")
                     current_price = None
                 
                 # 如果get_full_tick失败，尝试get_market_data作为备选
@@ -519,15 +522,15 @@ class AdvancedTradeAPI:
                                 elif hasattr(first_item, '__getitem__') and 'lastPrice' in first_item.dtype.names if hasattr(first_item, 'dtype') and hasattr(first_item.dtype, 'names') else False:
                                     current_price = float(first_item['lastPrice'])
                     except Exception as e:
-                        print(f"获取tick数据失败: {str(e)}")
+                        logger.info(f"获取tick数据失败: {str(e)}")
                         current_price = None
                 
                 if current_price is not None and current_price > 0:
-                    print(f"{code} 实时价格: {current_price}, 触发价: {trigger_price}")
+                    logger.info(f"{code} 实时价格: {current_price}, 触发价: {trigger_price}")
                     
                     # 检查是否触发条件
                     if trigger_condition(current_price, trigger_price):
-                        print(f"条件单触发: {code}, 当前价格: {current_price}, 触发价: {trigger_price}")
+                        logger.info(f"条件单触发: {code}, 当前价格: {current_price}, 触发价: {trigger_price}")
                         
                         # 执行订单 - 使用目标价格或当前价格
                         execution_price = target_price if target_price > 0 else current_price
@@ -545,22 +548,22 @@ class AdvancedTradeAPI:
                         )
                         
                         if order_id:
-                            print(f"条件单执行成功: {code}, 委托号: {order_id}")
+                            logger.info(f"条件单执行成功: {code}, 委托号: {order_id}")
                         else:
-                            print(f"条件单执行失败: {code}")
+                            logger.info(f"条件单执行失败: {code}")
                         
                         # 执行完成后退出监控
                         break
                     else:
-                        print(f"条件未满足: {current_price} 与 {trigger_price} 的关系不满足触发条件")
+                        logger.info(f"条件未满足: {current_price} 与 {trigger_price} 的关系不满足触发条件")
                 else:
-                    print(f"无法获取有效实时价格: {current_price}")
+                    logger.info(f"无法获取有效实时价格: {current_price}")
                 
                 # 等待一段时间再检查 (避免过于频繁的API调用)
                 time.sleep(5)  # 每5秒检查一次
                 
             except Exception as e:
-                print(f"监控条件单时出错: {str(e)}")
+                logger.info(f"监控条件单时出错: {str(e)}")
                 time.sleep(5)  # 出错时也等待5秒再继续
                 continue
     
@@ -582,20 +585,20 @@ class AdvancedTradeAPI:
                         if hasattr(order, 'order_status'):
                             if xt_const and order.order_status in [xt_const.ORDER_SUCCEEDED, xt_const.ORDER_CANCELED, 
                                                     xt_const.ORDER_PART_CANCEL, xt_const.ORDER_JUNK]:
-                                print(f"委托 {order_id} 已成交或已撤销，无法撤单")
+                                logger.info(f"委托 {order_id} 已成交或已撤销，无法撤单")
                                 return False
             
             # 尝试撤单
             result = self.trader.cancel_order_stock(account, order_id)
             if result == 0:
-                print(f"同步撤单成功: {order_id}")
+                logger.info(f"同步撤单成功: {order_id}")
                 return True
             else:
-                print(f"同步撤单失败，错误码: {result}")
+                logger.info(f"同步撤单失败，错误码: {result}")
                 return False
                 
         except Exception as e:
-            print(f"同步撤单操作失败: {str(e)}")
+            logger.info(f"同步撤单操作失败: {str(e)}")
             return False
     
     def batch_cancel_orders(self, account_id: str, order_ids: list) -> list:
@@ -772,7 +775,7 @@ class AdvancedTradeAPI:
         """订阅实时数据"""
         try:
             # 这里应该实现真实的实时数据订阅
-            print(f"实时数据订阅成功: {codes}")
+            logger.info(f"实时数据订阅成功: {codes}")
             return True
         except Exception as e:
             ErrorHandler.log_error(f"订阅实时数据失败: {str(e)}")
@@ -782,7 +785,7 @@ class AdvancedTradeAPI:
         """下载历史数据"""
         try:
             # 这里应该实现真实的历史数据下载
-            print(f"历史数据下载成功: {codes}")
+            logger.info(f"历史数据下载成功: {codes}")
             return True
         except Exception as e:
             ErrorHandler.log_error(f"下载历史数据失败: {str(e)}")
@@ -838,6 +841,6 @@ class AdvancedTradeAPI:
         if self.trader:
             try:
                 self.trader.stop()
-                print("高级交易服务已断开")
+                logger.info("高级交易服务已断开")
             except Exception as e:
                 ErrorHandler.log_error(f"断开高级交易服务失败: {str(e)}")

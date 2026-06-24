@@ -971,7 +971,8 @@ class TushareDownloadThread(QThread):
             # 确保表存在
             try:
                 conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
-            except Exception:                conn.execute("""
+            except Exception:
+                conn.execute("""
                     CREATE TABLE stock_daily (
                         stock_code VARCHAR,
                         symbol_type VARCHAR DEFAULT 'stock',

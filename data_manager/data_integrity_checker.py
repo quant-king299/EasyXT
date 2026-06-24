@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 数据完整性检查模块
 提供全面的数据质量检查和验证功能
@@ -107,7 +110,7 @@ class DataIntegrityChecker:
         report = DataQualityReport()
 
         # 1. 检查缺失交易日
-        print(f"[1/5] 检查缺失交易日...")
+        logger.info(f"[1/5] 检查缺失交易日...")
         missing_report = self.detector.detect_missing_data(stock_code, start_date, end_date)
 
         if missing_report['missing_count'] > 0:
@@ -119,21 +122,21 @@ class DataIntegrityChecker:
             report.add_issue('INFO', "交易日数据完整")
 
         # 2. 检查数据质量
-        print(f"[2/5] 检查数据质量...")
+        logger.info(f"[2/5] 检查数据质量...")
         quality_issues = self._check_data_quality(stock_code, start_date, end_date)
 
         for issue in quality_issues:
             report.add_issue(issue['level'], issue['message'])
 
         # 3. 检查价格关系
-        print(f"[3/5] 检查价格关系...")
+        logger.info(f"[3/5] 检查价格关系...")
         price_issues = self._check_price_relations(stock_code, start_date, end_date)
 
         for issue in price_issues:
             report.add_issue(issue['level'], issue['message'])
 
         # 4. 检查异常值
-        print(f"[4/5] 检查异常值...")
+        logger.info(f"[4/5] 检查异常值...")
         outlier_issues = self._check_outliers(stock_code, start_date, end_date)
 
         for issue in outlier_issues:
@@ -141,7 +144,7 @@ class DataIntegrityChecker:
 
         # 5. 检查成交量异常
         if detailed:
-            print(f"[5/5] 检查成交量...")
+            logger.info(f"[5/5] 检查成交量...")
             volume_issues = self._check_volume_anomalies(stock_code, start_date, end_date)
 
             for issue in volume_issues:
@@ -345,7 +348,7 @@ class DataIntegrityChecker:
 
         total = len(stock_codes)
         for i, stock_code in enumerate(stock_codes, 1):
-            print(f"\n检查进度: {i}/{total} - {stock_code}")
+            logger.info(f"\n检查进度: {i}/{total} - {stock_code}")
             report = self.check_integrity(stock_code, start_date, end_date)
             reports[stock_code] = report
 
@@ -414,41 +417,41 @@ class DataIntegrityChecker:
 
 def test_integrity_checker():
     """测试数据完整性检查功能"""
-    print("=" * 60)
-    print("数据完整性检查测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("数据完整性检查测试")
+    logger.info("=" * 60)
     print()
 
     # 创建检查器
     checker = DataIntegrityChecker()
 
     if not checker.connect():
-        print("[ERROR] 无法连接数据库")
+        logger.error("[ERROR] 无法连接数据库")
         return
 
     # 测试单个股票
-    print("[1] 检查 511380.SH 完整性...")
+    logger.info("[1] 检查 511380.SH 完整性...")
     report = checker.check_integrity('511380.SH', '2024-01-01', '2025-01-31')
 
-    print(f"\n检查结果: {report['status']}")
-    print(f"缺失交易日: {report['missing_trading_days']}")
-    print(f"完整度: {report['completeness_ratio']*100:.2f}%")
-    print(f"错误: {report['quality_report']['errors']}")
-    print(f"警告: {report['quality_report']['warnings']}")
+    logger.info(f"\n检查结果: {report['status']}")
+    logger.info(f"缺失交易日: {report['missing_trading_days']}")
+    logger.info(f"完整度: {report['completeness_ratio']*100:.2f}%")
+    logger.info(f"错误: {report['quality_report']['errors']}")
+    logger.info(f"警告: {report['quality_report']['warnings']}")
 
     # 测试批量检查
     print()
-    print("[2] 批量检查...")
+    logger.info("[2] 批量检查...")
     stock_codes = ['511380.SH', '511880.SH', '511010.SH']
     reports = checker.batch_check_integrity(stock_codes, '2024-01-01', '2025-01-31')
 
     # 生成报告
     report_text = checker.generate_integrity_report(reports)
     print()
-    print(report_text)
+    logger.info(report_text)
 
     checker.close()
-    print("[OK] 测试完成")
+    logger.info("[OK] 测试完成")
 
 
 if __name__ == "__main__":

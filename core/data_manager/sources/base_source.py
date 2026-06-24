@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 数据源抽象基类
 
@@ -113,7 +116,7 @@ class BaseDataSource(ABC):
             try:
                 self._connection.close()
             except Exception as e:
-                print(f"[{self.__class__.__name__}] 关闭连接时出错: {e}")
+                logger.info(f"[{self.__class__.__name__}] 关闭连接时出错: {e}")
             finally:
                 self._connection = None
                 self.is_connected = False

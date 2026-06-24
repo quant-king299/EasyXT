@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 QMT Local Data Reader - Enhanced Version
 Directly reads QMT local cache files (.dat) without API calls
@@ -72,7 +75,7 @@ class QMTLocalReader:
         """读取分钟线数据"""
         file_path = self.get_file_path(stock_code, period)
         if not file_path:
-            print(f"[WARNING] Data file not found: {stock_code} {period}")
+            logger.warning(f"[WARNING] Data file not found: {stock_code} {period}")
             return None
 
         try:
@@ -89,7 +92,7 @@ class QMTLocalReader:
             return df
 
         except Exception as e:
-            print(f"[ERROR] Failed to read file {file_path}: {e}")
+            logger.error(f"[ERROR] Failed to read file {file_path}: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -97,7 +100,7 @@ class QMTLocalReader:
     def _parse_minute_file(self, file_data: bytes, stock_code: str, period: str) -> Optional[pd.DataFrame]:
         """解析分钟线二进制文件"""
         file_size = len(file_data)
-        print(f"[DEBUG] File size: {file_size} bytes")
+        logger.debug(f"[DEBUG] File size: {file_size} bytes")
 
         # 尝试不同的记录大小
         possible_sizes = [52, 48, 40, 56, 44, 36, 32, 28]
@@ -109,7 +112,7 @@ class QMTLocalReader:
             if num_records < 100 or num_records > 1000000:
                 continue
 
-            print(f"[DEBUG] Trying format: {record_size} bytes, {num_records} records, header: {header_size} bytes")
+            logger.debug(f"[DEBUG] Trying format: {record_size} bytes, {num_records} records, header: {header_size} bytes")
 
             try:
                 data_start = header_size
@@ -165,15 +168,15 @@ class QMTLocalReader:
                         if not test_records:
                             continue
 
-                        print(f"[DEBUG]   Trying sub-format: {fmt_desc}")
-                        print(f"[DEBUG]   First record: {test_records[0]}")
+                        logger.debug(f"[DEBUG]   Trying sub-format: {fmt_desc}")
+                        logger.debug(f"[DEBUG]   First record: {test_records[0]}")
 
                         # 转换为 DataFrame 进行验证
                         df = self._records_to_dataframe(test_records, stock_code, period, fmt)
 
                         # 验证数据的合理性
                         if self._validate_data(df):
-                            print(f"[OK] Using format: {fmt_desc}")
+                            logger.info(f"[OK] Using format: {fmt_desc}")
 
                             # 格式正确，解析全部数据
                             all_records = []
@@ -187,7 +190,7 @@ class QMTLocalReader:
                                 offset += record_size
 
                             df = self._records_to_dataframe(all_records, stock_code, period, fmt)
-                            print(f"[OK] Successfully parsed {stock_code} {period}: {len(df)} records (format: {record_size}bytes)")
+                            logger.info(f"[OK] Successfully parsed {stock_code} {period}: {len(df)} records (format: {record_size}bytes)")
                             return df
 
                     except Exception as e:
@@ -195,10 +198,10 @@ class QMTLocalReader:
                         continue
 
             except Exception as e:
-                print(f"[DEBUG] Format {record_size} bytes failed: {e}")
+                logger.debug(f"[DEBUG] Format {record_size} bytes failed: {e}")
                 continue
 
-        print(f"[ERROR] Cannot parse file format: {stock_code} {period}")
+        logger.error(f"[ERROR] Cannot parse file format: {stock_code} {period}")
         return None
 
     def _records_to_dataframe(self, records: List[tuple], stock_code: str,
@@ -322,15 +325,15 @@ class QMTLocalReader:
 
 def test_qmt_local_reader():
     """测试 QMT 本地读取器"""
-    print("\n" + "="*80)
-    print("QMT Local Data Reader Test (Enhanced)")
-    print("="*80)
+    logger.info("\n" + "="*80)
+    logger.info("QMT Local Data Reader Test (Enhanced)")
+    logger.info("="*80)
 
     try:
         reader = QMTLocalReader()
-        print(f"[OK] QMT data directory: {reader.data_dir}")
+        logger.info(f"[OK] QMT data directory: {reader.data_dir}")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
         return
 
     test_cases = [
@@ -338,30 +341,30 @@ def test_qmt_local_reader():
     ]
 
     for stock_code, period, start_date, end_date in test_cases:
-        print(f"\n{'='*80}")
-        print(f"Test: {stock_code} {period} ({start_date} ~ {end_date})")
-        print(f"{'='*80}")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"Test: {stock_code} {period} ({start_date} ~ {end_date})")
+        logger.info(f"{'='*80}")
 
         df = reader.read_minute_data(stock_code, period, start_date, end_date)
 
         if df is not None and not df.empty:
-            print(f"\n[OK] Successfully read {len(df)} records")
-            print("\nFirst 5 records:")
-            print(df.head())
-            print("\nLast 5 records:")
-            print(df.tail())
+            logger.info(f"\n[OK] Successfully read {len(df)} records")
+            logger.info("\nFirst 5 records:")
+            logger.info(df.head())
+            logger.info("\nLast 5 records:")
+            logger.info(df.tail())
 
-            print(f"\nStatistics:")
-            print(f"  Time range: {df['time'].min()} ~ {df['time'].max()}")
-            print(f"  Price range: {df['low'].min():.2f} ~ {df['high'].max():.2f}")
-            print(f"  Total volume: {df['volume'].sum():,.0f}")
-            print(f"  Total amount: {df['amount'].sum():,.0f}")
+            logger.info(f"\nStatistics:")
+            logger.info(f"  Time range: {df['time'].min()} ~ {df['time'].max()}")
+            logger.info(f"  Price range: {df['low'].min():.2f} ~ {df['high'].max():.2f}")
+            logger.info(f"  Total volume: {df['volume'].sum():,.0f}")
+            logger.info(f"  Total amount: {df['amount'].sum():,.0f}")
         else:
-            print(f"\n[ERROR] Failed to read data")
+            logger.error(f"\n[ERROR] Failed to read data")
 
-    print("\n" + "="*80)
-    print("Test Complete")
-    print("="*80)
+    logger.info("\n" + "="*80)
+    logger.info("Test Complete")
+    logger.info("="*80)
 
 
 if __name__ == '__main__':

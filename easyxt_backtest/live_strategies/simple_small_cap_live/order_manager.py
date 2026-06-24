@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 订单管理模块
 
@@ -64,7 +67,7 @@ class OrderManager:
         """
         order = self.current_orders.get(order_id)
         if not order:
-            print(f"订单不存在: {order_id}")
+            logger.info(f"订单不存在: {order_id}")
             return False
 
         try:
@@ -91,7 +94,7 @@ class OrderManager:
             return True
 
         except Exception as e:
-            print(f"执行订单失败: {e}")
+            logger.info(f"执行订单失败: {e}")
             order['status'] = 'failed'
             return False
 
@@ -122,7 +125,7 @@ class OrderManager:
             for p in pos:
                 positions[p['stock_code']] = p['volume']
         except Exception as e:
-            print(f"获取持仓失败: {e}")
+            logger.info(f"获取持仓失败: {e}")
 
         return positions
 
@@ -141,5 +144,5 @@ class OrderManager:
                 'total_asset': account.get('total_asset', 0)
             }}
         except Exception as e:
-            print(f"获取账户信息失败: {e}")
+            logger.info(f"获取账户信息失败: {e}")
             return {}

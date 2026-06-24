@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 雪球跟单策略 - 主入口模块
 """
@@ -108,9 +111,9 @@ async def main():
         app.start_gui()
         
     except KeyboardInterrupt:
-        print("\n收到中断信号，正在退出...")
+        logger.info("\n收到中断信号，正在退出...")
     except Exception as e:
-        print(f"系统运行错误: {e}")
+        logger.info(f"系统运行错误: {e}")
     finally:
         await app.cleanup()
 

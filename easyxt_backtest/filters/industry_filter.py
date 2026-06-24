@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 行业过滤器
 
@@ -85,5 +88,5 @@ class IndustryFilter(BaseFilter):
             else:
                 return None
         except Exception as e:
-            print(f"⚠️ 获取行业数据失败: {e}")
+            logger.info(f"⚠️ 获取行业数据失败: {e}")
             return None

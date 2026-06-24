@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 PTQMT客户端
 用于聚宽策略通过中转服务与QMT客户端通信
@@ -34,13 +37,13 @@ except ImportError:
     # 如果不存在，创建模拟log函数
     class MockLogger:
         def info(self, *args):
-            print("INFO:", *args)
+            logger.info("INFO:", *args)
         
         def warning(self, *args):
-            print("WARNING:", *args)
+            logger.info("WARNING:", *args)
         
         def error(self, *args):
-            print("ERROR:", *args)
+            logger.info("ERROR:", *args)
     
     log = MockLogger()
 
@@ -84,13 +87,13 @@ class PTQMTClient:
                 if result.get('success'):
                     return result.get('signal_id')
                 else:
-                    print(f"❌ 信号发送失败: {result.get('message')}")
+                    logger.info(f"❌ 信号发送失败: {result.get('message')}")
                     return None
             else:
-                print(f"❌ HTTP错误: {response.status_code}")
+                logger.info(f"❌ HTTP错误: {response.status_code}")
                 return None
         except Exception as e:
-            print(f"❌ 异常: {e}")
+            logger.info(f"❌ 异常: {e}")
             return None
     
     def get_result(self, signal_id):
@@ -107,13 +110,13 @@ class PTQMTClient:
                 if result.get('success'):
                     return result.get('result')
                 else:
-                    print(f"❌ 查询结果失败: {result.get('message')}")
+                    logger.info(f"❌ 查询结果失败: {result.get('message')}")
                     return None
             else:
-                print(f"❌ HTTP错误: {response.status_code}")
+                logger.info(f"❌ HTTP错误: {response.status_code}")
                 return None
         except Exception as e:
-            print(f"❌ 异常: {e}")
+            logger.info(f"❌ 异常: {e}")
             return None
 
 # 初始化PTQMT客户端

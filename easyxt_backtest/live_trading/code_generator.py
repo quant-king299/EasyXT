@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 实盘代码生成器
 
@@ -255,13 +258,13 @@ class {class_name}:
                             # 没有数据的股票，给一个很低的得分
                             scores[stock] = -float('inf')
                 else:
-                    print("[WARN] 无法获取基本面数据")
+                    logger.warning("[WARN] 无法获取基本面数据")
                     scores = {{stock: 0.0 for stock in stock_pool}}
             except Exception as e:
-                print(f"[WARN] 计算因子得分失败: {{e}}")
+                logger.warning(f"[WARN] 计算因子得分失败: {{e}}")
                 scores = {{stock: 0.0 for stock in stock_pool}}
         else:
-            print("[WARN] data_manager未配置")
+            logger.warning("[WARN] data_manager未配置")
             scores = {{stock: 0.0 for stock in stock_pool}}
 
         return scores
@@ -391,7 +394,7 @@ class OrderManager:
         """
         order = self.current_orders.get(order_id)
         if not order:
-            print(f"订单不存在: {order_id}")
+            logger.info(f"订单不存在: {order_id}")
             return False
 
         try:
@@ -418,7 +421,7 @@ class OrderManager:
             return True
 
         except Exception as e:
-            print(f"执行订单失败: {e}")
+            logger.info(f"执行订单失败: {e}")
             order['status'] = 'failed'
             return False
 
@@ -449,7 +452,7 @@ class OrderManager:
             for p in pos:
                 positions[p['stock_code']] = p['volume']
         except Exception as e:
-            print(f"获取持仓失败: {e}")
+            logger.info(f"获取持仓失败: {e}")
 
         return positions
 
@@ -468,7 +471,7 @@ class OrderManager:
                 'total_asset': account.get('total_asset', 0)
             }}
         except Exception as e:
-            print(f"获取账户信息失败: {e}")
+            logger.info(f"获取账户信息失败: {e}")
             return {}
 '''
 
@@ -523,7 +526,7 @@ class RiskController:
         if order['direction'] == 'buy':
             required = order['volume'] * order['price']
             if required > account['cash']:
-                print(f"资金不足: 需要{{required:.2f}}, 可用{{account['cash']:.2f}}")
+                logger.info(f"资金不足: 需要{{required:.2f}}, 可用{{account['cash']:.2f}}")
                 return False
 
         # 2. 检查单笔亏损限制
@@ -563,7 +566,7 @@ class RiskController:
         if peak_value > 0:
             drawdown = (peak_value - current_value) / peak_value
             if drawdown > self.max_drawdown:
-                print(f"⚠️ 回撤超限: {{drawdown:.2%}} > {{self.max_drawdown:.2%}}")
+                logger.info(f"⚠️ 回撤超限: {{drawdown:.2%}} > {{self.max_drawdown:.2%}}")
                 return False
         return True
 '''
@@ -620,7 +623,7 @@ class {class_name}Live:
 
     def initialize(self):
         """初始化"""
-        print(f"初始化{config.name}实盘策略...")
+        logger.info(f"初始化{config.name}实盘策略...")
 
         # TODO: 连接QMT
         # self.trader = XtQuantTrader(self.account_id)
@@ -635,12 +638,12 @@ class {class_name}Live:
         risk_config = {live_config.get('risk_control', dict())}
         self.risk_controller = RiskController(risk_config)
 
-        print("✅ 初始化完成（模拟模式）")
+        logger.info("✅ 初始化完成（模拟模式）")
         return True
 
     def on_rebalance(self):
         """调仓回调"""
-        print(f"\\n[{{datetime.now()}}] 🔔 触发调仓")
+        logger.info(f"\\n[{{datetime.now()}}] 🔔 触发调仓")
 
         # 1. 获取当前持仓
         # current_positions = self.order_manager.get_positions()
@@ -649,8 +652,8 @@ class {class_name}Live:
         date = datetime.now().strftime('%Y%m%d')
         target_portfolio = self.strategy.run_rebalance(date)
 
-        print(f"✅ 调仓完成（模拟模式）")
-        print(f"   目标持仓: {{len(target_portfolio)}} 只股票")
+        logger.info(f"✅ 调仓完成（模拟模式）")
+        logger.info(f"   目标持仓: {{len(target_portfolio)}} 只股票")
 
     def run(self):
         """运行实盘策略"""
@@ -659,18 +662,18 @@ class {class_name}Live:
 
         self.is_running = True
 
-        print(f"\\n开始运行{config.name}实盘策略...")
-        print(f"账户ID: {{self.account_id}}")
-        print(f"⚠️  模拟模式：不会执行实际交易")
+        logger.info(f"\\n开始运行{config.name}实盘策略...")
+        logger.info(f"账户ID: {{self.account_id}}")
+        logger.info(f"⚠️  模拟模式：不会执行实际交易")
 
         # 执行一次调仓测试
         self.on_rebalance()
 
-        print(f"\\n✅ 测试完成！")
-        print(f"\\n💡 实盘使用时需要:")
-        print(f"   1. 配置QMT账户ID")
-        print(f"   2. 取消注释QMT相关代码")
-        print(f"   3. 运行策略: python main.py")
+        logger.info(f"\\n✅ 测试完成！")
+        logger.info(f"\\n💡 实盘使用时需要:")
+        logger.info(f"   1. 配置QMT账户ID")
+        logger.info(f"   2. 取消注释QMT相关代码")
+        logger.info(f"   3. 运行策略: python main.py")
 
 
 def main():

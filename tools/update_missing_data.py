@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 补充更新缺失的股票数据
 检查DuckDB中数据较旧的股票，从QMT补充最新数据
@@ -21,19 +24,19 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
         stock_codes: 指定股票代码列表，None表示自动查找落后股票
         days_behind: 落后天数阈值，默认30天
     """
-    print("=" * 70)
-    print("补充更新缺失的股票数据")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("补充更新缺失的股票数据")
+    logger.info("=" * 70)
 
     try:
         from data_manager.duckdb_connection_pool import get_db_manager
         from xtquant import xtdata
         import pandas as pd
 
-        print("\n[步骤1] 连接数据源...")
+        logger.info("\n[步骤1] 连接数据源...")
         manager = get_db_manager(r'D:/StockData/stock_data.ddb')
 
-        print("[步骤2] 查找需要更新的股票...")
+        logger.info("[步骤2] 查找需要更新的股票...")
 
         if stock_codes is None:
             # 自动查找落后超过指定天数的股票
@@ -51,16 +54,16 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
             stock_codes = df_stocks['stock_code'].tolist()
 
         if not stock_codes:
-            print(f"\n✓ 没有发现需要更新的股票（落后>{days_behind}天）")
+            logger.info(f"\n✓ 没有发现需要更新的股票（落后>{days_behind}天）")
             return
 
-        print(f"\n发现 {len(stock_codes)} 只股票需要更新:")
-        print(f"  {', '.join(stock_codes[:20])}")
+        logger.info(f"\n发现 {len(stock_codes)} 只股票需要更新:")
+        logger.info(f"  {', '.join(stock_codes[:20])}")
         if len(stock_codes) > 20:
-            print(f"  ... 还有 {len(stock_codes) - 20} 只")
+            logger.info(f"  ... 还有 {len(stock_codes) - 20} 只")
 
-        print("\n[步骤3] 从QMT补充数据...")
-        print("-" * 70)
+        logger.info("\n[步骤3] 从QMT补充数据...")
+        logger.info("-" * 70)
 
         success_count = 0
         failed_count = 0
@@ -68,7 +71,7 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
 
         for idx, stock_code in enumerate(stock_codes, 1):
             try:
-                print(f"\n[{idx}/{len(stock_codes)}] {stock_code}:")
+                logger.info(f"\n[{idx}/{len(stock_codes)}] {stock_code}:")
 
                 # 查询该股票在DuckDB中的最新日期
                 query = f"""
@@ -78,21 +81,21 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                 """
                 result = manager.execute_read_query(query)
                 if result.empty:
-                    print("  ⊗ 数据库中无该股票记录，跳过")
+                    logger.info("  ⊗ 数据库中无该股票记录，跳过")
                     skipped_count += 1
                     continue
 
                 latest_date = result.iloc[0]['latest_date']
-                print(f"  数据库最新日期: {latest_date}")
+                logger.info(f"  数据库最新日期: {latest_date}")
 
                 # 计算需要补充的日期范围
                 start_date = (pd.to_datetime(latest_date) + timedelta(days=1)).strftime('%Y%m%d')
                 end_date = (datetime.now() + timedelta(days=1)).strftime('%Y%m%d')
 
-                print(f"  补充范围: {start_date} ~ {end_date}")
+                logger.info(f"  补充范围: {start_date} ~ {end_date}")
 
                 # 从QMT获取数据
-                print(f"  正在从QMT下载...")
+                logger.info(f"  正在从QMT下载...")
                 try:
                     download_result = xtdata.download_history_data2(
                         stock_code,
@@ -102,7 +105,7 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                     )
                 except TypeError as e:
                     # API参数顺序可能不同，尝试不同的调用方式
-                    print(f"  警告: download_history_data2调用失败，尝试直接获取数据...")
+                    logger.info(f"  警告: download_history_data2调用失败，尝试直接获取数据...")
                     download_result = None
 
                 # 获取数据
@@ -116,11 +119,11 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                 if isinstance(data, dict) and stock_code in data:
                     df = data[stock_code]
                     if df.empty:
-                        print("  ⊗ QMT无新数据")
+                        logger.info("  ⊗ QMT无新数据")
                         skipped_count += 1
                         continue
 
-                    print(f"  获取到 {len(df)} 条新数据")
+                    logger.info(f"  获取到 {len(df)} 条新数据")
 
                     # 转换数据格式
                     df_processed = pd.DataFrame({
@@ -139,7 +142,7 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                     })
 
                     # 保存到DuckDB
-                    print(f"  正在保存到DuckDB...")
+                    logger.info(f"  正在保存到DuckDB...")
 
                     # 使用原生DuckDB连接插入数据
                     with manager.get_write_connection() as con:
@@ -165,28 +168,28 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
                           AND date > '{latest_date}'
                     """).iloc[0]['count']
 
-                    print(f"  ✓ 成功补充 {new_count} 条记录")
+                    logger.info(f"  ✓ 成功补充 {new_count} 条记录")
                     success_count += 1
 
                 else:
-                    print("  ⊗ 获取数据失败")
+                    logger.info("  ⊗ 获取数据失败")
                     failed_count += 1
 
             except Exception as e:
-                print(f"  ⊗ 错误: {e}")
+                logger.info(f"  ⊗ 错误: {e}")
                 failed_count += 1
 
         # 输出汇总
-        print("\n" + "=" * 70)
-        print("补充更新完成！")
-        print("=" * 70)
-        print(f"总计: {len(stock_codes)} 只股票")
-        print(f"成功: {success_count} 只")
-        print(f"失败: {failed_count} 只")
-        print(f"跳过: {skipped_count} 只")
+        logger.info("\n" + "=" * 70)
+        logger.info("补充更新完成！")
+        logger.info("=" * 70)
+        logger.info(f"总计: {len(stock_codes)} 只股票")
+        logger.info(f"成功: {success_count} 只")
+        logger.info(f"失败: {failed_count} 只")
+        logger.info(f"跳过: {skipped_count} 只")
 
     except Exception as e:
-        print(f"\n✗ 更新失败: {e}")
+        logger.info(f"\n✗ 更新失败: {e}")
         import traceback
         traceback.print_exc()
 

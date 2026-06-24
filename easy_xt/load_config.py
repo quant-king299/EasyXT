@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 配置加载模块
 提供从统一配置文件加载配置的功能
@@ -40,12 +43,12 @@ def load_unified_config() -> Optional[Dict[str, Any]]:
             try:
                 with open(config_path, 'r', encoding='utf-8') as f:
                     config_data = json.load(f)
-                print(f"[OK] Successfully loaded unified config: {config_path}")
+                logger.info(f"[OK] Successfully loaded unified config: {config_path}")
                 return config_data
             except Exception as e:
-                print(f"[WARNING] Config file loading failed {config_path}: {e}")
+                logger.warning(f"[WARNING] Config file loading failed {config_path}: {e}")
 
-    print("[INFO] No unified config file found, using defaults")
+    logger.info("[INFO] No unified config file found, using defaults")
     return None
 
 def update_config_with_unified_settings(config_instance) -> bool:
@@ -81,10 +84,10 @@ def update_config_with_unified_settings(config_instance) -> bool:
                     config_instance.settings['trade']['userdata_path'] = qmt_path
                     config_instance.settings['qmt']['detected_path'] = os.path.dirname(qmt_path)
                 else:
-                    print(f"[WARN] 配置文件中的QMT路径不存在: {qmt_path}，将尝试自动检测")
+                    logger.warning(f"[WARN] 配置文件中的QMT路径不存在: {qmt_path}，将尝试自动检测")
             else:
                 # 否则使用原始逻辑设置QMT路径
                 if not config_instance.set_qmt_path(qmt_path):
-                    print(f"[WARN] 配置文件中的QMT路径无效: {qmt_path}，将尝试自动检测")
+                    logger.warning(f"[WARN] 配置文件中的QMT路径无效: {qmt_path}，将尝试自动检测")
     
     return True

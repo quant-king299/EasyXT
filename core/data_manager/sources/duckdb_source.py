@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 DuckDB数据源
 
@@ -49,7 +52,7 @@ class DuckDBSource(BaseDataSource):
             self.connection.execute(test_query)
             return True
         except Exception as e:
-            print(f"[DuckDBSource] 连接失败: {e}")
+            logger.info(f"[DuckDBSource] 连接失败: {e}")
             return False
 
     def is_available(self) -> bool:
@@ -80,7 +83,7 @@ class DuckDBSource(BaseDataSource):
             # 验证日期格式
             if not validate_date(start_date) or not validate_date(end_date):
                 if verbose:
-                    print(f"[DuckDBSource] 日期格式错误: {start_date} ~ {end_date}")
+                    logger.info(f"[DuckDBSource] 日期格式错误: {start_date} ~ {end_date}")
                 return None
 
             # 标准化股票代码（兼容 str 和 List[str] 两种传入方式）
@@ -126,20 +129,20 @@ class DuckDBSource(BaseDataSource):
 
             if df.empty:
                 if verbose:
-                    print(f"[DuckDBSource] 未找到价格数据: {start_date} ~ {end_date}")
+                    logger.info(f"[DuckDBSource] 未找到价格数据: {start_date} ~ {end_date}")
                 return None
 
             # 设置MultiIndex
             df.set_index(['date', 'symbol'], inplace=True)
 
             if verbose:
-                print(f"[DuckDBSource] 获取价格数据成功: {len(df)}条记录")
+                logger.info(f"[DuckDBSource] 获取价格数据成功: {len(df)}条记录")
 
             return df
 
         except Exception as e:
             if verbose:
-                print(f"[DuckDBSource] 获取价格数据失败: {e}")
+                logger.info(f"[DuckDBSource] 获取价格数据失败: {e}")
             return None
 
     def get_fundamentals(self,
@@ -167,7 +170,7 @@ class DuckDBSource(BaseDataSource):
         try:
             # 验证日期格式
             if not validate_date(date):
-                print(f"[DuckDBSource] 日期格式错误: {date}")
+                logger.info(f"[DuckDBSource] 日期格式错误: {date}")
                 return None
 
             if not symbols:
@@ -228,7 +231,7 @@ class DuckDBSource(BaseDataSource):
             # 如果表不存在或其他错误，静默返回None
             # 让HybridDataManager的fallback机制处理
             import sys
-            print(f"[DuckDBSource] 获取基本面数据失败: {e}", file=sys.stderr)
+            logger.info(f"[DuckDBSource] 获取基本面数据失败: {e}", file=sys.stderr)
             return None
 
     def get_trading_dates(self,

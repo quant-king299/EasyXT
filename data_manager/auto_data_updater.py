@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 定时自动数据补充模块
 实现每日收盘后自动更新数据的功能
@@ -353,49 +356,49 @@ class AutoDataUpdater:
 
 def test_auto_updater():
     """测试自动更新功能"""
-    print("=" * 60)
-    print("自动数据更新测试")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("自动数据更新测试")
+    logger.info("=" * 60)
     print()
 
     # 创建更新器
     updater = AutoDataUpdater(update_time='15:30')
 
     # 显示状态
-    print("当前状态:")
+    logger.info("当前状态:")
     status = updater.get_status()
     for key, value in status.items():
-        print(f"  {key}: {value}")
+        logger.info(f"  {key}: {value}")
     print()
 
     # 判断是否应该更新
-    print("判断是否应该更新:")
+    logger.info("判断是否应该更新:")
     should = updater.should_update_today()
-    print(f"  应该更新: {should}")
-    print(f"  原因: {'是交易日且已到设定时间' if should else '不是交易日或未到设定时间'}")
+    logger.info(f"  应该更新: {should}")
+    logger.info(f"  原因: {'是交易日且已到设定时间' if should else '不是交易日或未到设定时间'}")
     print()
 
     # 手动触发一次更新（测试）
-    print("手动触发更新（测试）:")
+    logger.info("手动触发更新（测试）:")
     result = updater.manual_update(['511380.SH', '511880.SH'])
-    print(f"  更新结果: 成功 {result['success']}, 失败 {result['failed']}")
+    logger.info(f"  更新结果: 成功 {result['success']}, 失败 {result['failed']}")
     print()
 
     # 显示更新后的状态
-    print("更新后的状态:")
+    logger.info("更新后的状态:")
     status = updater.get_status()
     for key, value in status.items():
-        print(f"  {key}: {value}")
+        logger.info(f"  {key}: {value}")
 
     print()
-    print("[OK] 测试完成")
+    logger.info("[OK] 测试完成")
 
 
 def start_auto_update_service():
     """启动自动更新服务（生产环境使用）"""
-    print("=" * 60)
-    print("启动自动数据更新服务")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("启动自动数据更新服务")
+    logger.info("=" * 60)
     print()
 
     updater = AutoDataUpdater(update_time='15:30')
@@ -403,16 +406,16 @@ def start_auto_update_service():
     try:
         updater.start()
 
-        print("服务已启动，按 Ctrl+C 停止")
+        logger.info("服务已启动，按 Ctrl+C 停止")
 
         # 保持主线程运行
         while True:
             time.sleep(1)
 
     except KeyboardInterrupt:
-        print("\n收到停止信号")
+        logger.info("\n收到停止信号")
         updater.stop()
-        print("服务已停止")
+        logger.info("服务已停止")
 
 
 if __name__ == "__main__":

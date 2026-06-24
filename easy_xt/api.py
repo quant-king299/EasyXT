@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 EasyXT主API入口
 统一的API接口，简化xtquant的使用
@@ -38,9 +41,9 @@ class EasyXT:
         """
         self._data_connected = self.data.connect()
         if self._data_connected:
-            print("数据服务初始化成功")
+            logger.info("数据服务初始化成功")
         else:
-            print("数据服务初始化失败")
+            logger.info("数据服务初始化失败")
         return self._data_connected
     
     def init_trade(self, userdata_path: str, session_id: Optional[str] = None) -> bool:
@@ -56,9 +59,9 @@ class EasyXT:
         """
         self._trade_connected = self.trade.connect(userdata_path, session_id if session_id else "")
         if self._trade_connected:
-            print("交易服务初始化成功")
+            logger.info("交易服务初始化成功")
         else:
-            print("交易服务初始化失败")
+            logger.info("交易服务初始化失败")
         return self._trade_connected
     
     def add_account(self, account_id: str, account_type: str = 'STOCK') -> bool:
@@ -329,10 +332,10 @@ class EasyXT:
             >>> api.run_forever()
         """
         if not self._data_connected:
-            print("⚠️ 数据服务未连接，正在尝试连接...")
+            logger.info("⚠️ 数据服务未连接，正在尝试连接...")
             self._data_connected = self.data.connect()
             if not self._data_connected:
-                print("❌ 数据服务连接失败")
+                logger.info("❌ 数据服务连接失败")
                 return -1
 
         return self.data.subscribe_quote(codes, period, callback)
@@ -365,10 +368,10 @@ class EasyXT:
             >>> api.run_forever()
         """
         if not self._data_connected:
-            print("⚠️ 数据服务未连接，正在尝试连接...")
+            logger.info("⚠️ 数据服务未连接，正在尝试连接...")
             self._data_connected = self.data.connect()
             if not self._data_connected:
-                print("❌ 数据服务连接失败")
+                logger.info("❌ 数据服务连接失败")
                 return -1
 
         return self.data.subscribe_whole_quote(codes, callback)
@@ -659,7 +662,7 @@ class EasyXT:
         if hasattr(self.trade, 'trader') and self.trade.trader and account_id in self.trade.accounts:
             account = self.trade.accounts[account_id]
             trades = self.trade.trader.query_stock_trades(account)
-            print("成交数量:", len(trades))
+            logger.info("成交数量:", len(trades))
             
             if len(trades) == 0:
                 return pd.DataFrame()
@@ -683,5 +686,5 @@ class EasyXT:
             
             return pd.DataFrame(result_data)
         else:
-            print("成交数量: 0")
+            logger.info("成交数量: 0")
             return pd.DataFrame()

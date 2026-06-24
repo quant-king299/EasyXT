@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 龙虎榜数据模块
 
@@ -36,8 +39,8 @@ class DragonTigerData:
         except ImportError:
             self.ak = None
             self.ak_available = False
-            print("[WARNING] 未安装akshare，龙虎榜功能不可用")
-            print("[TIPS] 运行: pip install akshare")
+            logger.warning("[WARNING] 未安装akshare，龙虎榜功能不可用")
+            logger.info("[TIPS] 运行: pip install akshare")
 
     # ============================================================
     # 龙虎榜榜单
@@ -123,7 +126,7 @@ class DragonTigerData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取龙虎榜失败 {date}: {e}")
+            logger.error(f"[ERROR] 获取龙虎榜失败 {date}: {e}")
             return pd.DataFrame()
 
     def get_stock_history(self, stock_code: str,
@@ -190,7 +193,7 @@ class DragonTigerData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取个股历史龙虎榜失败 {stock_code}: {e}")
+            logger.error(f"[ERROR] 获取个股历史龙虎榜失败 {stock_code}: {e}")
             return pd.DataFrame()
 
     def _convert_to_full_code(self, code: str) -> str:
@@ -251,7 +254,7 @@ class DragonTigerData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取机构席位明细失败: {e}")
+            logger.error(f"[ERROR] 获取机构席位明细失败: {e}")
             return pd.DataFrame()
 
     def get_institutional_rank(self, date: str = None,
@@ -321,7 +324,7 @@ class DragonTigerData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取营业部席位明细失败: {e}")
+            logger.error(f"[ERROR] 获取营业部席位明细失败: {e}")
             return pd.DataFrame()
 
     def get_broker_rank(self, date: str = None,
@@ -344,7 +347,7 @@ class DragonTigerData:
             return pd.DataFrame()
 
         if by not in df.columns:
-            print(f"[WARNING] 排序字段 {by} 不存在")
+            logger.warning(f"[WARNING] 排序字段 {by} 不存在")
             return pd.DataFrame()
 
         # 排序
@@ -419,14 +422,14 @@ class DragonTigerData:
             if not inst_df.empty:
                 result['institutional'] = inst_df
         except Exception as e:
-            print(f"[ERROR] 获取机构席位失败: {e}")
+            logger.error(f"[ERROR] 获取机构席位失败: {e}")
 
         try:
             broker_df = self.get_broker_rank(date, 'net_buy_total', top_n)
             if not broker_df.empty:
                 result['broker'] = broker_df
         except Exception as e:
-            print(f"[ERROR] 获取营业部席位失败: {e}")
+            logger.error(f"[ERROR] 获取营业部席位失败: {e}")
 
         return result
 
@@ -512,7 +515,7 @@ class DragonTigerData:
             return count_df
 
         except Exception as e:
-            print(f"[ERROR] 选择连续上榜股票失败: {e}")
+            logger.error(f"[ERROR] 选择连续上榜股票失败: {e}")
             return pd.DataFrame()
 
 
@@ -548,76 +551,76 @@ def select_by_institutional(date: str = None,
 
 if __name__ == "__main__":
     """测试代码"""
-    print("=" * 70)
-    print("  龙虎榜数据模块测试")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("  龙虎榜数据模块测试")
+    logger.info("=" * 70)
 
     dt = DragonTigerData()
 
     # 测试1: 获取每日龙虎榜
-    print("\n[测试1] 获取最新龙虎榜...")
+    logger.info("\n[测试1] 获取最新龙虎榜...")
     try:
         df = dt.get_daily_list()
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  共 {len(df)} 只股票上榜")
-            print("\n  前5名:")
-            print(df.head().to_string())
+            logger.info("[OK] 成功!")
+            logger.info(f"  共 {len(df)} 只股票上榜")
+            logger.info("\n  前5名:")
+            logger.info(df.head().to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试2: 机构席位排行
-    print("\n[测试2] 获取机构净买入排行...")
+    logger.info("\n[测试2] 获取机构净买入排行...")
     try:
         df = dt.get_institutional_rank(top_n=5)
         if not df.empty:
-            print("[OK] 成功!")
-            print(df.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(df.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试3: 营业部排行
-    print("\n[测试3] 获取营业部净买入排行...")
+    logger.info("\n[测试3] 获取营业部净买入排行...")
     try:
         df = dt.get_broker_rank(top_n=5)
         if not df.empty:
-            print("[OK] 成功!")
-            print(df.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(df.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试4: 个股历史龙虎榜
-    print("\n[测试4] 获取个股历史龙虎榜...")
+    logger.info("\n[测试4] 获取个股历史龙虎榜...")
     try:
         df = dt.get_stock_history('000001.SZ', count=10)
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  共 {len(df)} 条记录")
-            print(df.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(f"  共 {len(df)} 条记录")
+            logger.info(df.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试5: 基于机构席位选股
-    print("\n[测试5] 基于机构席位选股...")
+    logger.info("\n[测试5] 基于机构席位选股...")
     try:
         df = dt.select_by_institutional(min_net_buy=1000, top_n=10)
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  共 {len(df)} 只股票")
-            print(df.head().to_string())
+            logger.info("[OK] 成功!")
+            logger.info(f"  共 {len(df)} 只股票")
+            logger.info(df.head().to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
-    print("\n" + "=" * 70)
-    print("  测试完成!")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("  测试完成!")
+    logger.info("=" * 70)

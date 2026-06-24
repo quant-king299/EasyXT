@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 条件单GUI组件
 提供条件单的可视化配置、管理和监控界面
@@ -1129,7 +1132,7 @@ ID: {order['id']}
 
             return None
         except Exception as e:
-            print(f"获取{stock_code}当前价格失败: {str(e)}")
+            logger.info(f"获取{stock_code}当前价格失败: {str(e)}")
             return None
 
     def _check_price_condition(self, order: dict, current_price: float) -> bool:
@@ -1161,7 +1164,7 @@ ID: {order['id']}
 
             return False
         except Exception as e:
-            print(f"检查价格条件失败: {str(e)}")
+            logger.info(f"检查价格条件失败: {str(e)}")
             return False
 
     def _check_change_condition(self, order: dict, current_price: float) -> bool:

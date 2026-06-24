@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 稳健的批量检查股票上市日期（带重试机制）
 """
@@ -25,7 +28,7 @@ import duckdb
 
 TOKEN = os.getenv('TUSHARE_TOKEN')
 if not TOKEN:
-    print("[ERROR] TUSHARE_TOKEN not set")
+    logger.error("[ERROR] TUSHARE_TOKEN not set")
     sys.exit(1)
 
 ts.set_token(TOKEN)
@@ -33,9 +36,9 @@ pro = ts.pro_api()
 
 DUCKDB_PATH = os.getenv('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
 
-print("="*70)
-print("批量检查股票上市日期（稳健版）")
-print("="*70)
+logger.info("="*70)
+logger.info("批量检查股票上市日期（稳健版）")
+logger.info("="*70)
 
 START_DATE = '2022-01-01'
 
@@ -78,10 +81,10 @@ def get_list_date_with_retry(stock_code, max_retries=3, delay=2):
 
         except Exception as e:
             if attempt < max_retries - 1:
-                print(f"  [{stock_code}] 重试 {attempt+1}/{max_retries}: {str(e)[:30]}")
+                logger.info(f"  [{stock_code}] 重试 {attempt+1}/{max_retries}: {str(e)[:30]}")
                 time.sleep(delay * (attempt + 1))  # 递增延迟
             else:
-                print(f"  [{stock_code}] 失败: {str(e)[:40]}")
+                logger.info(f"  [{stock_code}] 失败: {str(e)[:40]}")
                 return {'code': stock_code, 'error': str(e)[:50]}
 
     return None
@@ -103,8 +106,8 @@ try:
 
     df_stocks = con.execute(query).df()
 
-    print(f"\n发现 {len(df_stocks)} 只股票需要检查")
-    print(f"开始日期: {START_DATE}\n")
+    logger.info(f"\n发现 {len(df_stocks)} 只股票需要检查")
+    logger.info(f"开始日期: {START_DATE}\n")
 
     con.close()
 
@@ -122,7 +125,7 @@ try:
         stock_code = row['stock_code']
 
         if (i + 1) % 10 == 0:
-            print(f"进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
+            logger.info(f"进度: {i+1}/{total} ({(i+1)/total*100:.1f}%)")
 
         # 获取上市日期（带重试）
         info = get_list_date_with_retry(stock_code, max_retries=2, delay=1)
@@ -149,7 +152,7 @@ try:
                     'market': info.get('market', 'N/A'),
                     'earliest': row['earliest_date'].strftime('%Y-%m-%d')
                 })
-                print(f"  ! {stock_code} ({info.get('name', 'N/A')}) 已上市于 {list_date_formatted}")
+                logger.info(f"  ! {stock_code} ({info.get('name', 'N/A')}) 已上市于 {list_date_formatted}")
         else:
             results['not_found'].append(stock_code)
 
@@ -157,69 +160,69 @@ try:
         time.sleep(1)
 
     # 输出结果
-    print("\n" + "="*70)
-    print("统计结果")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("统计结果")
+    logger.info("="*70)
 
-    print(f"\n[OK] 未上市股票（2022-01-01之后上市）: {len(results['not_listed'])} 只")
-    print(f"    这些股票无法获取2022年之前的历史数据 - 正常现象")
+    logger.info(f"\n[OK] 未上市股票（2022-01-01之后上市）: {len(results['not_listed'])} 只")
+    logger.info(f"    这些股票无法获取2022年之前的历史数据 - 正常现象")
 
-    print(f"\n[WARNING] 已上市但无数据（2022-01-01之前上市）: {len(results['already_listed'])} 只")
-    print(f"    这些股票应该有历史数据但获取失败 - 需要调查")
+    logger.warning(f"\n[WARNING] 已上市但无数据（2022-01-01之前上市）: {len(results['already_listed'])} 只")
+    logger.info(f"    这些股票应该有历史数据但获取失败 - 需要调查")
 
-    print(f"\n[?] 未找到上市信息: {len(results['not_found'])} 只")
-    print(f"\n[ERROR] 查询出错: {len(results['error'])} 只")
+    logger.info(f"\n[?] 未找到上市信息: {len(results['not_found'])} 只")
+    logger.error(f"\n[ERROR] 查询出错: {len(results['error'])} 只")
 
     # 显示已上市的股票
     if results['already_listed']:
-        print("\n" + "="*70)
-        print(f"已上市但无数据的股票详情（{len(results['already_listed'])}只）：")
-        print("="*70)
+        logger.info("\n" + "="*70)
+        logger.info(f"已上市但无数据的股票详情（{len(results['already_listed'])}只）：")
+        logger.info("="*70)
         for item in results['already_listed'][:20]:
-            print(f"  {item['code']} ({item['name']}):")
-            print(f"    上市日期: {item['list_date']}")
-            print(f"    最早数据: {item['earliest']}")
+            logger.info(f"  {item['code']} ({item['name']}):")
+            logger.info(f"    上市日期: {item['list_date']}")
+            logger.info(f"    最早数据: {item['earliest']}")
         if len(results['already_listed']) > 20:
-            print(f"  ... 还有 {len(results['already_listed'])-20} 只")
+            logger.info(f"  ... 还有 {len(results['already_listed'])-20} 只")
 
     # 显示未上市股票示例
     if results['not_listed']:
-        print("\n" + "="*70)
-        print(f"未上市股票示例（{len(results['not_listed'])}只中的前10只）：")
-        print("="*70)
+        logger.info("\n" + "="*70)
+        logger.info(f"未上市股票示例（{len(results['not_listed'])}只中的前10只）：")
+        logger.info("="*70)
         for item in results['not_listed'][:10]:
-            print(f"  {item['code']} ({item['name']}, {item['market']}): {item['list_date']}")
+            logger.info(f"  {item['code']} ({item['name']}, {item['market']}): {item['list_date']}")
         if len(results['not_listed']) > 10:
-            print(f"  ... 还有 {len(results['not_listed'])-10} 只")
+            logger.info(f"  ... 还有 {len(results['not_listed'])-10} 只")
 
-    print("\n" + "="*70)
-    print("结论")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("结论")
+    logger.info("="*70)
 
     total_checked = len(results['not_listed']) + len(results['already_listed']) + len(results['not_found']) + len(results['error'])
 
     if len(results['already_listed']) == 0:
-        print(f"[OK] 所有 {total_checked} 只失败股票都是因为上市时间晚于2022-01-01")
-        print("      这是完全正常的现象，无法获取上市之前的历史数据")
+        logger.info(f"[OK] 所有 {total_checked} 只失败股票都是因为上市时间晚于2022-01-01")
+        logger.info("      这是完全正常的现象，无法获取上市之前的历史数据")
     else:
         pct_not_listed = len(results['not_listed']) / total_checked * 100
         pct_already_listed = len(results['already_listed']) / total_checked * 100
 
-        print(f"统计结果:")
-        print(f"  - {len(results['not_listed'])}只 ({pct_not_listed:.1f}%) 未上市 - 正常")
-        print(f"  - {len(results['already_listed'])}只 ({pct_already_listed:.1f}%) 已上市但无数据 - 需调查")
+        logger.info(f"统计结果:")
+        logger.info(f"  - {len(results['not_listed'])}只 ({pct_not_listed:.1f}%) 未上市 - 正常")
+        logger.info(f"  - {len(results['already_listed'])}只 ({pct_already_listed:.1f}%) 已上市但无数据 - 需调查")
 
         if len(results['already_listed']) < 20:
-            print(f"\n  大部分失败都是正常的新股，只有{len(results['already_listed'])}只需要进一步调查")
+            logger.info(f"\n  大部分失败都是正常的新股，只有{len(results['already_listed'])}只需要进一步调查")
         else:
-            print(f"\n  有{len(results['already_listed'])}只已上市股票无法获取数据，可能原因：")
-            print(f"    1. QMT本地数据不完整（科创板/创业板新股）")
-            print(f"    2. Tushare数据缺失")
-            print(f"    3. 股票长期停牌")
+            logger.info(f"\n  有{len(results['already_listed'])}只已上市股票无法获取数据，可能原因：")
+            logger.info(f"    1. QMT本地数据不完整（科创板/创业板新股）")
+            logger.info(f"    2. Tushare数据缺失")
+            logger.info(f"    3. 股票长期停牌")
 
-    print("="*70)
+    logger.info("="*70)
 
 except Exception as e:
-    print(f"\n错误: {e}")
+    logger.info(f"\n错误: {e}")
     import traceback
     traceback.print_exc()

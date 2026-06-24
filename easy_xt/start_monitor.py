@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 #!/usr/bin/env python3
 """
 P1-009监控告警系统启动脚本
@@ -40,7 +43,7 @@ def main():
     
     if args.test:
         # 运行测试
-        print("🧪 运行监控系统测试...")
+        logger.info("🧪 运行监控系统测试...")
         os.system("python tests/test_monitor_system.py")
         return
     
@@ -56,15 +59,15 @@ def main():
             manager.print_status()
             return
         
-        print("🚀 启动EasyXT监控告警系统...")
-        print("按 Ctrl+C 停止服务")
+        logger.info("🚀 启动EasyXT监控告警系统...")
+        logger.info("按 Ctrl+C 停止服务")
         
         asyncio.run(manager.start())
         
     except KeyboardInterrupt:
-        print("\n👋 用户中断，服务已停止")
+        logger.info("\n👋 用户中断，服务已停止")
     except Exception as e:
-        print(f"❌ 启动失败: {e}")
+        logger.info(f"❌ 启动失败: {e}")
         sys.exit(1)
 
 

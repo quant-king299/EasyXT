@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 EasyXT - xtquant的简化API封装
 让用户更方便快捷地调用xtquant功能
@@ -39,7 +42,7 @@ def _patch_xtdata_download():
         sys.modules['xtquant.xtdata'].download_history_data = locked_download
         sys.modules['xtquant.xtdata'].download_history_data2 = locked_download2
 
-        print("[EasyXT] xtdata download functions patched (global RLock)")
+        logger.info("[EasyXT] xtdata download functions patched (global RLock)")
         return True
     except ImportError:
         return False
@@ -47,8 +50,8 @@ def _patch_xtdata_download():
 _patch_applied = _patch_xtdata_download()
 
 # 显示作者信息
-print("作者微信: www_ptqmt_com")
-print("欢迎关注微信公众号: 王者quant")
+logger.info("作者微信: www_ptqmt_com")
+logger.info("欢迎关注微信公众号: 王者quant")
 
 # 延迟导入避免循环依赖
 def _get_api():

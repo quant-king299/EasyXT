@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 通达信预警与EasyXT集成示例
 展示如何将tdxtrader与EasyXT结合使用，实现通达信预警信号的程序化交易
@@ -22,7 +25,7 @@ try:
     tdx_start = tdx_start_import
     TDX_AVAILABLE = True
 except ImportError:
-    print("⚠️  tdxtrader模块未找到，请确保已正确安装")
+    logger.info("⚠️  tdxtrader模块未找到，请确保已正确安装")
 
 # 全局EasyXT实例
 easy_xt = get_api()
@@ -40,20 +43,20 @@ def initialize_trade_service() -> bool:
         # 获取QMT路径
         qmt_path = config.get_userdata_path()
         if not qmt_path:
-            print("❌ 未配置QMT路径")
+            logger.info("❌ 未配置QMT路径")
             return False
         
-        print(f"🔍 尝试连接交易服务: {qmt_path}")
+        logger.info(f"🔍 尝试连接交易服务: {qmt_path}")
         # 初始化交易服务
         if easy_xt.init_trade(qmt_path):
             trade_initialized = True
-            print("✅ 交易服务初始化成功")
+            logger.info("✅ 交易服务初始化成功")
             return True
         else:
-            print("❌ 交易服务初始化失败")
+            logger.info("❌ 交易服务初始化失败")
             return False
     except Exception as e:
-        print(f"❌ 交易服务初始化异常: {e}")
+        logger.info(f"❌ 交易服务初始化异常: {e}")
         return False
 
 def add_account_to_service(account_id: str) -> bool:
@@ -63,16 +66,16 @@ def add_account_to_service(account_id: str) -> bool:
         return True
         
     try:
-        print(f"➕ 添加账户: {account_id}")
+        logger.info(f"➕ 添加账户: {account_id}")
         if easy_xt.add_account(account_id):
             account_added = True
-            print(f"✅ 账户 {account_id} 添加成功")
+            logger.info(f"✅ 账户 {account_id} 添加成功")
             return True
         else:
-            print(f"❌ 账户 {account_id} 添加失败")
+            logger.info(f"❌ 账户 {account_id} 添加失败")
             return False
     except Exception as e:
-        print(f"❌ 账户添加异常: {e}")
+        logger.info(f"❌ 账户添加异常: {e}")
         return False
 
 def buy_event(params: Dict[str, Any]):
@@ -87,56 +90,56 @@ def buy_event(params: Dict[str, Any]):
             - stock: 股票信息
             - position: 持仓信息
     """
-    print("🔍 buy_event函数被调用")
+    logger.info("🔍 buy_event函数被调用")
     # 获取股票信息
     stock = params.get('stock')
     position = params.get('position')
     xt_trader = params.get('xt_trader')
     account = params.get('account')
     
-    print(f"📊 接收到的参数: stock={stock}, position={position}")
+    logger.info(f"📊 接收到的参数: stock={stock}, position={position}")
     
     if stock is None:
-        print("❌ 股票信息缺失")
+        logger.info("❌ 股票信息缺失")
         return None
     
     stock_price = stock.get('price', 0.0)
-    print(f"📈 买入信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
-    print(f"   价格: {stock_price}, 时间: {stock.get('time', '未知')}")
-    print(f"   完整股票信息: {stock}")
+    logger.info(f"📈 买入信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
+    logger.info(f"   价格: {stock_price}, 时间: {stock.get('time', '未知')}")
+    logger.info(f"   完整股票信息: {stock}")
     
     try:
         # 从统一配置中获取账户ID
         account_id = config.get('settings.account.account_id')
         if not account_id:
-            print("❌ 未在统一配置中找到账户ID")
+            logger.info("❌ 未在统一配置中找到账户ID")
             return None
         
         # 确保交易服务已初始化
         if not trade_initialized:
             if not initialize_trade_service():
-                print("❌ 交易服务初始化失败")
+                logger.info("❌ 交易服务初始化失败")
                 return None
         
         # 确保账户已添加
         if not account_added:
             if not add_account_to_service(account_id):
-                print("❌ 账户添加失败")
+                logger.info("❌ 账户添加失败")
                 return None
         
         # 如果价格为0或无效，使用市价委托
         if stock_price <= 0:
-            print(f"⚠️  价格无效({stock_price})，使用市价委托")
+            logger.info(f"⚠️  价格无效({stock_price})，使用市价委托")
             price_type = 'market'
             price_value = 0
         else:
             price_type = 'limit'
             price_value = stock_price
         
-        print(f"🔍 准备执行异步买入操作: 账户={account_id}, 股票={stock.get('code', '')}, 数量=100, 价格={price_value}, 类型={price_type}")
+        logger.info(f"🔍 准备执行异步买入操作: 账户={account_id}, 股票={stock.get('code', '')}, 数量=100, 价格={price_value}, 类型={price_type}")
         
         # 优先使用EasyXT高级API执行异步买入操作
-        print("🚀 调用advanced_xt.async_order进行异步下单")
+        logger.info("🚀 调用advanced_xt.async_order进行异步下单")
         seq = advanced_xt.async_order(
             account_id=account_id,
             code=stock.get('code', ''),
@@ -148,21 +151,21 @@ def buy_event(params: Dict[str, Any]):
             order_remark=f"买入{stock.get('name', '未知')}"
         )
         
-        print(f"📊 async_order返回结果: {seq}")
+        logger.info(f"📊 async_order返回结果: {seq}")
         if seq:
-            print(f"✅ 异步买入委托已提交，序列号: {seq}，委托价格: {price_value if price_type == 'limit' else '市价'}")
+            logger.info(f"✅ 异步买入委托已提交，序列号: {seq}，委托价格: {price_value if price_type == 'limit' else '市价'}")
             # 返回None表示已经执行委托，不需要再通过xt_trader.order_stock_async()执行
             return None
         else:
-            print("⚠️  EasyXT高级API下单失败，尝试使用xt_trader备选方案")
+            logger.info("⚠️  EasyXT高级API下单失败，尝试使用xt_trader备选方案")
             # 返回一个空字典而不是None，让系统尝试使用xt_trader下单作为备选方案
             return {}
         
     except Exception as e:
-        print(f"❌ 买入操作异常: {e}")
+        logger.info(f"❌ 买入操作异常: {e}")
         import traceback
         traceback.print_exc()
-        print("⚠️  发生异常，返回空字典触发xt_trader备选方案")
+        logger.info("⚠️  发生异常，返回空字典触发xt_trader备选方案")
         # 返回一个空字典而不是None，让系统尝试使用xt_trader下单作为备选方案
         return {}
 
@@ -178,63 +181,63 @@ def sell_event(params: Dict[str, Any]):
             - stock: 股票信息
             - position: 持仓信息
     """
-    print("🔍 sell_event函数被调用")
+    logger.info("🔍 sell_event函数被调用")
     # 获取股票信息
     stock = params.get('stock')
     position = params.get('position')
     xt_trader = params.get('xt_trader')
     account = params.get('account')
     
-    print(f"📊 接收到的参数: stock={stock}, position={position}")
+    logger.info(f"📊 接收到的参数: stock={stock}, position={position}")
     
     if stock is None:
-        print("❌ 股票信息缺失")
+        logger.info("❌ 股票信息缺失")
         return None
     
     stock_price = stock.get('price', 0.0)
-    print(f"📉 卖出信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
-    print(f"   价格: {stock_price}, 时间: {stock.get('time', '未知')}")
-    print(f"   完整股票信息: {stock}")
+    logger.info(f"📉 卖出信号触发: {stock.get('name', '未知')} ({stock.get('code', '未知')})")
+    logger.info(f"   价格: {stock_price}, 时间: {stock.get('time', '未知')}")
+    logger.info(f"   完整股票信息: {stock}")
     
     # 检查是否有持仓
     if position is None:
-        print("⚠️  无持仓，不执行卖出操作")
+        logger.info("⚠️  无持仓，不执行卖出操作")
         return None
     else:
-        print(f"📊 持仓信息: 可用数量={position.can_use_volume}")
+        logger.info(f"📊 持仓信息: 可用数量={position.can_use_volume}")
     
     try:
         # 从统一配置中获取账户ID
         account_id = config.get('settings.account.account_id')
         if not account_id:
-            print("❌ 未在统一配置中找到账户ID")
+            logger.info("❌ 未在统一配置中找到账户ID")
             return None
         
         # 确保交易服务已初始化
         if not trade_initialized:
             if not initialize_trade_service():
-                print("❌ 交易服务初始化失败")
+                logger.info("❌ 交易服务初始化失败")
                 return None
         
         # 确保账户已添加
         if not account_added:
             if not add_account_to_service(account_id):
-                print("❌ 账户添加失败")
+                logger.info("❌ 账户添加失败")
                 return None
         
         # 如果价格为0或无效，使用市价委托
         if stock_price <= 0:
-            print(f"⚠️  价格无效({stock_price})，使用市价委托")
+            logger.info(f"⚠️  价格无效({stock_price})，使用市价委托")
             price_type = 'market'
             price_value = 0
         else:
             price_type = 'limit'
             price_value = stock_price
         
-        print(f"🔍 准备执行异步卖出操作: 账户={account_id}, 股票={stock.get('code', '')}, 数量={position.can_use_volume}, 价格={price_value}, 类型={price_type}")
+        logger.info(f"🔍 准备执行异步卖出操作: 账户={account_id}, 股票={stock.get('code', '')}, 数量={position.can_use_volume}, 价格={price_value}, 类型={price_type}")
         
         # 优先使用EasyXT高级API执行异步卖出操作
-        print("🚀 调用advanced_xt.async_order进行异步下单")
+        logger.info("🚀 调用advanced_xt.async_order进行异步下单")
         seq = advanced_xt.async_order(
             account_id=account_id,
             code=stock.get('code', ''),
@@ -246,21 +249,21 @@ def sell_event(params: Dict[str, Any]):
             order_remark=f"卖出{stock.get('name', '未知')}"
         )
         
-        print(f"📊 async_order返回结果: {seq}")
+        logger.info(f"📊 async_order返回结果: {seq}")
         if seq:
-            print(f"✅ 异步卖出委托已提交，序列号: {seq}，委托价格: {price_value if price_type == 'limit' else '市价'}")
+            logger.info(f"✅ 异步卖出委托已提交，序列号: {seq}，委托价格: {price_value if price_type == 'limit' else '市价'}")
             # 返回None表示已经执行委托，不需要再通过xt_trader.order_stock_async()执行
             return None
         else:
-            print("⚠️  EasyXT高级API下单失败，尝试使用xt_trader备选方案")
+            logger.info("⚠️  EasyXT高级API下单失败，尝试使用xt_trader备选方案")
             # 返回一个空字典而不是None，让系统尝试使用xt_trader下单作为备选方案
             return {}
             
     except Exception as e:
-        print(f"❌ 卖出操作异常: {e}")
+        logger.info(f"❌ 卖出操作异常: {e}")
         import traceback
         traceback.print_exc()
-        print("⚠️  发生异常，返回空字典触发xt_trader备选方案")
+        logger.info("⚠️  发生异常，返回空字典触发xt_trader备选方案")
         # 返回一个空字典而不是None，让系统尝试使用xt_trader下单作为备选方案
         return {}
 
@@ -292,54 +295,54 @@ def start_tdx_trading_with_easyxt():
     # ========================================
     
     if not account_id:
-        print("❌ 未在统一配置中找到账户ID，请检查配置文件")
+        logger.info("❌ 未在统一配置中找到账户ID，请检查配置文件")
         return
     
-    print("🚀 启动通达信预警交易系统（EasyXT版）")
-    print(f"   账户ID: {account_id}")
-    print(f"   QMT路径: {mini_qmt_path}")
+    logger.info("🚀 启动通达信预警交易系统（EasyXT版）")
+    logger.info(f"   账户ID: {account_id}")
+    logger.info(f"   QMT路径: {mini_qmt_path}")
     
     # 初始化高级API
-    print("🔧 初始化高级交易API...")
+    logger.info("🔧 初始化高级交易API...")
     qmt_path = config.get_userdata_path()
     if qmt_path:
         if advanced_xt.connect(qmt_path):
-            print("✅ 高级交易API连接成功")
+            logger.info("✅ 高级交易API连接成功")
             if advanced_xt.add_account(account_id):
-                print("✅ 高级交易账户添加成功")
+                logger.info("✅ 高级交易账户添加成功")
             else:
-                print("❌ 高级交易账户添加失败")
+                logger.info("❌ 高级交易账户添加失败")
         else:
-            print("❌ 高级交易API连接失败")
+            logger.info("❌ 高级交易API连接失败")
     else:
-        print("❌ 未配置QMT路径")
+        logger.info("❌ 未配置QMT路径")
     
     # 显示启用的模式
     if file_path:
-        print(f"   预警文件: {file_path}")
-        print(f"   买入信号: {buy_sign}")
-        print(f"   卖出信号: {sell_sign}")
+        logger.info(f"   预警文件: {file_path}")
+        logger.info(f"   买入信号: {buy_sign}")
+        logger.info(f"   卖出信号: {sell_sign}")
     else:
-        print("   预警文件: 已禁用")
+        logger.info("   预警文件: 已禁用")
     
     if block_files is not None and isinstance(block_files, dict):
-        print(f"   板块文件模式: 已启用")
+        logger.info(f"   板块文件模式: 已启用")
         for path, op in block_files.items():  # type: ignore
-            print(f"     {op}板块: {path}")
+            logger.info(f"     {op}板块: {path}")
     else:
-        print("   板块文件模式: 已禁用")
+        logger.info("   板块文件模式: 已禁用")
     
-    print(f"   轮询间隔: {interval}秒")
+    logger.info(f"   轮询间隔: {interval}秒")
     
     # 预先初始化交易服务和账户
-    print("🔄 预初始化交易服务...")
+    logger.info("🔄 预初始化交易服务...")
     if not initialize_trade_service():
-        print("❌ 交易服务初始化失败，无法启动交易系统")
+        logger.info("❌ 交易服务初始化失败，无法启动交易系统")
         return
         
-    print("🔄 预添加账户...")
+    logger.info("🔄 预添加账户...")
     if not add_account_to_service(account_id):
-        print("❌ 账户添加失败，无法启动交易系统")
+        logger.info("❌ 账户添加失败，无法启动交易系统")
         return
     
     if TDX_AVAILABLE and tdx_start is not None:
@@ -359,11 +362,11 @@ def start_tdx_trading_with_easyxt():
                 block_files=block_files
             )
         except KeyboardInterrupt:
-            print("\n⏹️  交易系统已停止")
+            logger.info("\n⏹️  交易系统已停止")
         except Exception as e:
-            print(f"❌ 交易系统启动失败: {e}")
+            logger.info(f"❌ 交易系统启动失败: {e}")
     else:
-        print("❌ tdxtrader模块不可用，无法启动交易系统")
+        logger.info("❌ tdxtrader模块不可用，无法启动交易系统")
 
 # 使用示例
 if __name__ == "__main__":

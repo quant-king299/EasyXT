@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 网格交易策略
 
@@ -111,8 +114,8 @@ class GridStrategy(bt.Strategy):
             self.grid_lines.append(grid_price)
             self.grid_positions[grid_price] = 0  # 0表示该网格无持仓
 
-        print(f"[网格初始化] 基准价: {self.base_price:.3f}, 网格数: {self.params.grid_count}")
-        print(f"[网格线] {len(self.grid_lines)}条: {[f'{p:.3f}' for p in self.grid_lines[:5]]}...")
+        logger.info(f"[网格初始化] 基准价: {self.base_price:.3f}, 网格数: {self.params.grid_count}")
+        logger.info(f"[网格线] {len(self.grid_lines)}条: {[f'{p:.3f}' for p in self.grid_lines[:5]]}...")
 
     def _find_grid_index(self, price: float) -> int:
         """
@@ -252,7 +255,7 @@ class GridStrategy(bt.Strategy):
 
         # 只有当变化超过10%时才调整
         if abs(new_base - self.base_price) / self.base_price > 0.10:
-            print(f"[动态调整] 基准价: {self.base_price:.3f} -> {new_base:.3f}")
+            logger.info(f"[动态调整] 基准价: {self.base_price:.3f} -> {new_base:.3f}")
             self.base_price = new_base
 
             # 重新初始化网格
@@ -277,8 +280,8 @@ class GridStrategy(bt.Strategy):
             self.price_high = current_price
             self.price_low = current_price
 
-            print(f"[网格重新初始化] 新范围: {self.grid_lines[0]:.3f} ~ {self.grid_lines[-1]:.3f}")
-            print(f"[动态调整] 当前网格索引: {new_index}, 当前价格: {current_price:.3f}")
+            logger.info(f"[网格重新初始化] 新范围: {self.grid_lines[0]:.3f} ~ {self.grid_lines[-1]:.3f}")
+            logger.info(f"[动态调整] 当前网格索引: {new_index}, 当前价格: {current_price:.3f}")
 
     def notify_order(self, order):
         """订单状态通知"""
@@ -303,13 +306,13 @@ class GridStrategy(bt.Strategy):
         final_value = self.broker.getvalue()
         starting_cash = 100000
         total_return = (final_value - starting_cash) / starting_cash * 100
-        print(f"\n{'='*60}")
-        print(f"回测完成")
-        print(f"初始资金: {starting_cash:,.2f}")
-        print(f"最终资金: {final_value:,.2f}")
-        print(f"总收益率: {total_return:.2f}%")
-        print(f"总交易次数: {len(self.trade_log)}")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"回测完成")
+        logger.info(f"初始资金: {starting_cash:,.2f}")
+        logger.info(f"最终资金: {final_value:,.2f}")
+        logger.info(f"总收益率: {total_return:.2f}%")
+        logger.info(f"总交易次数: {len(self.trade_log)}")
+        logger.info(f"{'='*60}\n")
 
 
 class AdaptiveGridStrategy(bt.Strategy):
@@ -350,8 +353,8 @@ class AdaptiveGridStrategy(bt.Strategy):
                 self.base_price = self.data.close[0]
                 self.last_buy_price = self.base_price
                 self.last_sell_price = self.base_price
-            print(f"[自适应网格初始化] 基准价: {self.base_price:.3f}")
-            print(f"[参数] 买入阈值: {self.params.buy_threshold*100:.2f}%, 卖出阈值: {self.params.sell_threshold*100:.2f}%")
+            logger.info(f"[自适应网格初始化] 基准价: {self.base_price:.3f}")
+            logger.info(f"[参数] 买入阈值: {self.params.buy_threshold*100:.2f}%, 卖出阈值: {self.params.sell_threshold*100:.2f}%")
             return
 
         current_price = self.data.close[0]
@@ -392,7 +395,7 @@ class AdaptiveGridStrategy(bt.Strategy):
                     'size': self.params.position_size,
                     'trigger_price': current_price
                 })
-                print(f"[自适应网格买入] 价格: {current_price:.3f}, 跌幅: {change_from_last_buy*100:.2f}%")
+                logger.info(f"[自适应网格买入] 价格: {current_price:.3f}, 跌幅: {change_from_last_buy*100:.2f}%")
 
         # 卖出逻辑：价格上涨超过卖出阈值 且有持仓
         elif change_from_last_sell > self.params.sell_threshold and current_pos >= self.params.position_size:
@@ -406,7 +409,7 @@ class AdaptiveGridStrategy(bt.Strategy):
                     'size': self.params.position_size,
                     'trigger_price': current_price
                 })
-                print(f"[自适应网格卖出] 价格: {current_price:.3f}, 涨幅: {change_from_last_sell*100:.2f}%")
+                logger.info(f"[自适应网格卖出] 价格: {current_price:.3f}, 涨幅: {change_from_last_sell*100:.2f}%")
 
     def notify_order(self, order):
         """订单状态通知"""
@@ -427,13 +430,13 @@ class AdaptiveGridStrategy(bt.Strategy):
         final_value = self.broker.getvalue()
         starting_cash = 100000
         total_return = (final_value - starting_cash) / starting_cash * 100
-        print(f"\n{'='*60}")
-        print(f"自适应网格策略回测完成")
-        print(f"初始资金: {starting_cash:,.2f}")
-        print(f"最终资金: {final_value:,.2f}")
-        print(f"总收益率: {total_return:.2f}%")
-        print(f"总交易次数: {len(self.trade_log)}")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"自适应网格策略回测完成")
+        logger.info(f"初始资金: {starting_cash:,.2f}")
+        logger.info(f"最终资金: {final_value:,.2f}")
+        logger.info(f"总收益率: {total_return:.2f}%")
+        logger.info(f"总交易次数: {len(self.trade_log)}")
+        logger.info(f"{'='*60}\n")
 
 
 class ATRGridStrategy(bt.Strategy):
@@ -486,8 +489,8 @@ class ATRGridStrategy(bt.Strategy):
                 self.base_price = current_price
             self.last_adjust_date = current_date
             self.last_rebalance_date = current_date
-            print(f"[ATR网格初始化] 基准价: {self.base_price:.3f}")
-            print(f"[参数] ATR周期: {self.params.atr_period}, ATR倍数: {self.params.atr_multiplier}")
+            logger.info(f"[ATR网格初始化] 基准价: {self.base_price:.3f}")
+            logger.info(f"[参数] ATR周期: {self.params.atr_period}, ATR倍数: {self.params.atr_multiplier}")
 
             # 立即创建初始网格线，不要等到20天后
             self._rebalance_grid(current_price)
@@ -539,10 +542,10 @@ class ATRGridStrategy(bt.Strategy):
                 estimated_atr = prices.std() if len(prices) > 0 else self.base_price * 0.01
 
             grid_spacing = estimated_atr * self.params.atr_multiplier
-            print(f"[ATR网格初始化] 使用估算ATR: {estimated_atr:.4f}, 网格间距: {grid_spacing:.4f}")
+            logger.info(f"[ATR网格初始化] 使用估算ATR: {estimated_atr:.4f}, 网格间距: {grid_spacing:.4f}")
         else:
             grid_spacing = self.current_atr * self.params.atr_multiplier
-            print(f"[ATR网格重新平衡] ATR: {self.current_atr:.4f}, 网格间距: {grid_spacing:.4f}")
+            logger.info(f"[ATR网格重新平衡] ATR: {self.current_atr:.4f}, 网格间距: {grid_spacing:.4f}")
 
         # 创建网格线（以基准价为中心，上下各10格）
         self.grid_lines = []
@@ -554,7 +557,7 @@ class ATRGridStrategy(bt.Strategy):
                 self.grid_lines.append(grid_price)
 
         self.grid_lines.sort()
-        print(f"[网格线] {len(self.grid_lines)}条: {[f'{p:.3f}' for p in self.grid_lines[:5]]}...")
+        logger.info(f"[网格线] {len(self.grid_lines)}条: {[f'{p:.3f}' for p in self.grid_lines[:5]]}...")
 
     def _check_grid_triggers(self, current_price: float, current_date):
         """
@@ -655,7 +658,7 @@ class ATRGridStrategy(bt.Strategy):
         diff = current_price - self.base_price
         if abs(diff) / self.base_price > 0.05:  # 变化超过5%才调整
             new_base = self.base_price + diff * 0.1
-            print(f"[ATR动态调整] 基准价: {self.base_price:.3f} -> {new_base:.3f}")
+            logger.info(f"[ATR动态调整] 基准价: {self.base_price:.3f} -> {new_base:.3f}")
             self.base_price = new_base
             self._rebalance_grid(current_price)
 
@@ -678,10 +681,10 @@ class ATRGridStrategy(bt.Strategy):
         final_value = self.broker.getvalue()
         starting_cash = 100000
         total_return = (final_value - starting_cash) / starting_cash * 100
-        print(f"\n{'='*60}")
-        print(f"ATR动态网格策略回测完成")
-        print(f"初始资金: {starting_cash:,.2f}")
-        print(f"最终资金: {final_value:,.2f}")
-        print(f"总收益率: {total_return:.2f}%")
-        print(f"总交易次数: {len(self.trade_log)}")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"ATR动态网格策略回测完成")
+        logger.info(f"初始资金: {starting_cash:,.2f}")
+        logger.info(f"最终资金: {final_value:,.2f}")
+        logger.info(f"总收益率: {total_return:.2f}%")
+        logger.info(f"总交易次数: {len(self.trade_log)}")
+        logger.info(f"{'='*60}\n")

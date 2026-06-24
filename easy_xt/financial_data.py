@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 财务数据集成模块 - 使用akshare
 
@@ -20,7 +23,7 @@ class FinancialDataClient:
             self.available = True
         except ImportError:
             self.available = False
-            print("[WARNING] 未安装akshare，请运行: pip install akshare")
+            logger.warning("[WARNING] 未安装akshare，请运行: pip install akshare")
 
     def get_stock_info(self, symbol: str) -> Dict:
         """
@@ -241,7 +244,7 @@ def get_combined_data(
                 financial = client.get_key_ratios(ak_code)
                 result['financial_data'][tdx_code] = financial
             except Exception as e:
-                print(f"获取{tdx_code}财务数据失败: {e}")
+                logger.info(f"获取{tdx_code}财务数据失败: {e}")
                 result['financial_data'][tdx_code] = {}
 
     return result
@@ -265,53 +268,53 @@ def get_stock_financial_quick(tdx_code: str) -> Dict:
 
 if __name__ == "__main__":
     """测试代码"""
-    print("="*70)
-    print("  测试财务数据集成模块")
-    print("="*70)
+    logger.info("="*70)
+    logger.info("  测试财务数据集成模块")
+    logger.info("="*70)
 
     # 测试1: 获取个股信息
-    print("\n[测试1] 获取个股基本信息...")
+    logger.info("\n[测试1] 获取个股基本信息...")
     try:
         client = FinancialDataClient()
 
         info = client.get_stock_info('000001')
-        print("[OK] 成功!")
-        print(f"  股票名称: {info.get('股票名称')}")
-        print(f"  总股本: {info.get('总股本')}")
-        print(f"  流通股: {info.get('流通股')}")
-        print(f"  总市值: {info.get('总市值')}")
+        logger.info("[OK] 成功!")
+        logger.info(f"  股票名称: {info.get('股票名称')}")
+        logger.info(f"  总股本: {info.get('总股本')}")
+        logger.info(f"  流通股: {info.get('流通股')}")
+        logger.info(f"  总市值: {info.get('总市值')}")
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试2: 获取财务指标
-    print("\n[测试2] 获取财务指标...")
+    logger.info("\n[测试2] 获取财务指标...")
     try:
         df = client.get_financial_indicator('000001')
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  数据形状: {df.shape}")
-            print(f"\n  最新财务指标:")
-            print(df.tail(3).to_string(max_cols=10))
+            logger.info("[OK] 成功!")
+            logger.info(f"  数据形状: {df.shape}")
+            logger.info(f"\n  最新财务指标:")
+            logger.info(df.tail(3).to_string(max_cols=10))
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试3: 获取关键指标
-    print("\n[测试3] 获取关键财务指标...")
+    logger.info("\n[测试3] 获取关键财务指标...")
     try:
         ratios = client.get_key_ratios('000001')
-        print("[OK] 成功!")
+        logger.info("[OK] 成功!")
         for key, value in ratios.items():
-            print(f"  {key}: {value}")
+            logger.info(f"  {key}: {value}")
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试4: 综合数据
-    print("\n[测试4] 获取综合数据（行情+财务）...")
+    logger.info("\n[测试4] 获取综合数据（行情+财务）...")
     try:
         data = get_combined_data(
             tdx_codes=['000001.SZ', '600519.SH'],
@@ -319,17 +322,17 @@ if __name__ == "__main__":
             include_financial=True
         )
 
-        print("[OK] 成功!")
-        print(f"  行情数据形状: {data['market_data'].shape}")
-        print(f"  财务数据:")
+        logger.info("[OK] 成功!")
+        logger.info(f"  行情数据形状: {data['market_data'].shape}")
+        logger.info(f"  财务数据:")
         for code, financial in data['financial_data'].items():
-            print(f"    {code}: {len(financial)} 个指标")
+            logger.info(f"    {code}: {len(financial)} 个指标")
 
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
         import traceback
         traceback.print_exc()
 
-    print("\n" + "="*70)
-    print("  测试完成!")
-    print("="*70)
+    logger.info("\n" + "="*70)
+    logger.info("  测试完成!")
+    logger.info("="*70)

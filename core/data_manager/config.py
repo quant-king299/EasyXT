@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 配置管理模块
 
@@ -155,11 +158,11 @@ class DataManagerConfig:
             abs_path = os.path.abspath(expanded_path)
 
             if os.path.exists(abs_path):
-                print(f"[Config] 自动检测到DuckDB数据库: {abs_path}")
+                logger.info(f"[Config] 自动检测到DuckDB数据库: {abs_path}")
                 return abs_path
 
         # 未找到已有文件，返回项目目录路径（首次会自动创建）
-        print(f"[Config] 使用默认路径: {project_db}")
+        logger.info(f"[Config] 使用默认路径: {project_db}")
         return str(project_db)
 
     def _detect_available_sources(self) -> List[str]:
@@ -255,7 +258,7 @@ class DataManagerConfig:
 
         if not available:
             # 如果什么都检测不到，使用默认降级方案
-            print("[Config] 未检测到任何数据源，使用默认降级方案: QMT -> Tushare")
+            logger.info("[Config] 未检测到任何数据源，使用默认降级方案: QMT -> Tushare")
             return ['qmt', 'tushare']
 
         # 根据是否为新手模式调整优先级
@@ -274,7 +277,7 @@ class DataManagerConfig:
             # DuckDB（本地最快） > QMT（本地） > Tushare（在线）
             preferred = available
 
-        print(f"[Config] 自动检测到的可用数据源: {preferred}")
+        logger.info(f"[Config] 自动检测到的可用数据源: {preferred}")
         return preferred
 
     def is_cache_enabled(self) -> bool:
@@ -312,9 +315,9 @@ class DataManagerConfig:
                 if config_path.suffix == '.json':
                     json.dump(self.config, f, indent=2, ensure_ascii=False)
 
-            print(f"[Config] 配置已保存到: {config_file}")
+            logger.info(f"[Config] 配置已保存到: {config_file}")
         except Exception as e:
-            print(f"[Config] 保存配置文件失败: {e}")
+            logger.info(f"[Config] 保存配置文件失败: {e}")
 
     def __repr__(self) -> str:
         """字符串表示"""

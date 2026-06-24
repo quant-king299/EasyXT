@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 多策略管理 GUI 组件
 ==================
@@ -176,7 +179,7 @@ class ProcessManager:
             self.write_pid_file(name, proc.pid, run_mode, schedule_type)
             return proc
         except Exception as e:
-            print(f"启动调度器失败 ({name}): {e}")
+            logger.info(f"启动调度器失败 ({name}): {e}")
             return None
 
     def _start_one_shot(self, name: str, run_mode: str) -> Optional[subprocess.Popen]:
@@ -185,7 +188,7 @@ class ProcessManager:
         script = strategy_dir / f"run_{name}.py"
 
         if not script.exists():
-            print(f"策略脚本不存在: {script}")
+            logger.info(f"策略脚本不存在: {script}")
             return None
 
         cmd = [sys.executable, str(script)]
@@ -211,7 +214,7 @@ class ProcessManager:
             self.write_pid_file(name, proc.pid, run_mode, "once")
             return proc
         except Exception as e:
-            print(f"启动策略失败 ({name}): {e}")
+            logger.info(f"启动策略失败 ({name}): {e}")
             return None
 
     def stop(self, name: str) -> bool:

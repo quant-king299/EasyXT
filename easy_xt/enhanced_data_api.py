@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 增强数据API - 统一数据接口
 
@@ -31,8 +34,8 @@ class EnhancedDataAPI:
         self.money_flow = MoneyFlowAnalyzer()
         self.dragon_tiger = DragonTigerData()
 
-        print("[OK] EnhancedDataAPI 初始化成功")
-        print("[INFO] 可用模块: factor_library, sector_data, money_flow, dragon_tiger")
+        logger.info("[OK] EnhancedDataAPI 初始化成功")
+        logger.info("[INFO] 可用模块: factor_library, sector_data, money_flow, dragon_tiger")
 
     # ============================================================
     # 因子数据接口
@@ -400,9 +403,9 @@ def get_api() -> EnhancedDataAPI:
 
 if __name__ == "__main__":
     """测试代码"""
-    print("=" * 70)
-    print("  增强数据API测试")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("  增强数据API测试")
+    logger.info("=" * 70)
 
     # 创建API实例
     api = EnhancedDataAPI()
@@ -411,45 +414,45 @@ if __name__ == "__main__":
     test_codes = ['000001.SZ', '600000.SH']
 
     # 测试1: 获取因子
-    print("\n[测试1] 获取多因子数据...")
+    logger.info("\n[测试1] 获取多因子数据...")
     try:
         factors = api.get_factors(test_codes, ['value', 'momentum'])
         if not factors.empty:
-            print("[OK] 成功!")
-            print(factors.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(factors.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试2: 获取板块涨幅榜
-    print("\n[测试2] 获取板块涨幅榜...")
+    logger.info("\n[测试2] 获取板块涨幅榜...")
     try:
         sectors = api.get_top_sectors('industry', top_n=5)
         if not sectors.empty:
-            print("[OK] 成功!")
-            print(sectors.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(sectors.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试3: 快速分析
-    print("\n[测试3] 快速分析股票...")
+    logger.info("\n[测试3] 快速分析股票...")
     try:
         analysis = api.quick_analysis('000001.SZ')
-        print("[OK] 成功!")
+        logger.info("[OK] 成功!")
         for key, value in analysis.items():
             if key not in ['stock_code', 'update_time']:
-                print(f"\n  {key}:")
+                logger.info(f"\n  {key}:")
                 if isinstance(value, dict):
                     for k, v in value.items():
-                        print(f"    {k}: {v}")
+                        logger.info(f"    {k}: {v}")
                 else:
-                    print(f"    {value}")
+                    logger.info(f"    {value}")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
-    print("\n" + "=" * 70)
-    print("  测试完成!")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("  测试完成!")
+    logger.info("=" * 70)

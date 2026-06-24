@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 高级数据查看器组件
 符合现有GUI的浅色主题风格
@@ -440,8 +443,8 @@ class AdvancedDataViewerWidget(QWidget):
         except Exception as e:
             # 只在调试时显示详细错误，给用户显示友好提示
             import traceback
-            print(f"加载股票列表失败: {e}")
-            print(traceback.format_exc())
+            logger.info(f"加载股票列表失败: {e}")
+            logger.info(traceback.format_exc())
 
             # 检查是否是数据库不存在的问题
             if "Cannot open file" in str(e) or "系统找不到指定的路径" in str(e):

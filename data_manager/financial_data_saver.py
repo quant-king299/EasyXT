@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 财务数据保存到DuckDB模块
 将QMT的财务数据保存到本地DuckDB数据库
@@ -40,13 +43,13 @@ class FinancialDataSaver:
                     desc_result = self.db_manager.execute_read_query(f"DESCRIBE {table}")
                     # 如果列数小于预期，删除旧表
                     if len(desc_result) < 15:  # 至少应该有15列
-                        print(f"[DEBUG] 检测到旧版本的 {table} 表（{len(desc_result)}列），删除重建...")
+                        logger.debug(f"[DEBUG] 检测到旧版本的 {table} 表（{len(desc_result)}列），删除重建...")
                         self.db_manager.execute_write_query(f"DROP TABLE IF EXISTS {table}")
                 except Exception:
                     # 表不存在或无法访问，忽略
                     pass
         except Exception as e:
-            print(f"[DEBUG] 检查表结构时出错: {e}")
+            logger.debug(f"[DEBUG] 检查表结构时出错: {e}")
 
         # 创建利润表数据表
         self.db_manager.execute_write_query("""
@@ -150,18 +153,18 @@ class FinancialDataSaver:
 
         try:
             # 确保传入的是DataFrame类型（防御性编程）
-            print(f"[DEBUG {stock_code}] income_df type: {type(income_df)}, isinstance DataFrame: {isinstance(income_df, pd.DataFrame)}")
-            print(f"[DEBUG {stock_code}] balance_df type: {type(balance_df)}, isinstance DataFrame: {isinstance(balance_df, pd.DataFrame)}")
-            print(f"[DEBUG {stock_code}] cashflow_df type: {type(cashflow_df)}, isinstance DataFrame: {isinstance(cashflow_df, pd.DataFrame)}")
+            logger.info(f"[DEBUG {stock_code}] income_df type: {type(income_df)}, isinstance DataFrame: {isinstance(income_df, pd.DataFrame)}")
+            logger.info(f"[DEBUG {stock_code}] balance_df type: {type(balance_df)}, isinstance DataFrame: {isinstance(balance_df, pd.DataFrame)}")
+            logger.info(f"[DEBUG {stock_code}] cashflow_df type: {type(cashflow_df)}, isinstance DataFrame: {isinstance(cashflow_df, pd.DataFrame)}")
 
             if income_df is not None and not isinstance(income_df, pd.DataFrame):
-                print(f"[DEBUG {stock_code}] income_df类型错误: {type(income_df)}, 值: {repr(income_df)[:200]}")
+                logger.info(f"[DEBUG {stock_code}] income_df类型错误: {type(income_df)}, 值: {repr(income_df)[:200]}")
                 income_df = pd.DataFrame()
             if balance_df is not None and not isinstance(balance_df, pd.DataFrame):
-                print(f"[DEBUG {stock_code}] balance_df类型错误: {type(balance_df)}, 值: {repr(balance_df)[:200]}")
+                logger.info(f"[DEBUG {stock_code}] balance_df类型错误: {type(balance_df)}, 值: {repr(balance_df)[:200]}")
                 balance_df = pd.DataFrame()
             if cashflow_df is not None and not isinstance(cashflow_df, pd.DataFrame):
-                print(f"[DEBUG {stock_code}] cashflow_df类型错误: {type(cashflow_df)}, 值: {repr(cashflow_df)[:200]}")
+                logger.info(f"[DEBUG {stock_code}] cashflow_df类型错误: {type(cashflow_df)}, 值: {repr(cashflow_df)[:200]}")
                 cashflow_df = pd.DataFrame()
 
             # 保存利润表数据
@@ -193,7 +196,7 @@ class FinancialDataSaver:
         except Exception as e:
             import traceback
             error_detail = traceback.format_exc()
-            print(f"[ERROR {stock_code}] 保存财务数据失败: {str(e)}\n{error_detail}")
+            logger.info(f"[ERROR {stock_code}] 保存财务数据失败: {str(e)}\n{error_detail}")
             result['error'] = str(e)
 
         return result
@@ -379,7 +382,7 @@ class FinancialDataSaver:
 
         # 最后的fallback：取前10个字符
         result = str(timetag)[:10]
-        print(f"[DEBUG] _format_timetag fallback: timetag={timetag}, result={result}")
+        logger.debug(f"[DEBUG] _format_timetag fallback: timetag={timetag}, result={result}")
         return result
 
     def _save_to_table(self, table_name: str, df: pd.DataFrame):
@@ -455,7 +458,7 @@ class FinancialDataSaver:
             result['cashflow'] = self.db_manager.execute_read_query(cashflow_query)
 
         except Exception as e:
-            print(f"Error loading financial data: {e}")
+            logger.info(f"Error loading financial data: {e}")
 
         return result
 
@@ -485,5 +488,5 @@ class FinancialDataSaver:
         try:
             return self.db_manager.execute_read_query(query)
         except Exception as e:
-            print(f"Error getting financial summary: {e}")
+            logger.info(f"Error getting financial summary: {e}")
             return pd.DataFrame()

@@ -5,6 +5,10 @@ from qka.utils import timestamp_to_datetime_string, parse_order_type, convert_to
 from qka.anis import RED, GREEN, YELLOW, BLUE, RESET
 from qka.logger import logger
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 error_orders = []
 
 class MyXtQuantTraderCallback(XtQuantTraderCallback):
@@ -13,7 +17,7 @@ class MyXtQuantTraderCallback(XtQuantTraderCallback):
         连接状态回调
         :return:
         """
-        print("connection lost")
+        logger.info("connection lost")
     def on_stock_order(self, order):
         """
         委托信息推送

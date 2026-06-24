@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 雪球数据采集器
 负责从雪球网站采集组合持仓和调仓信息
@@ -345,9 +348,9 @@ async def main():
         holdings = await collector.get_portfolio_holdings(portfolio_code)
         
         if holdings:
-            print(f"组合 {portfolio_code} 当前持仓:")
+            logger.info(f"组合 {portfolio_code} 当前持仓:")
             for holding in holdings:
-                print(f"  {holding['symbol']} {holding['name']}: {holding['target_weight']:.2%}")
+                logger.info(f"  {holding['symbol']} {holding['name']}: {holding['target_weight']:.2%}")
         
     finally:
         await collector.close()

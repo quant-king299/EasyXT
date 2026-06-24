@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 多级数据源降级获取器
 ====================
@@ -325,7 +328,7 @@ class FallbackFetcher:
             end='20240601',
             period='1d'
         )
-        print(f"数据来源: {df['source'].iloc[0]}")
+        logger.info(f"数据来源: {df['source'].iloc[0]}")
     """
 
     def __init__(self,

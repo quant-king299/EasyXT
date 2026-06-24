@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 批量技术因子计算器（优化版）
 
@@ -48,11 +51,11 @@ class BatchTechnicalFactor(BaseFactor):
             elif factor_field == 'volatility':
                 return self._calculate_volatility_batch(stock_pool, date, params)
             else:
-                print(f"不支持的因子: {factor_field}")
+                logger.info(f"不支持的因子: {factor_field}")
                 return pd.Series(index=stock_pool, dtype=float)
 
         except Exception as e:
-            print(f"批量计算因子失败: {e}")
+            logger.info(f"批量计算因子失败: {e}")
             import traceback
             traceback.print_exc()
             return pd.Series(index=stock_pool, dtype=float)
@@ -116,7 +119,7 @@ class BatchTechnicalFactor(BaseFactor):
                 return pd.Series(index=stock_pool, dtype=float)
 
         except Exception as e:
-            print(f"批量计算动量失败: {e}")
+            logger.info(f"批量计算动量失败: {e}")
             return pd.Series(index=stock_pool, dtype=float)
 
     def _calculate_ma_batch(self, stock_pool: List[str], date: str, params: dict) -> pd.Series:
@@ -160,5 +163,5 @@ class BatchTechnicalFactor(BaseFactor):
                 return pd.Series(index=stock_pool, dtype=float)
 
         except Exception as e:
-            print(f"批量计算MA失败: {e}")
+            logger.info(f"批量计算MA失败: {e}")
             return pd.Series(index=stock_pool, dtype=float)

@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 10年回测进度监控
 """
@@ -8,13 +11,13 @@ from pathlib import Path
 
 log_file = Path(__file__).parent.parent / "output" / "10year_backtest.log"
 
-print("\n" + "="*70)
-print("10年回测进度监控")
-print("="*70)
+logger.info("\n" + "="*70)
+logger.info("10年回测进度监控")
+logger.info("="*70)
 
-print("\n正在运行...")
-print(f"日志文件: {log_file}")
-print("\n按 Ctrl+C 停止监控\n")
+logger.info("\n正在运行...")
+logger.info(f"日志文件: {log_file}")
+logger.info("\n按 Ctrl+C 停止监控\n")
 
 try:
     last_size = 0
@@ -37,7 +40,7 @@ try:
                             '[步骤', '======', '总交易次数',
                             '最终资金', '✓'
                         ]):
-                            print(line.strip())
+                            logger.info(line.strip())
 
                         # 保存最近20行用于查找错误
                         last_lines.append(line)
@@ -49,9 +52,9 @@ try:
         time.sleep(2)  # 每2秒检查一次
 
 except KeyboardInterrupt:
-    print("\n\n监控已停止")
-    print("\n最后20行日志:")
-    print("-"*70)
+    logger.info("\n\n监控已停止")
+    logger.info("\n最后20行日志:")
+    logger.info("-"*70)
     for line in last_lines[-20:]:
-        print(line.rstrip())
-    print("="*70)
+        logger.info(line.rstrip())
+    logger.info("="*70)

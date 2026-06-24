@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 雪球跟单系统 - 真实交易版 (使用 easy_xt)
 使用 easy_xt 封装的交易API，解决所有兼容性问题
@@ -37,11 +40,11 @@ def setup_logging():
 
 def print_banner():
     """显示启动横幅"""
-    print("=" * 80)
-    print("🚀 雪球跟单系统 - 真实交易版 (EasyXT)")
-    print("⚠️  警告：此版本会执行真实交易操作！")
-    print("=" * 80)
-    print(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.info("=" * 80)
+    logger.info("🚀 雪球跟单系统 - 真实交易版 (EasyXT)")
+    logger.info("⚠️  警告：此版本会执行真实交易操作！")
+    logger.info("=" * 80)
+    logger.info(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     try:
         from .internal.config_manager import ConfigManager as _Cfg
         _cfg = _Cfg()
@@ -52,43 +55,43 @@ def print_banner():
     except Exception:
         combo_str = '未配置'
         account_id = '未配置'
-    print(f"📊 跟单组合: {combo_str}")
-    print(f"🏦 交易账号: {account_id}")
-    print(f"💰 交易模式: 真实交易模式")
-    print(f"🔧 交易接口: EasyXT (高级封装)")
-    print("=" * 80)
+    logger.info(f"📊 跟单组合: {combo_str}")
+    logger.info(f"🏦 交易账号: {account_id}")
+    logger.info(f"💰 交易模式: 真实交易模式")
+    logger.info(f"🔧 交易接口: EasyXT (高级封装)")
+    logger.info("=" * 80)
 
 def safety_confirmation():
     """安全确认流程"""
-    print("\n⚠️" + "⚠️" * 19)
-    print("重要安全提醒")
-    print("⚠️" + "⚠️" * 19)
-    print("此版本将执行真实交易操作！")
-    print("- 会使用您的真实资金进行买卖")
-    print("- 存在盈亏风险")
-    print("- 请确保您了解相关风险")
-    print("- 建议先在模拟环境中测试")
-    print("⚠️" + "⚠️" * 19)
+    logger.info("\n⚠️" + "⚠️" * 19)
+    logger.info("重要安全提醒")
+    logger.info("⚠️" + "⚠️" * 19)
+    logger.info("此版本将执行真实交易操作！")
+    logger.info("- 会使用您的真实资金进行买卖")
+    logger.info("- 存在盈亏风险")
+    logger.info("- 请确保您了解相关风险")
+    logger.info("- 建议先在模拟环境中测试")
+    logger.info("⚠️" + "⚠️" * 19)
     
     # 第一重确认
     confirm1 = input("\n🔐 第一重确认 - 输入 'YES' 确认启动真实交易: ").strip()
     if confirm1 != "YES":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
     # 第二重确认
     confirm2 = input("🔐 第二重确认 - 输入 'CONFIRM' 再次确认: ").strip()
     if confirm2 != "CONFIRM":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
     # 第三重确认
     confirm3 = input("🔐 第三重确认 - 输入 'ENABLE' 最终确认: ").strip()
     if confirm3 != "ENABLE":
-        print("❌ 用户取消启动")
+        logger.info("❌ 用户取消启动")
         return False
     
-    print("✅ 安全确认完成")
+    logger.info("✅ 安全确认完成")
     return True
 
 def load_config():
@@ -111,16 +114,16 @@ def load_config():
         
         config['settings']['trading']['trade_mode'] = 'real'
         
-        print("✅ 真实交易配置加载成功")
+        logger.info("✅ 真实交易配置加载成功")
         return config
     except Exception as e:
-        print(f"❌ 真实交易配置加载失败: {e}")
+        logger.info(f"❌ 真实交易配置加载失败: {e}")
         return None
 
 def test_easyxt_connection(config):
     """测试 easy_xt 连接"""
     try:
-        print("\n🔧 初始化 EasyXT 交易API...")
+        logger.info("\n🔧 初始化 EasyXT 交易API...")
         
         # 导入 easy_xt
         from easy_xt.advanced_trade_api import AdvancedTradeAPI
@@ -129,58 +132,58 @@ def test_easyxt_connection(config):
         qmt_path = config['settings']['account']['qmt_path']
         account_id = config['settings']['account']['account_id']
         
-        print(f"📁 QMT路径: {qmt_path}")
-        print(f"🏦 交易账号: {account_id}")
+        logger.info(f"📁 QMT路径: {qmt_path}")
+        logger.info(f"🏦 交易账号: {account_id}")
         
         # 创建高级交易API
         session_id = f"xueqiu_real_{int(time.time())}"
         api = AdvancedTradeAPI()
         
         # 连接交易服务
-        print("🚀 连接交易服务...")
+        logger.info("🚀 连接交易服务...")
         result = api.connect(qmt_path, session_id)
         
         if not result:
-            print("❌ EasyXT 连接失败")
+            logger.info("❌ EasyXT 连接失败")
             return False
         
-        print("✅ EasyXT 连接成功")
+        logger.info("✅ EasyXT 连接成功")
         
         # 添加账户
-        print("📡 添加交易账户...")
+        logger.info("📡 添加交易账户...")
         account_result = api.add_account(account_id)
         
         if not account_result:
-            print("❌ 添加账户失败")
+            logger.info("❌ 添加账户失败")
             api.disconnect()
             return False
         
-        print("✅ 账户添加成功")
+        logger.info("✅ 账户添加成功")
         
         # 测试账户查询
         try:
-            print("💰 查询账户资产...")
+            logger.info("💰 查询账户资产...")
             asset_info = api.get_account_asset_detailed(account_id)
             if asset_info:
-                print("✅ 账户查询成功")
+                logger.info("✅ 账户查询成功")
                 total_asset = getattr(asset_info, 'total_asset', 0)
                 cash = getattr(asset_info, 'cash', 0)
-                print(f"💰 总资产: {total_asset:.2f}")
-                print(f"💵 可用资金: {cash:.2f}")
+                logger.info(f"💰 总资产: {total_asset:.2f}")
+                logger.info(f"💵 可用资金: {cash:.2f}")
             else:
-                print("⚠️ 账户查询返回空数据")
+                logger.info("⚠️ 账户查询返回空数据")
         except Exception as e:
-            print(f"⚠️ 账户查询失败: {e}")
+            logger.info(f"⚠️ 账户查询失败: {e}")
         
         # 断开连接
         api.disconnect()
         return True
         
     except ImportError as e:
-        print(f"❌ EasyXT 模块导入失败: {e}")
+        logger.info(f"❌ EasyXT 模块导入失败: {e}")
         return False
     except Exception as e:
-        print(f"❌ EasyXT 连接测试失败: {e}")
+        logger.info(f"❌ EasyXT 连接测试失败: {e}")
         return False
 
 class XueqiuRealTrader:
@@ -301,31 +304,31 @@ async def main():
             return
         
         # 显示配置信息
-        print("\n📋 真实交易配置:")
-        print(f"   🏦 交易账号: {config['settings']['account']['account_id']}")
-        print(f"   📁 QMT路径: {config['settings']['account']['qmt_path']}")
+        logger.info("\n📋 真实交易配置:")
+        logger.info(f"   🏦 交易账号: {config['settings']['account']['account_id']}")
+        logger.info(f"   📁 QMT路径: {config['settings']['account']['qmt_path']}")
         
         if 'portfolios' in config and 'ZH2863835' in config['portfolios']:
             portfolio = config['portfolios']['ZH2863835']
-            print(f"   💰 跟单比例: {portfolio['follow_ratio']*100}%")
-            print(f"   💵 最大仓位: {portfolio['max_position']}元")
+            logger.info(f"   💰 跟单比例: {portfolio['follow_ratio']*100}%")
+            logger.info(f"   💵 最大仓位: {portfolio['max_position']}元")
         
         if 'trading' in config['settings']:
             trading = config['settings']['trading']
-            print(f"   💸 最大单笔: {trading.get('max_single_amount', 5000)}元")
-            print(f"   💰 最小交易: {trading.get('min_trade_amount', 100)}元")
+            logger.info(f"   💸 最大单笔: {trading.get('max_single_amount', 5000)}元")
+            logger.info(f"   💰 最小交易: {trading.get('min_trade_amount', 100)}元")
         
-        print(f"   🌐 组合URL: https://xueqiu.com/P/ZH2863835")
+        logger.info(f"   🌐 组合URL: https://xueqiu.com/P/ZH2863835")
         
         # 最终确认
         final_confirm = input("\n🔐 最终确认 - 输入 'START' 开始交易: ").strip()
         if final_confirm != "START":
-            print("❌ 用户取消启动")
+            logger.info("❌ 用户取消启动")
             return
         
         # 测试 EasyXT 连接
         if not test_easyxt_connection(config):
-            print("❌ EasyXT 连接测试失败，无法启动真实交易")
+            logger.info("❌ EasyXT 连接测试失败，无法启动真实交易")
             return
         
         # 创建交易器
@@ -333,12 +336,12 @@ async def main():
         
         # 初始化交易器
         if not await trader.initialize():
-            print("❌ 交易器初始化失败")
+            logger.info("❌ 交易器初始化失败")
             return
         
-        print("\n🎉 真实交易系统启动成功！")
-        print("📊 系统正在运行，监控雪球组合变化...")
-        print("⚠️ 按 Ctrl+C 可以安全停止系统")
+        logger.info("\n🎉 真实交易系统启动成功！")
+        logger.info("📊 系统正在运行，监控雪球组合变化...")
+        logger.info("⚠️ 按 Ctrl+C 可以安全停止系统")
         
         # 主循环
         order_count = 0
@@ -350,22 +353,22 @@ async def main():
             while True:
                 # 显示实时状态
                 current_time = datetime.now().strftime("%H:%M:%S")
-                print(f"\r📊 [{current_time}] 实时状态: 📈总订单:{order_count} ✅成功:{success_count} ❌失败:{failed_count} 🔄活跃:0 💰总额:{total_amount:.2f}", end="")
+                logger.info(f"\r📊 [{current_time}] 实时状态: 📈总订单:{order_count} ✅成功:{success_count} ❌失败:{failed_count} 🔄活跃:0 💰总额:{total_amount:.2f}", end="")
                 
                 # 这里添加实际的雪球监控和交易逻辑
                 await asyncio.sleep(5)  # 每5秒检查一次
                 
         except KeyboardInterrupt:
-            print(f"\n\n⚠️ 收到停止信号，正在安全关闭系统...")
+            logger.info(f"\n\n⚠️ 收到停止信号，正在安全关闭系统...")
             
         finally:
             # 清理资源
             trader.cleanup()
-            print("👋 系统已安全关闭")
+            logger.info("👋 系统已安全关闭")
     
     except Exception as e:
         logger.error(f"系统运行异常: {e}")
-        print(f"❌ 系统异常: {e}")
+        logger.info(f"❌ 系统异常: {e}")
 
 if __name__ == "__main__":
     asyncio.run(main())

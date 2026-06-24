@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 安全数据更新工具
 可以在GUI运行时安全更新数据
@@ -78,19 +81,19 @@ class SafeDataUpdater:
         Returns:
             bool: 是否成功释放
         """
-        print(f"等待数据库锁释放...（最多 {timeout} 秒）")
+        logger.info(f"等待数据库锁释放...（最多 {timeout} 秒）")
 
         start_time = time.time()
         while time.time() - start_time < timeout:
             if not self.check_database_lock():
-                print("[OK] 数据库锁已释放")
+                logger.info("[OK] 数据库锁已释放")
                 return True
 
             elapsed = int(time.time() - start_time)
-            print(f"  等待中... {elapsed}/{timeout} 秒", end='\r')
+            logger.info(f"  等待中... {elapsed}/{timeout} 秒", end='\r')
             time.sleep(2)
 
-        print("\n[ERROR] 等待超时")
+        logger.error("\n[ERROR] 等待超时")
         return False
 
     def safe_update(self, update_func, *args, **kwargs):
@@ -105,49 +108,49 @@ class SafeDataUpdater:
         Returns:
             更新结果
         """
-        print("=" * 80)
-        print("安全数据更新")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("安全数据更新")
+        logger.info("=" * 80)
 
         # 1. 检查GUI进程
-        print("\n[1] 检查GUI进程...")
+        logger.info("\n[1] 检查GUI进程...")
         gui_procs = self.find_gui_processes()
 
         if gui_procs:
-            print(f"发现 {len(gui_procs)} 个GUI进程正在运行:")
+            logger.info(f"发现 {len(gui_procs)} 个GUI进程正在运行:")
             for proc in gui_procs:
-                print(f"  PID {proc['pid']}: {proc['cmdline'][:80]}")
+                logger.info(f"  PID {proc['pid']}: {proc['cmdline'][:80]}")
 
-            print("\n建议操作:")
-            print("  1. 关闭GUI窗口")
-            print("  2. 或者等待此工具自动检测锁释放")
+            logger.info("\n建议操作:")
+            logger.info("  1. 关闭GUI窗口")
+            logger.info("  2. 或者等待此工具自动检测锁释放")
 
             response = input("\n是否继续？(y/n): ").strip().lower()
             if response != 'y':
-                print("已取消更新")
+                logger.info("已取消更新")
                 return None
         else:
-            print("[OK] 未发现GUI进程")
+            logger.info("[OK] 未发现GUI进程")
 
         # 2. 检查数据库锁
-        print("\n[2] 检查数据库锁...")
+        logger.info("\n[2] 检查数据库锁...")
         if self.check_database_lock():
-            print("数据库已被锁定")
+            logger.info("数据库已被锁定")
             if not self.wait_for_lock_release(timeout=60):
-                print("\n无法获取数据库访问权限")
-                print("请手动关闭所有GUI程序后重试")
+                logger.info("\n无法获取数据库访问权限")
+                logger.info("请手动关闭所有GUI程序后重试")
                 return None
         else:
-            print("[OK] 数据库未被锁定")
+            logger.info("[OK] 数据库未被锁定")
 
         # 3. 执行更新
-        print("\n[3] 执行更新...")
+        logger.info("\n[3] 执行更新...")
         try:
             result = update_func(*args, **kwargs)
-            print("\n[OK] 更新成功")
+            logger.info("\n[OK] 更新成功")
             return result
         except Exception as e:
-            print(f"\n[ERROR] 更新失败: {e}")
+            logger.error(f"\n[ERROR] 更新失败: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -159,7 +162,7 @@ def fill_adjustment_batch():
     manager = get_db_manager()
 
     # 检查当前状态
-    print("检查当前状态...")
+    logger.info("检查当前状态...")
     stats = manager.execute_read_query("""
         SELECT
             COUNT(DISTINCT stock_code) as stock_count,
@@ -169,16 +172,16 @@ def fill_adjustment_batch():
         WHERE 1=1
     """)
 
-    print(f"股票数量: {stats['stock_count'].iloc[0]:,}")
-    print(f"总记录数: {stats['total_rows'].iloc[0]:,}")
-    print(f"已有复权数据: {stats['has_front_data'].iloc[0]:,}")
+    logger.info(f"股票数量: {stats['stock_count'].iloc[0]:,}")
+    logger.info(f"总记录数: {stats['total_rows'].iloc[0]:,}")
+    logger.info(f"已有复权数据: {stats['has_front_data'].iloc[0]:,}")
 
     if stats['has_front_data'].iloc[0] > 0:
-        print("\n已有部分复权数据，跳过更新")
+        logger.info("\n已有部分复权数据，跳过更新")
         return {'success': True, 'message': '已有数据，跳过'}
 
     # 批量更新
-    print("\n开始批量更新...")
+    logger.info("\n开始批量更新...")
     import time
     start_time = time.time()
 
@@ -209,9 +212,9 @@ def fill_adjustment_batch():
         affected_rows = result.rowcount
         elapsed = time.time() - start_time
 
-        print(f"\n[OK] 更新完成！")
-        print(f"更新记录数: {affected_rows:,}")
-        print(f"耗时: {elapsed:.1f} 秒")
+        logger.info(f"\n[OK] 更新完成！")
+        logger.info(f"更新记录数: {affected_rows:,}")
+        logger.info(f"耗时: {elapsed:.1f} 秒")
 
     return {'success': True, 'affected_rows': affected_rows}
 
@@ -228,20 +231,20 @@ if __name__ == "__main__":
     updater = SafeDataUpdater()
 
     if args.test_lock:
-        print("=" * 80)
-        print("数据库锁检测测试")
-        print("=" * 80)
+        logger.info("=" * 80)
+        logger.info("数据库锁检测测试")
+        logger.info("=" * 80)
 
         gui_procs = updater.find_gui_processes()
-        print(f"\n发现GUI进程: {len(gui_procs)}")
+        logger.info(f"\n发现GUI进程: {len(gui_procs)}")
 
         is_locked = updater.check_database_lock()
-        print(f"数据库锁定状态: {'已锁定' if is_locked else '未锁定'}")
+        logger.info(f"数据库锁定状态: {'已锁定' if is_locked else '未锁定'}")
 
     elif args.fill_adjustment:
         updater.safe_update(fill_adjustment_batch)
 
     else:
-        print("使用方法:")
-        print("  测试数据库锁: python safe_data_updater.py --test-lock")
-        print("  填充复权数据: python safe_data_updater.py --fill-adjustment")
+        logger.info("使用方法:")
+        logger.info("  测试数据库锁: python safe_data_updater.py --test-lock")
+        logger.info("  填充复权数据: python safe_data_updater.py --fill-adjustment")

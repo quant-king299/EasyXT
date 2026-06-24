@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 统一因子库接口
 
@@ -38,7 +41,7 @@ try:
     )
     EASYXT_AVAILABLE = True
 except ImportError as e:
-    print(f"[WARNING] 无法导入easy_xt因子模块: {e}")
+    logger.warning(f"[WARNING] 无法导入easy_xt因子模块: {e}")
     EASYXT_AVAILABLE = False
 
 # ============================================================
@@ -54,7 +57,7 @@ try:
     )
     PRICING_AVAILABLE = True
 except ImportError as e:
-    print(f"[INFO] 定价因子模块暂不可用: {e}")
+    logger.info(f"[INFO] 定价因子模块暂不可用: {e}")
     PRICING_AVAILABLE = False
 
 # ============================================================
@@ -70,7 +73,7 @@ try:
     )
     ANALYSIS_AVAILABLE = True
 except ImportError as e:
-    print(f"[INFO] 因子分析模块暂不可用: {e}")
+    logger.info(f"[INFO] 因子分析模块暂不可用: {e}")
     ANALYSIS_AVAILABLE = False
 
 # ============================================================
@@ -85,7 +88,7 @@ try:
     )
     CUSTOM_AVAILABLE = True
 except ImportError as e:
-    print(f"[INFO] 自定义因子模块暂不可用: {e}")
+    logger.info(f"[INFO] 自定义因子模块暂不可用: {e}")
     CUSTOM_AVAILABLE = False
 
 # ============================================================
@@ -200,24 +203,24 @@ def list_all_factors():
 
 
 if __name__ == "__main__":
-    print("=" * 70)
-    print(" " * 20 + "统一因子库 - 因子列表")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info(" " * 20 + "统一因子库 - 因子列表")
+    logger.info("=" * 70)
 
-    print("\n[可用模块状态]")
+    logger.info("\n[可用模块状态]")
     modules = get_available_modules()
     for module, available in modules.items():
         status = "✓" if available else "✗"
-        print(f"  {status} {module}")
+        logger.info(f"  {status} {module}")
 
-    print("\n[所有因子]")
+    logger.info("\n[所有因子]")
     all_factors = list_all_factors()
     for category, factors in all_factors.items():
         if factors:
-            print(f"\n{category} ({len(factors)}个):")
+            logger.info(f"\n{category} ({len(factors)}个):")
             for factor in factors[:10]:  # 只显示前10个
-                print(f"  - {factor}")
+                logger.info(f"  - {factor}")
             if len(factors) > 10:
-                print(f"  ... 还有 {len(factors) - 10} 个")
+                logger.info(f"  ... 还有 {len(factors) - 10} 个")
 
-    print("\n" + "=" * 70)
+    logger.info("\n" + "=" * 70)

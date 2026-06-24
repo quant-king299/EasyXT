@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 聚宽到Ptrade代码转换GUI组件
 提供聚宽策略代码转换为Ptrade格式的可视化界面
@@ -40,7 +43,7 @@ try:
     JQToPtradeEnhancedConverter = JQToPtradeUnifiedConverter
 
     CONVERTER_AVAILABLE = True
-    print("[OK] 代码转换器已加载（统一转换器v3）")
+    logger.info("[OK] 代码转换器已加载（统一转换器v3）")
 except ImportError as e:
     CONVERTER_AVAILABLE = False
     JQToPtradeConverter = None
@@ -50,7 +53,7 @@ except ImportError as e:
     JQToPtradeCurrentDataConverter = None
     JQToPtradeEnhancedConverter = None
     JQToPtradeUnifiedConverter = None
-    print(f"[WARNING] 代码转换器不可用: {e}")
+    logger.warning(f"[WARNING] 代码转换器不可用: {e}")
 
 
 class PasteInputDialog(QDialog):

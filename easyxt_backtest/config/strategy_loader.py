@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 YAML策略配置加载器
 
@@ -312,7 +315,7 @@ class StrategyConfigLoader:
         with open(yaml_file, 'w', encoding='utf-8') as f:
             yaml.dump(config_dict, f, allow_unicode=True, default_flow_style=False, sort_keys=False)
 
-        print(f"✅ 策略配置已保存到: {yaml_path}")
+        logger.info(f"✅ 策略配置已保存到: {yaml_path}")
 
 
 # 便捷函数
@@ -401,4 +404,4 @@ rebalance:
     with open(output_file, 'w', encoding='utf-8') as f:
         f.write(sample_config.strip())
 
-    print(f"✅ 示例配置已创建: {output_path}")
+    logger.info(f"✅ 示例配置已创建: {output_path}")

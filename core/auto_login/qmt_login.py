@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 QMT 自动登录模块
 
@@ -466,14 +469,14 @@ def main():
         success = auto_login.login(restart=args.restart, timeout=args.timeout)
 
         if success:
-            print("\n✓ 登录成功！")
+            logger.info("\n✓ 登录成功！")
             return 0
         else:
-            print("\n✗ 登录失败，请检查配置或手动操作")
+            logger.info("\n✗ 登录失败，请检查配置或手动操作")
             return 1
 
     except Exception as e:
-        print(f"\n✗ 错误: {e}")
+        logger.info(f"\n✗ 错误: {e}")
         return 1
 
 

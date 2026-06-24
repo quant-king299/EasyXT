@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 QMT信号客户端
 用于连接中转服务获取交易信号，并转发到本地QKA服务执行交易
@@ -35,10 +38,10 @@ class QMTSignalClient:
         self.qka_headers = {"X-Token": self.token}
         self.session = requests.Session()
         
-        print(f"QMT信号客户端初始化完成:")
-        print(f"  中转服务地址: {self.proxy_url}")
-        print(f"  QKA服务地址: {self.qka_url}")
-        print(f"  访问令牌: {self.token}")
+        logger.info(f"QMT信号客户端初始化完成:")
+        logger.info(f"  中转服务地址: {self.proxy_url}")
+        logger.info(f"  QKA服务地址: {self.qka_url}")
+        logger.info(f"  访问令牌: {self.token}")
     
     def get_pending_signals(self) -> List[Dict]:
         """
@@ -58,16 +61,16 @@ class QMTSignalClient:
                 result = response.json()
                 if result.get('success'):
                     signals = result.get('signals', [])
-                    print(f"获取到 {len(signals)} 个待处理信号")
+                    logger.info(f"获取到 {len(signals)} 个待处理信号")
                     return signals
                 else:
-                    print(f"❌ 获取信号失败: {result.get('message')}")
+                    logger.info(f"❌ 获取信号失败: {result.get('message')}")
                     return []
             else:
-                print(f"❌ HTTP错误: {response.status_code}")
+                logger.info(f"❌ HTTP错误: {response.status_code}")
                 return []
         except Exception as e:
-            print(f"❌ 获取信号异常: {e}")
+            logger.info(f"❌ 获取信号异常: {e}")
             return []
     
     def execute_signal(self, signal: Dict) -> Dict:
@@ -90,14 +93,14 @@ class QMTSignalClient:
             strategy_name = signal.get('strategy_name')
             signal_id = signal.get('signal_id')
             
-            print(f"执行交易信号:")
-            print(f"  股票代码: {stock_code}")
-            print(f"  订单类型: {'买入' if order_type == 23 else '卖出'} ({order_type})")
-            print(f"  订单数量: {order_volume}")
-            print(f"  价格类型: {'限价' if price_type == 11 else '市价'} ({price_type})")
-            print(f"  价格: {price}")
-            print(f"  策略名称: {strategy_name}")
-            print(f"  信号ID: {signal_id}")
+            logger.info(f"执行交易信号:")
+            logger.info(f"  股票代码: {stock_code}")
+            logger.info(f"  订单类型: {'买入' if order_type == 23 else '卖出'} ({order_type})")
+            logger.info(f"  订单数量: {order_volume}")
+            logger.info(f"  价格类型: {'限价' if price_type == 11 else '市价'} ({price_type})")
+            logger.info(f"  价格: {price}")
+            logger.info(f"  策略名称: {strategy_name}")
+            logger.info(f"  信号ID: {signal_id}")
             
             # 调用QKA服务执行交易
             trade_params = {
@@ -118,7 +121,7 @@ class QMTSignalClient:
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"✅ 交易执行成功: {result}")
+                logger.info(f"✅ 交易执行成功: {result}")
                 
                 # 返回执行结果
                 execution_result = {
@@ -129,8 +132,8 @@ class QMTSignalClient:
                 }
                 return execution_result
             else:
-                print(f"❌ 交易执行失败，HTTP错误: {response.status_code}")
-                print(f"响应内容: {response.text}")
+                logger.info(f"❌ 交易执行失败，HTTP错误: {response.status_code}")
+                logger.info(f"响应内容: {response.text}")
                 execution_result = {
                     'signal_id': signal_id,
                     'success': False,
@@ -139,7 +142,7 @@ class QMTSignalClient:
                 }
                 return execution_result
         except Exception as e:
-            print(f"❌ 交易执行异常: {e}")
+            logger.info(f"❌ 交易执行异常: {e}")
             execution_result = {
                 'signal_id': signal.get('signal_id'),
                 'success': False,
@@ -169,16 +172,16 @@ class QMTSignalClient:
             if response.status_code == 200:
                 result_data = response.json()
                 if result_data.get('success'):
-                    print(f"✅ 执行结果报告成功")
+                    logger.info(f"✅ 执行结果报告成功")
                     return True
                 else:
-                    print(f"❌ 执行结果报告失败: {result_data.get('message')}")
+                    logger.info(f"❌ 执行结果报告失败: {result_data.get('message')}")
                     return False
             else:
-                print(f"❌ HTTP错误: {response.status_code}")
+                logger.info(f"❌ HTTP错误: {response.status_code}")
                 return False
         except Exception as e:
-            print(f"❌ 报告结果异常: {e}")
+            logger.info(f"❌ 报告结果异常: {e}")
             return False
     
     def run(self, interval: int = 5):
@@ -188,8 +191,8 @@ class QMTSignalClient:
         Args:
             interval: 轮询间隔（秒）
         """
-        print(f"开始运行QMT信号客户端，轮询间隔: {interval}秒")
-        print("=" * 50)
+        logger.info(f"开始运行QMT信号客户端，轮询间隔: {interval}秒")
+        logger.info("=" * 50)
         
         try:
             while True:
@@ -208,9 +211,9 @@ class QMTSignalClient:
                 time.sleep(interval)
                 
         except KeyboardInterrupt:
-            print("\n客户端已停止")
+            logger.info("\n客户端已停止")
         except Exception as e:
-            print(f"客户端运行异常: {e}")
+            logger.info(f"客户端运行异常: {e}")
 
 def main():
     """主函数"""

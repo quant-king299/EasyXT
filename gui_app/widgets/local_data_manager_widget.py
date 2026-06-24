@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 本地数据管理GUI组件
 提供本地数据的下载、管理和查看功能
@@ -2413,7 +2416,8 @@ class LocalDataManagerWidget(QWidget):
                 all_stocks = xtdata.get_stock_list_in_sector('沪深A股')
                 stock_list = all_stocks[:100]  # 限制前100只，避免太多
                 QMessageBox.information(self, "提示", f"为避免下载时间过长，限制为前100只股票")
-            except (ImportError, AttributeError):                QMessageBox.warning(self, "错误", "获取股票列表失败")
+            except (ImportError, AttributeError):
+                QMessageBox.warning(self, "错误", "获取股票列表失败")
                 return
         elif "沪深300" in stock_selection:
             # 获取沪深300成分股
@@ -2536,7 +2540,8 @@ class LocalDataManagerWidget(QWidget):
             try:
                 from xtquant import xtdata
                 stock_list = xtdata.get_stock_list_in_sector('沪深A股')
-            except (ImportError, AttributeError):                QMessageBox.warning(self, "错误", "获取股票列表失败")
+            except (ImportError, AttributeError):
+                QMessageBox.warning(self, "错误", "获取股票列表失败")
                 return
         else:
             stock_list = ["000001.SZ", "600519.SH"]
@@ -3126,7 +3131,7 @@ class DataViewerDialog(QDialog):
                 lines = log_output.strip().split('\n')
                 for line in lines:
                     if '[INFO]' in line or '[OK]' in line or '[WARN]' in line:
-                        print(f"📋 {line}")  # 同时输出到控制台
+                        logger.info(f"📋 {line}")
 
             if df.empty:
                 self.stats_label.setText(f"❌ 未找到 {self.stock_code} 的数据")

@@ -104,13 +104,13 @@ class 自适应网格测试器:
                 with open(self.config_file, 'r', encoding='utf-8') as f:
                     loaded_config = json.load(f)
                     default_config.update(loaded_config)
-                print(f"✅ 已加载配置文件: {self.config_file}")
+                logger.info(f"✅ 已加载配置文件: {self.config_file}")
             except Exception as e:
-                print(f"⚠️ 加载配置文件失败: {e}，使用默认配置")
+                logger.info(f"⚠️ 加载配置文件失败: {e}，使用默认配置")
         else:
             # 保存默认配置
             self.save_config(default_config)
-            print(f"📝 已创建默认配置文件: {self.config_file}")
+            logger.info(f"📝 已创建默认配置文件: {self.config_file}")
 
         return default_config
 
@@ -126,31 +126,31 @@ class 自适应网格测试器:
             )
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config, f, ensure_ascii=False, indent=2)
-            print(f"✅ 配置已保存: {config_path}")
+            logger.info(f"✅ 配置已保存: {config_path}")
         except Exception as e:
-            print(f"❌ 保存配置失败: {e}")
+            logger.info(f"❌ 保存配置失败: {e}")
 
     def print_banner(self):
         """打印横幅"""
-        print("\n" + "="*80)
-        print(" "*25 + "国债ETF高频网格测试")
-        print("="*80)
+        logger.info("\n" + "="*80)
+        logger.info(" "*25 + "国债ETF高频网格测试")
+        logger.info("="*80)
         print(f"测试时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("="*80)
+        logger.info("="*80)
 
     def print_config(self):
         """打印配置信息"""
-        print("\n📋 当前配置:")
-        print("-"*80)
-        print(f"账户ID: {'*' * 10 if self.config['账户ID'] else '未设置'}")
-        print(f"账户类型: {self.config['账户类型']}")
-        print(f"股票池: {self.config['股票池']}")
-        print(f"网格阈值: 买入{self.config['买入涨跌幅']}% / 卖出{self.config['卖出涨跌幅']}%")
-        print(f"交易数量: {self.config['单次交易数量']}股/次")
-        print(f"最大持仓: {self.config['最大持仓数量']}股")
+        logger.info("\n📋 当前配置:")
+        logger.info("-"*80)
+        logger.info(f"账户ID: {'*' * 10 if self.config['账户ID'] else '未设置'}")
+        logger.info(f"账户类型: {self.config['账户类型']}")
+        logger.info(f"股票池: {self.config['股票池']}")
+        logger.info(f"网格阈值: 买入{self.config['买入涨跌幅']}% / 卖出{self.config['卖出涨跌幅']}%")
+        logger.info(f"交易数量: {self.config['单次交易数量']}股/次")
+        logger.info(f"最大持仓: {self.config['最大持仓数量']}股")
         print(f"价格模式: {self._get_price_mode_name()}")
-        print(f"测试模式: {'是' if self.config['是否测试'] else '否（实盘）'}")
-        print("-"*80)
+        logger.info(f"测试模式: {'是' if self.config['是否测试'] else '否（实盘）'}")
+        logger.info("-"*80)
 
     def _get_price_mode_name(self):
         """获取价格模式名称"""
@@ -163,10 +163,10 @@ class 自适应网格测试器:
     def check_account_config(self):
         """检查账户配置"""
         if not self.config['账户ID']:
-            print("\n⚠️ 未配置账户ID")
-            print("请选择:")
-            print("1. 输入账户ID")
-            print("2. 仅测试（不连接账户）")
+            logger.info("\n⚠️ 未配置账户ID")
+            logger.info("请选择:")
+            logger.info("1. 输入账户ID")
+            logger.info("2. 仅测试（不连接账户）")
 
             choice = input("\n请选择 (1/2): ").strip()
 
@@ -175,12 +175,12 @@ class 自适应网格测试器:
                 if account_id:
                     self.config['账户ID'] = account_id
                     self.save_config()
-                    print(f"✅ 账户ID已保存")
+                    logger.info(f"✅ 账户ID已保存")
                 else:
-                    print("❌ 账户ID不能为空，将以测试模式运行")
+                    logger.info("❌ 账户ID不能为空，将以测试模式运行")
                     self.config['是否测试'] = True
             else:
-                print("将以测试模式运行（不实际下单）")
+                logger.info("将以测试模式运行（不实际下单）")
                 self.config['是否测试'] = True
 
     def setup_log_file(self):
@@ -194,12 +194,12 @@ class 自适应网格测试器:
             log_file = os.path.join(log_dir, f'bond_etf_grid_{date_str}.json')
             self.config['日志文件路径'] = log_file
 
-            print(f"📝 日志文件: {log_file}")
+            logger.info(f"📝 日志文件: {log_file}")
 
     def print_market_status(self):
         """打印市场状态"""
-        print("\n📊 市场状态:")
-        print("-"*80)
+        logger.info("\n📊 市场状态:")
+        logger.info("-"*80)
 
         for i, stock_code in enumerate(self.config['股票池']):
             try:
@@ -208,7 +208,7 @@ class 自适应网格测试器:
                 price_df = api.data.get_current_price([stock_code])
 
                 if price_df is None or price_df.empty:
-                    print(f"{stock_code}: 无法获取行情")
+                    logger.info(f"{stock_code}: 无法获取行情")
                     continue
 
                 stock_data = price_df[price_df['code'] == stock_code].iloc[0]
@@ -224,7 +224,8 @@ class 自适应网格测试器:
                             if pos['持仓量'] >= 10:
                                 position_info = f"{pos['持仓量']}股 " \
                                              f"(可用{pos['可用数量']}股)"
-                    except Exception:                        pass
+                    except Exception:
+                        pass
 
                 # 打印行情
                 print(f"{stock_code} ({self.config['股票名称'][i]})")
@@ -234,12 +235,12 @@ class 自适应网格测试器:
                       f"涨跌: {change_pct:+.2f}%  "
                       f"持仓: {position_info}")
                 print(f"  时间: {datetime.now().strftime('%H:%M:%S')}")
-                print()
+                logger.info()
 
             except Exception as e:
-                print(f"{stock_code}: 获取行情失败 - {e}")
+                logger.info(f"{stock_code}: 获取行情失败 - {e}")
 
-        print("-"*80)
+        logger.info("-"*80)
 
     def calculate_pnl(self):
         """计算盈亏"""
@@ -277,17 +278,17 @@ class 自适应网格测试器:
         """打印统计信息"""
         pnl, fee = self.calculate_pnl()
 
-        print("\n📈 交易统计:")
-        print("-"*80)
+        logger.info("\n📈 交易统计:")
+        logger.info("-"*80)
         print(f"运行时长: {self._get_runtime()}")
-        print(f"运行次数: {self.stats['运行次数']}")
-        print(f"买入次数: {self.stats['买入次数']}")
-        print(f"卖出次数: {self.stats['卖出次数']}")
-        print(f"总交易: {self.stats['买入次数'] + self.stats['卖出次数']}次")
-        print(f"预估收益: {pnl:.2f}元")
-        print(f"预估手续费: {fee:.2f}元")
-        print(f"净收益: {pnl - fee:.2f}元")
-        print("-"*80)
+        logger.info(f"运行次数: {self.stats['运行次数']}")
+        logger.info(f"买入次数: {self.stats['买入次数']}")
+        logger.info(f"卖出次数: {self.stats['卖出次数']}")
+        logger.info(f"总交易: {self.stats['买入次数'] + self.stats['卖出次数']}次")
+        logger.info(f"预估收益: {pnl:.2f}元")
+        logger.info(f"预估手续费: {fee:.2f}元")
+        logger.info(f"净收益: {pnl - fee:.2f}元")
+        logger.info("-"*80)
 
     def _get_runtime(self):
         """获取运行时长"""
@@ -311,24 +312,24 @@ class 自适应网格测试器:
         self.setup_log_file()
 
         # 询问是否开始
-        print("\n是否开始测试? (y/n): ", end='')
+        logger.info("\n是否开始测试? (y/n): ", end='')
         if input().strip().lower() != 'y':
-            print("已取消")
+            logger.info("已取消")
             return
 
         # 初始化数据连接
-        print("\n⏳ 正在初始化数据服务...")
+        logger.info("\n⏳ 正在初始化数据服务...")
         try:
             api = easy_xt.get_api()
             if api.init_data():
-                print("✅ 数据服务初始化成功")
+                logger.info("✅ 数据服务初始化成功")
             else:
-                print("⚠️ 数据服务初始化失败，请确保迅投客户端已启动")
+                logger.info("⚠️ 数据服务初始化失败，请确保迅投客户端已启动")
         except Exception as e:
-            print(f"⚠️ 数据服务初始化异常: {e}")
+            logger.info(f"⚠️ 数据服务初始化异常: {e}")
 
         # 初始化策略
-        print("\n⏳ 正在初始化策略...")
+        logger.info("\n⏳ 正在初始化策略...")
         try:
             self.strategy = 自适应网格策略(self.config)
             self.strategy.initialize()  # 调用策略的初始化方法
@@ -352,10 +353,10 @@ class 自适应网格测试器:
 
             self.strategy.log = enhanced_log
 
-            print("✅ 策略初始化成功\n")
+            logger.info("✅ 策略初始化成功\n")
 
         except Exception as e:
-            print(f"❌ 策略初始化失败: {e}")
+            logger.info(f"❌ 策略初始化失败: {e}")
             import traceback
             traceback.print_exc()
             return
@@ -364,9 +365,9 @@ class 自适应网格测试器:
         self.print_market_status()
 
         # 主循环
-        print("\n🚀 开始运行测试...")
-        print("提示: 按 Ctrl+C 停止测试\n")
-        print("="*80)
+        logger.info("\n🚀 开始运行测试...")
+        logger.info("提示: 按 Ctrl+C 停止测试\n")
+        logger.info("="*80)
 
         try:
             import time
@@ -390,29 +391,29 @@ class 自适应网格测试器:
                     time.sleep(self.config['监控间隔'])
 
                 except KeyboardInterrupt:
-                    print("\n\n⏹️ 收到停止信号，正在退出...")
+                    logger.info("\n\n⏹️ 收到停止信号，正在退出...")
                     break
                 except Exception as e:
-                    print(f"\n❌ 运行错误: {e}")
+                    logger.info(f"\n❌ 运行错误: {e}")
                     import traceback
                     traceback.print_exc()
                     time.sleep(5)  # 等待后继续
 
         except KeyboardInterrupt:
-            print("\n\n⏹️ 测试已停止")
+            logger.info("\n\n⏹️ 测试已停止")
 
         # 打印最终统计
-        print("\n" + "="*80)
-        print(" "*30 + "测试结束")
-        print("="*80)
+        logger.info("\n" + "="*80)
+        logger.info(" "*30 + "测试结束")
+        logger.info("="*80)
         self.print_statistics()
         self.print_market_status()
 
         # 显示日志文件位置
         if not self.config['是否测试'] and \
            os.path.exists(self.config['日志文件路径']):
-            print(f"\n📝 交易日志已保存到:")
-            print(f"   {self.config['日志文件路径']}")
+            logger.info(f"\n📝 交易日志已保存到:")
+            logger.info(f"   {self.config['日志文件路径']}")
 
 
 def main():

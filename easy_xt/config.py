@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 EasyXT配置管理
 """
@@ -53,12 +56,12 @@ class Config:
                     if any(keyword in path for keyword in QMT_SIMULATED_KEYWORDS):
                         self.settings['qmt']['detected_path'] = path
                         self.settings['trade']['userdata_path'] = userdata_path
-                        print(f"[OK] 自动检测到模拟盘QMT路径: {path}")
+                        logger.info(f"[OK] 自动检测到模拟盘QMT路径: {path}")
                         return path
         
         # 如果没有找到模拟盘路径，显示提示信息
-        print("[ERROR] 未能自动检测到模拟盘QMT路径")
-        print("💡 提示：当前只检测模拟盘路径，如需使用实盘路径请手动设置")
+        logger.error("[ERROR] 未能自动检测到模拟盘QMT路径")
+        logger.info("💡 提示：当前只检测模拟盘路径，如需使用实盘路径请手动设置")
         return None
     
     def get_qmt_path(self) -> Optional[str]:
@@ -72,12 +75,12 @@ class Config:
     def set_qmt_path(self, path: str) -> bool:
         """手动设置QMT路径"""
         if not os.path.exists(path):
-            print(f"[ERROR] QMT路径不存在: {path}")
+            logger.error(f"[ERROR] QMT路径不存在: {path}")
             return False
         
         userdata_path = os.path.join(path, self.settings['qmt']['userdata_subpath'])
         if not os.path.exists(userdata_path):
-            print(f"[ERROR] 未找到userdata_mini目录: {userdata_path}")
+            logger.error(f"[ERROR] 未找到userdata_mini目录: {userdata_path}")
             return False
         
         self.settings['qmt']['detected_path'] = path
@@ -88,7 +91,7 @@ class Config:
         if path not in possible_paths:
             possible_paths.insert(0, path)
         
-        print(f"[OK] QMT路径设置成功: {path}")
+        logger.info(f"[OK] QMT路径设置成功: {path}")
         return True
     
     def validate_qmt_setup(self) -> tuple[bool, str]:
@@ -137,34 +140,34 @@ class Config:
     
     def print_qmt_status(self):
         """打印QMT配置状态"""
-        print("\n" + "="*50)
-        print("QMT配置状态")
-        print("="*50)
+        logger.info("\n" + "="*50)
+        logger.info("QMT配置状态")
+        logger.info("="*50)
         
         qmt_path = self.get_qmt_path()
         userdata_path = self.get_userdata_path()
         
         if qmt_path:
-            print(f"[OK] QMT安装路径: {qmt_path}")
-            print(f"[OK] 用户数据路径: {userdata_path}")
+            logger.info(f"[OK] QMT安装路径: {qmt_path}")
+            logger.info(f"[OK] 用户数据路径: {userdata_path}")
             
             is_valid, msg = self.validate_qmt_setup()
             if is_valid:
-                print(f"[OK] 配置状态: {msg}")
+                logger.info(f"[OK] 配置状态: {msg}")
             else:
-                print(f"[ERROR] 配置状态: {msg}")
+                logger.error(f"[ERROR] 配置状态: {msg}")
         else:
-            print("[ERROR] 未检测到QMT安装路径")
-            print("\n可能的解决方案:")
-            print("1. 确保QMT已正确安装")
-            print("2. 手动设置QMT路径:")
-            print("   from easy_xt.config import config")
-            print("   config.set_qmt_path('你的QMT安装路径')")
-            print("\n常见QMT安装路径:")
+            logger.error("[ERROR] 未检测到QMT安装路径")
+            logger.info("\n可能的解决方案:")
+            logger.info("1. 确保QMT已正确安装")
+            logger.info("2. 手动设置QMT路径:")
+            logger.info("   from easy_xt.config import config")
+            logger.info("   config.set_qmt_path('你的QMT安装路径')")
+            logger.info("\n常见QMT安装路径:")
             for path in self.settings['qmt']['possible_paths']:
-                print(f"   - {path}")
+                logger.info(f"   - {path}")
         
-        print("="*50)
+        logger.info("="*50)
 
 
 # 全局配置实例

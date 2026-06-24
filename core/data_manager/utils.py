@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 数据管理工具函数
 
@@ -29,7 +32,7 @@ def convert_date_format(dt_str: str,
         dt = datetime.strptime(dt_str, input_format)
         return dt.strftime(output_format)
     except Exception as e:
-        print(f"[DateUtils] 日期格式转换失败: {e}")
+        logger.info(f"[DateUtils] 日期格式转换失败: {e}")
         return dt_str
 
 
@@ -59,7 +62,7 @@ def get_trading_date_range(start_date: str,
 
         return dates
     except Exception as e:
-        print(f"[DateUtils] 生成日期范围失败: {e}")
+        logger.info(f"[DateUtils] 生成日期范围失败: {e}")
         return []
 
 
@@ -200,7 +203,7 @@ def merge_dataframes(dfs: List[pd.DataFrame],
             result = pd.merge(result, df, on=on, how=how)
         return result
     except Exception as e:
-        print(f"[DataUtils] 合并DataFrame失败: {e}")
+        logger.info(f"[DataUtils] 合并DataFrame失败: {e}")
         return None
 
 
@@ -270,7 +273,7 @@ def sort_by_date(df: pd.DataFrame,
     try:
         return df.sort_values(by=date_column, ascending=ascending).reset_index(drop=True)
     except Exception as e:
-        print(f"[DataUtils] 按日期排序失败: {e}")
+        logger.info(f"[DataUtils] 按日期排序失败: {e}")
         return df
 
 
@@ -299,7 +302,7 @@ def fill_missing_data(df: pd.DataFrame,
         else:
             return df
     except Exception as e:
-        print(f"[DataUtils] 填充缺失数据失败: {e}")
+        logger.info(f"[DataUtils] 填充缺失数据失败: {e}")
         return df
 
 
@@ -323,7 +326,7 @@ def calculate_returns(prices: pd.Series,
         else:
             return prices.pct_change()
     except Exception as e:
-        print(f"[DataUtils] 计算收益率失败: {e}")
+        logger.info(f"[DataUtils] 计算收益率失败: {e}")
         return pd.Series()
 
 
@@ -401,7 +404,7 @@ def print_progress(current: int,
     percent = f"{100 * (current / float(total)):.1f}"
     filled_length = int(50 * current // total)
     bar = '█' * filled_length + '-' * (50 - filled_length)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end='', flush=True)
+    logger.info(f'\r{prefix} |{bar}| {percent}% {suffix}', end='', flush=True)
 
     if current == total:
-        print()  # 完成后换行
+        logger.info()

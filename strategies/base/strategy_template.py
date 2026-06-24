@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 策略基础模板
 所有策略都应该继承这个基类
@@ -76,7 +79,7 @@ class BaseStrategy(ABC):
             order: 订单信息
         """
         self.orders.append(order)
-        print(f"订单状态更新: {order}")
+        logger.info(f"订单状态更新: {order}")
         
     def buy(self, stock_code: str, quantity: int, price: float = None):
         """
@@ -93,15 +96,15 @@ class BaseStrategy(ABC):
         try:
             if price is None:
                 result = self.api.trade.buy_market(stock_code, quantity)
-                print(f"市价买入: {stock_code} {quantity}股")
+                logger.info(f"市价买入: {stock_code} {quantity}股")
             else:
                 result = self.api.trade.buy_limit(stock_code, quantity, price)
-                print(f"限价买入: {stock_code} {quantity}股 @{price}")
+                logger.info(f"限价买入: {stock_code} {quantity}股 @{price}")
                 
             return result
             
         except Exception as e:
-            print(f"买入失败: {str(e)}")
+            logger.info(f"买入失败: {str(e)}")
             return None
             
     def sell(self, stock_code: str, quantity: int, price: float = None):
@@ -119,15 +122,15 @@ class BaseStrategy(ABC):
         try:
             if price is None:
                 result = self.api.trade.sell_market(stock_code, quantity)
-                print(f"市价卖出: {stock_code} {quantity}股")
+                logger.info(f"市价卖出: {stock_code} {quantity}股")
             else:
                 result = self.api.trade.sell_limit(stock_code, quantity, price)
-                print(f"限价卖出: {stock_code} {quantity}股 @{price}")
+                logger.info(f"限价卖出: {stock_code} {quantity}股 @{price}")
                 
             return result
             
         except Exception as e:
-            print(f"卖出失败: {str(e)}")
+            logger.info(f"卖出失败: {str(e)}")
             return None
             
     def get_position(self, stock_code: str):
@@ -143,7 +146,7 @@ class BaseStrategy(ABC):
         try:
             return self.api.trade.get_position(stock_code)
         except Exception as e:
-            print(f"获取持仓失败: {str(e)}")
+            logger.info(f"获取持仓失败: {str(e)}")
             return None
             
     def get_account_info(self):
@@ -156,7 +159,7 @@ class BaseStrategy(ABC):
         try:
             return self.api.trade.get_account()
         except Exception as e:
-            print(f"获取账户信息失败: {str(e)}")
+            logger.info(f"获取账户信息失败: {str(e)}")
             return None
             
     def log(self, message: str):
@@ -167,7 +170,7 @@ class BaseStrategy(ABC):
             message: 日志消息
         """
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        print(f"[{timestamp}] {message}")
+        logger.info(f"[{timestamp}] {message}")
 
     def get_historical_data(self,
                            stock_code: str,

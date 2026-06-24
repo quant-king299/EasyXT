@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 统一的 Backtrader 底层引擎
 
@@ -137,7 +140,7 @@ class BacktestCore:
             metrics['final_value'] = self.get_broker_value()
 
         except Exception as e:
-            print(f"[WARNING] 提取性能指标时出错: {e}")
+            logger.warning(f"[WARNING] 提取性能指标时出错: {e}")
             return self._get_empty_metrics()
 
         return metrics
@@ -189,7 +192,7 @@ class BacktestCore:
                 ('胜率', f"{won.get('total', 0) / max(total.get('total', 1), 1) * 100:.1f}%", ''),
             ]
         except Exception as e:
-            print(f"[WARNING] 提取交易记录时出错: {e}")
+            logger.warning(f"[WARNING] 提取交易记录时出错: {e}")
 
         # 构建净值曲线
         try:
@@ -204,7 +207,7 @@ class BacktestCore:
                     values.append(round(cumulative_value, 2))
                 portfolio_curve = {'dates': dates, 'values': values}
         except Exception as e:
-            print(f"[WARNING] 构建净值曲线时出错: {e}")
+            logger.warning(f"[WARNING] 构建净值曲线时出错: {e}")
 
         # 计算风险指标
         try:
@@ -219,7 +222,7 @@ class BacktestCore:
                 'final_value': metrics.get('final_value', self.initial_cash),
             }
         except Exception as e:
-            print(f"[WARNING] 计算风险指标时出错: {e}")
+            logger.warning(f"[WARNING] 计算风险指标时出错: {e}")
 
         return {
             'metrics': metrics,

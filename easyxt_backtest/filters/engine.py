@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 排除条件过滤器引擎
 
@@ -64,9 +67,9 @@ class ExcludeFilterEngine:
                 elif config.type == "fundamental":
                     instances[config.name] = FundamentalFilter(config, self.data_manager)
                 else:
-                    print(f"⚠️ 不支持的过滤器类型: {config.type}")
+                    logger.info(f"⚠️ 不支持的过滤器类型: {config.type}")
             except Exception as e:
-                print(f"⚠️ 初始化过滤器失败 [{config.name}]: {e}")
+                logger.info(f"⚠️ 初始化过滤器失败 [{config.name}]: {e}")
 
         return instances
 
@@ -96,12 +99,12 @@ class ExcludeFilterEngine:
             filtered_count = before_count - after_count
 
             if verbose and filtered_count > 0:
-                print(f"  📊 过滤器 [{name}]: {before_count} -> {after_count} (过滤{filtered_count}只)")
+                logger.info(f"  📊 过滤器 [{name}]: {before_count} -> {after_count} (过滤{filtered_count}只)")
 
         if verbose:
             final_count = len(result)
             total_filtered = initial_count - final_count
-            print(f"  ✅ 过滤完成: {initial_count} -> {final_count} (总共过滤{total_filtered}只)")
+            logger.info(f"  ✅ 过滤完成: {initial_count} -> {final_count} (总共过滤{total_filtered}只)")
 
         return result
 

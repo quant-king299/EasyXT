@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 三数据源混合管理器
 
@@ -80,14 +83,14 @@ class TripleSourceDataManager:
         # 初始化客户端
         self._init_clients()
 
-        print("=" * 70)
-        print("三数据源管理器初始化")
-        print("=" * 70)
+        logger.info("=" * 70)
+        logger.info("三数据源管理器初始化")
+        logger.info("=" * 70)
         for source, available in self.sources.items():
             status = "OK" if available else "N/A"
-            print(f"  {source:12s} : {status}")
-        print(f"  优先级       : {' → '.join(self.priority)}")
-        print("=" * 70)
+            logger.info(f"  {source:12s} : {status}")
+        logger.info(f"  优先级       : {' → '.join(self.priority)}")
+        logger.info("=" * 70)
 
     def _check_qmt(self) -> bool:
         """检查QMT是否可用"""
@@ -134,7 +137,7 @@ class TripleSourceDataManager:
                 self.xt = xtdata
                 self.xt.connect()
             except Exception as e:
-                print(f"[WARNING] QMT初始化失败: {e}")
+                logger.warning(f"[WARNING] QMT初始化失败: {e}")
                 self.sources['qmt'] = False
 
         # qstock
@@ -143,7 +146,7 @@ class TripleSourceDataManager:
                 import qstock as qs
                 self.qs = qs
             except Exception as e:
-                print(f"[WARNING] qstock初始化失败: {e}")
+                logger.warning(f"[WARNING] qstock初始化失败: {e}")
                 self.sources['qstock'] = False
 
         # akshare
@@ -152,7 +155,7 @@ class TripleSourceDataManager:
                 import akshare as ak
                 self.ak = ak
             except Exception as e:
-                print(f"[WARNING] akshare初始化失败: {e}")
+                logger.warning(f"[WARNING] akshare初始化失败: {e}")
                 self.sources['akshare'] = False
 
         # tdx_client (行情数据)
@@ -203,7 +206,7 @@ class TripleSourceDataManager:
                             self.stats['qmt_hits'] += 1
                             return df
             except Exception as e:
-                print(f"[INFO] QMT获取行情失败: {e}")
+                logger.info(f"[INFO] QMT获取行情失败: {e}")
 
         # 尝试qstock
         if self.sources['qstock'] and 'qstock' in self.priority:
@@ -216,7 +219,7 @@ class TripleSourceDataManager:
                         self.stats['qstock_hits'] += 1
                         return df
             except Exception as e:
-                print(f"[INFO] qstock获取行情失败: {e}")
+                logger.info(f"[INFO] qstock获取行情失败: {e}")
 
         # 尝试akshare
         if self.sources['akshare'] and 'akshare' in self.priority:
@@ -226,7 +229,7 @@ class TripleSourceDataManager:
                     self.stats['akshare_hits'] += 1
                     return df
             except Exception as e:
-                print(f"[INFO] akshare获取行情失败: {e}")
+                logger.info(f"[INFO] akshare获取行情失败: {e}")
 
         self.stats['failures'] += 1
         return pd.DataFrame()
@@ -371,7 +374,7 @@ class TripleSourceDataManager:
                     self.stats['akshare_hits'] += 1
                     return df
             except Exception as e:
-                print(f"[INFO] akshare获取资金流向失败: {e}")
+                logger.info(f"[INFO] akshare获取资金流向失败: {e}")
 
         # qstock备用
         if self.sources['qstock'] and 'qstock' in self.priority:
@@ -384,7 +387,7 @@ class TripleSourceDataManager:
                     self.stats['qstock_hits'] += 1
                     return df
             except Exception as e:
-                print(f"[INFO] qstock获取资金流向失败: {e}")
+                logger.info(f"[INFO] qstock获取资金流向失败: {e}")
 
         return pd.DataFrame()
 
@@ -413,7 +416,7 @@ class TripleSourceDataManager:
                     self.stats['qstock_hits'] += 1
                     return df
             except Exception as e:
-                print(f"[INFO] qstock获取龙虎榜失败: {e}")
+                logger.info(f"[INFO] qstock获取龙虎榜失败: {e}")
 
         # akshare备用
         if self.sources['akshare']:
@@ -425,7 +428,7 @@ class TripleSourceDataManager:
                     self.stats['akshare_hits'] += 1
                     return df
             except Exception as e:
-                print(f"[INFO] akshare获取龙虎榜失败: {e}")
+                logger.info(f"[INFO] akshare获取龙虎榜失败: {e}")
 
         return pd.DataFrame()
 
@@ -524,7 +527,7 @@ class TripleSourceDataManager:
     def clear_cache(self):
         """清空缓存"""
         self.cache.clear()
-        print("[OK] 缓存已清空")
+        logger.info("[OK] 缓存已清空")
 
     def get_stats(self) -> Dict:
         """获取使用统计"""
@@ -545,16 +548,16 @@ class TripleSourceDataManager:
     def print_stats(self):
         """打印统计信息"""
         stats = self.get_stats()
-        print("\n" + "=" * 70)
-        print("数据源使用统计")
-        print("=" * 70)
-        print(f"  总请求数: {stats['total_requests']}")
-        print(f"  QMT命中:  {stats['qmt_hits']:6d} ({stats['qmt_ratio']})")
-        print(f"  qstock命中: {stats['qstock_hits']:6d} ({stats['qstock_ratio']})")
-        print(f"  akshare命中: {stats['akshare_hits']:6d} ({stats['akshare_ratio']})")
-        print(f"  失败次数: {stats['failures']:6d}")
-        print(f"  缓存项数: {stats['cache_size']}")
-        print("=" * 70)
+        logger.info("\n" + "=" * 70)
+        logger.info("数据源使用统计")
+        logger.info("=" * 70)
+        logger.info(f"  总请求数: {stats['total_requests']}")
+        logger.info(f"  QMT命中:  {stats['qmt_hits']:6d} ({stats['qmt_ratio']})")
+        logger.info(f"  qstock命中: {stats['qstock_hits']:6d} ({stats['qstock_ratio']})")
+        logger.info(f"  akshare命中: {stats['akshare_hits']:6d} ({stats['akshare_ratio']})")
+        logger.info(f"  失败次数: {stats['failures']:6d}")
+        logger.info(f"  缓存项数: {stats['cache_size']}")
+        logger.info("=" * 70)
 
 
 # ============================================================
@@ -583,52 +586,52 @@ def get_triple_source_manager(priority='qmt,qstock,akshare') -> TripleSourceData
 
 if __name__ == "__main__":
     """测试代码"""
-    print("=" * 70)
-    print("三数据源管理器测试")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("三数据源管理器测试")
+    logger.info("=" * 70)
 
     # 创建管理器
     manager = get_triple_source_manager(priority='qmt,qstock,akshare')
 
     # 测试1: 获取行情数据
-    print("\n[测试1] 获取行情数据...")
+    logger.info("\n[测试1] 获取行情数据...")
     try:
         df = manager.get_market_data(['000001.SZ'], '20240101', '20240131')
         if not df.empty:
-            print(f"[OK] 获取到 {len(df)} 条数据")
-            print(df.head().to_string())
+            logger.info(f"[OK] 获取到 {len(df)} 条数据")
+            logger.info(df.head().to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试2: 获取板块列表
-    print("\n[测试2] 获取板块列表...")
+    logger.info("\n[测试2] 获取板块列表...")
     try:
         sectors = manager.get_sector_list()
-        print(f"[OK] 行业板块: {len(sectors['industry'])} 个")
-        print(f"  前5个: {sectors['industry'][:5]}")
+        logger.info(f"[OK] 行业板块: {len(sectors['industry'])} 个")
+        logger.info(f"  前5个: {sectors['industry'][:5]}")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试3: 获取资金流向
-    print("\n[测试3] 获取资金流向...")
+    logger.info("\n[测试3] 获取资金流向...")
     try:
         df = manager.get_money_flow('000001.SZ', days=5)
         if not df.empty:
-            print(f"[OK] 获取到 {len(df)} 条数据")
+            logger.info(f"[OK] 获取到 {len(df)} 条数据")
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试4: 打印统计
-    print("\n[测试4] 使用统计...")
+    logger.info("\n[测试4] 使用统计...")
     try:
         manager.print_stats()
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
-    print("\n" + "=" * 70)
-    print("测试完成!")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("测试完成!")
+    logger.info("=" * 70)

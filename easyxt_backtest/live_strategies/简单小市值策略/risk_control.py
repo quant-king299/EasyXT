@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 风险控制模块
 
@@ -45,7 +48,7 @@ class RiskController:
         if order['direction'] == 'buy':
             required = order['volume'] * order['price']
             if required > account['cash']:
-                print(f"资金不足: 需要{{required:.2f}}, 可用{{account['cash']:.2f}}")
+                logger.info(f"资金不足: 需要{{required:.2f}}, 可用{{account['cash']:.2f}}")
                 return False
 
         # 2. 检查单笔亏损限制
@@ -85,6 +88,6 @@ class RiskController:
         if peak_value > 0:
             drawdown = (peak_value - current_value) / peak_value
             if drawdown > self.max_drawdown:
-                print(f"⚠️ 回撤超限: {{drawdown:.2%}} > {{self.max_drawdown:.2%}}")
+                logger.info(f"⚠️ 回撤超限: {{drawdown:.2%}} > {{self.max_drawdown:.2%}}")
                 return False
         return True

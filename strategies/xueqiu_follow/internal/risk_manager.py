@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 风险管理模块
 负责交易风险控制和资金管理
@@ -447,7 +450,7 @@ async def main():
     
     # 生成风险报告
     report = risk_manager.generate_risk_report(positions, account_info)
-    print(f"风险报告: {json.dumps(report, indent=2, ensure_ascii=False)}")
+    logger.info(f"风险报告: {json.dumps(report, indent=2, ensure_ascii=False)}")
 
 
 if __name__ == "__main__":

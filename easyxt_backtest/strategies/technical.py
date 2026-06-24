@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 技术指标策略
 
@@ -62,7 +65,7 @@ class DualMovingAverageStrategy(bt.Strategy):
     def log(self, txt):
         """打印日志"""
         dt = self.data.datetime.date(0)
-        print(f'[{dt}] {txt}')
+        logger.info(f'[{dt}] {txt}')
 
 
 class RSIStrategy(bt.Strategy):

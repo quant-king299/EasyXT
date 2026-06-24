@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 CSV导入工具
 支持从CSV文件导入股票列表和自定义数据
@@ -39,8 +42,8 @@ class CSVImporter:
             code_col = self._find_code_column(df)
 
             if code_col is None:
-                print(f"[ERROR] CSV中未找到股票代码列")
-                print(f"  可用列: {list(df.columns)}")
+                logger.error(f"[ERROR] CSV中未找到股票代码列")
+                logger.info(f"  可用列: {list(df.columns)}")
                 return []
 
             # 提取股票代码
@@ -49,11 +52,11 @@ class CSVImporter:
             # 标准化股票代码
             normalized_stocks = self._normalize_stock_codes(stocks)
 
-            print(f"[CSV导入] 从 {csv_path} 导入 {len(normalized_stocks)} 只股票")
+            logger.info(f"[CSV导入] 从 {csv_path} 导入 {len(normalized_stocks)} 只股票")
             return normalized_stocks
 
         except Exception as e:
-            print(f"[ERROR] CSV加载失败: {e}")
+            logger.error(f"[ERROR] CSV加载失败: {e}")
             return []
 
     def _find_code_column(self, df: pd.DataFrame) -> Optional[str]:
@@ -128,11 +131,11 @@ class CSVImporter:
                 df[time_col] = pd.to_datetime(df[time_col])
                 df.set_index(time_col, inplace=True)
 
-            print(f"[CSV导入] 从 {csv_path} 导入 {len(df)} 条数据")
+            logger.info(f"[CSV导入] 从 {csv_path} 导入 {len(df)} 条数据")
             return df
 
         except Exception as e:
-            print(f"[ERROR] 数据加载失败: {e}")
+            logger.error(f"[ERROR] 数据加载失败: {e}")
             return pd.DataFrame()
 
     def _standardize_column_names(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -210,10 +213,10 @@ class CSVImporter:
         try:
             df = pd.DataFrame({'股票代码': stocks})
             df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-            print(f"[CSV导出] 已导出 {len(stocks)} 只股票到 {csv_path}")
+            logger.info(f"[CSV导出] 已导出 {len(stocks)} 只股票到 {csv_path}")
 
         except Exception as e:
-            print(f"[ERROR] CSV导出失败: {e}")
+            logger.error(f"[ERROR] CSV导出失败: {e}")
 
     def create_template(self, csv_path: str, include_examples: bool = True):
         """
@@ -236,31 +239,31 @@ class CSVImporter:
                 df = pd.DataFrame(columns=['股票代码', '股票名称'])
 
             df.to_csv(csv_path, index=False, encoding='utf-8-sig')
-            print(f"[模板创建] 已创建CSV模板: {csv_path}")
+            logger.info(f"[模板创建] 已创建CSV模板: {csv_path}")
 
         except Exception as e:
-            print(f"[ERROR] 模板创建失败: {e}")
+            logger.error(f"[ERROR] 模板创建失败: {e}")
 
 
 # 测试代码
 if __name__ == "__main__":
-    print("="*80)
-    print("CSV导入工具测试")
-    print("="*80)
+    logger.info("="*80)
+    logger.info("CSV导入工具测试")
+    logger.info("="*80)
 
     importer = CSVImporter()
 
     # 测试1：创建模板
-    print("\n【测试1】创建CSV模板")
+    logger.info("\n【测试1】创建CSV模板")
     importer.create_template('stock_list_template.csv', include_examples=True)
 
     # 测试2：加载刚才创建的模板
-    print("\n【测试2】加载股票列表")
+    logger.info("\n【测试2】加载股票列表")
     stocks = importer.load_stock_list('stock_list_template.csv')
     if stocks:
-        print(f"加载的股票: {stocks}")
+        logger.info(f"加载的股票: {stocks}")
 
     # 测试3：导出股票列表
-    print("\n【测试3】导出股票列表")
+    logger.info("\n【测试3】导出股票列表")
     test_stocks = ['600000.SH', '000001.SZ', '511380.SH']
     importer.export_stock_list(test_stocks, 'my_stocks.csv')

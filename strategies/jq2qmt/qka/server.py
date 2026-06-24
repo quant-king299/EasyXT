@@ -7,6 +7,10 @@ import uvicorn
 import uuid
 import hashlib
 
+import logging
+
+logger = logging.getLogger(__name__)
+
 class QMTServer:
     def __init__(self, account_id: str, mini_qmt_path: str, host: str = "0.0.0.0", port: int = 8000, token: str = None):
         """初始化交易服务器
@@ -25,7 +29,7 @@ class QMTServer:
         self.trader = None
         self.account = None
         self.token = token if token else self.generate_token()  # 使用自定义token或生成固定token
-        print(f"\n授权Token: {self.token}\n")  # 打印token供客户端使用
+        logger.info(f"\n授权Token: {self.token}\n")
 
     def generate_token(self) -> str:
         """生成基于机器码的固定token"""

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 #!/usr/bin/env python3
 """
 P1-009: 监控告警系统主服务
@@ -253,14 +256,14 @@ class MonitorServiceManager:
     
     def print_status(self):
         """打印服务状态"""
-        print("\n" + "="*60)
-        print("📊 EasyXT监控告警系统状态")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("📊 EasyXT监控告警系统状态")
+        logger.info("="*60)
         
         if self.monitoring_service:
-            print("🟢 服务状态: 运行中")
-            print(f"📁 配置文件: {self.config_file}")
-            print(f"🔧 监控组件: {len([k for k, v in self.config.items() if v.get('enabled', False)])} 个已启用")
+            logger.info("🟢 服务状态: 运行中")
+            logger.info(f"📁 配置文件: {self.config_file}")
+            logger.info(f"🔧 监控组件: {len([k for k, v in self.config.items() if v.get('enabled', False)])} 个已启用")
             
             # 显示启用的组件
             enabled_components = []
@@ -268,15 +271,15 @@ class MonitorServiceManager:
                 if config.get('enabled', False):
                     enabled_components.append(component)
             
-            print(f"📋 启用组件: {', '.join(enabled_components)}")
+            logger.info(f"📋 启用组件: {', '.join(enabled_components)}")
             
             if self.config.get('dashboard', {}).get('enabled'):
                 dashboard_config = self.config['dashboard']
-                print(f"🌐 监控面板: http://{dashboard_config['host']}:{dashboard_config['port']}")
+                logger.info(f"🌐 监控面板: http://{dashboard_config['host']}:{dashboard_config['port']}")
         else:
-            print("🔴 服务状态: 未启动")
+            logger.info("🔴 服务状态: 未启动")
         
-        print("="*60)
+        logger.info("="*60)
 
 
 async def main():

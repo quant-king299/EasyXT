@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 复权查询模块 - QMT API方案
 
@@ -116,7 +119,7 @@ class AdjustmentCache:
 
         # 可转债和基金跳过复权处理
         if is_skip_adjust:
-            print(f"  [INFO] 检测到可转债 {stock_code}，跳过复权处理")
+            logger.info(f"  [INFO] 检测到可转债 {stock_code}，跳过复权处理")
             return self._get_raw_data(stock_code, start_date, end_date, con)
 
         # 1. 不复权：直接返回原始数据
@@ -134,7 +137,7 @@ class AdjustmentCache:
             return qmt_data
 
         # 4. tushare 兜底（QMT 离线时）
-        print(f"  [INFO] QMT 不可用，尝试 tushare 获取复权数据...")
+        logger.info(f"  [INFO] QMT 不可用，尝试 tushare 获取复权数据...")
         tushare_data = self._get_from_tushare_api(stock_code, start_date, end_date, adjust_type)
         if not tushare_data.empty:
             return tushare_data
@@ -168,13 +171,13 @@ class AdjustmentCache:
         if not df.empty:
             # 输出数据样本用于调试
             sample_close = df['close'].iloc[0] if len(df) > 0 else 'N/A'
-            print(f"  [DEBUG] _get_raw_data: 查询股票={stock_code}, 返回{len(df)}条记录, 首日收盘={sample_close}")
+            logger.debug(f"  [DEBUG] _get_raw_data: 查询股票={stock_code}, 返回{len(df)}条记录, 首日收盘={sample_close}")
             # 验证stock_code列的值
             if 'stock_code' in df.columns:
                 unique_codes = df['stock_code'].unique()
-                print(f"  [DEBUG] 数据中stock_code列的唯一值: {unique_codes}")
+                logger.debug(f"  [DEBUG] 数据中stock_code列的唯一值: {unique_codes}")
         else:
-            print(f"  [DEBUG] _get_raw_data: 查询股票={stock_code}, 返回空数据")
+            logger.debug(f"  [DEBUG] _get_raw_data: 查询股票={stock_code}, 返回空数据")
 
         # 设置date为索引（确保索引类型一致）
         if not df.empty and 'date' in df.columns:
@@ -288,12 +291,12 @@ class AdjustmentCache:
             df.index.name = 'date'
 
             result_cols = [c for c in ['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount'] if c in df.columns]
-            print(f"  [OK] 本地 adj_factor 复权成功 {len(df)} 条 [股票:{stock_code}]")
+            logger.info(f"  [OK] 本地 adj_factor 复权成功 {len(df)} 条 [股票:{stock_code}]")
             return df[result_cols]
 
         except Exception as e:
             # 本地计算失败不算严重，静默降级到其他方案
-            print(f"  [DEBUG] 本地 adj_factor 复权失败（将降级到其他方案）: {e}")
+            logger.debug(f"  [DEBUG] 本地 adj_factor 复权失败（将降级到其他方案）: {e}")
             return pd.DataFrame()
 
     def _get_from_qmt_api(self,
@@ -309,23 +312,23 @@ class AdjustmentCache:
         # 延迟导入xtdata
         if not self.qmt_available:
             try:
-                print(f"  [DEBUG] 尝试导入xtdata...")
+                logger.debug(f"  [DEBUG] 尝试导入xtdata...")
                 from xtquant import xtdata
                 self.xtdata = xtdata
                 self.qmt_available = True
-                print(f"  [INFO] AdjustmentCache: xtdata导入成功")
+                logger.info(f"  [INFO] AdjustmentCache: xtdata导入成功")
             except ImportError as e:
-                print(f"  [DEBUG] xtdata导入失败（QMT 未运行）: {e}")
+                logger.debug(f"  [DEBUG] xtdata导入失败（QMT 未运行）: {e}")
                 return pd.DataFrame()
             except Exception as e:
-                print(f"  [DEBUG] xtdata连接异常: {e}")
+                logger.debug(f"  [DEBUG] xtdata连接异常: {e}")
                 return pd.DataFrame()
 
         # 转换复权类型
         dividend_type = ADJUST_TO_QMT_DIVIDEND_TYPE.get(adjust_type, 'none')
 
         try:
-            print(f"  [INFO] 调用QMT API获取复权数据 [股票:{stock_code}] (dividend_type={dividend_type})...")
+            logger.info(f"  [INFO] 调用QMT API获取复权数据 [股票:{stock_code}] (dividend_type={dividend_type})...")
 
             # 转换日期格式：YYYY-MM-DD -> YYYYMMDD
             start_time_fmt = start_date.replace('-', '')
@@ -340,7 +343,7 @@ class AdjustmentCache:
                 dividend_type=dividend_type
             )
 
-            print(f"  [DEBUG] QMT API返回: {type(data)}, keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
+            logger.debug(f"  [DEBUG] QMT API返回: {type(data)}, keys: {data.keys() if isinstance(data, dict) else 'N/A'}")
 
             if data is None or (stock_code not in data):
                 warnings.warn(f"QMT API返回空数据 (dividend_type={dividend_type})")
@@ -353,18 +356,18 @@ class AdjustmentCache:
                 warnings.warn(f"QMT API返回空DataFrame (dividend_type={dividend_type})")
                 return pd.DataFrame()
 
-            print(f"  [OK] QMT API返回 {len(df)} 条数据 [股票:{stock_code}]")
+            logger.info(f"  [OK] QMT API返回 {len(df)} 条数据 [股票:{stock_code}]")
 
             # 格式化数据
             result = self._format_qmt_data(df, stock_code)
             if result.empty:
-                print(f"  [WARN] _format_qmt_data 返回空数据 [股票:{stock_code}]")
+                logger.warning(f"  [WARN] _format_qmt_data 返回空数据 [股票:{stock_code}]")
             else:
-                print(f"  [OK] _format_qmt_data 成功，返回 {len(result)} 条数据 [股票:{stock_code}]")
+                logger.info(f"  [OK] _format_qmt_data 成功，返回 {len(result)} 条数据 [股票:{stock_code}]")
             return result
 
         except Exception as e:
-            print(f"  [ERROR] QMT API调用失败 [股票:{stock_code}]: {e}")
+            logger.error(f"  [ERROR] QMT API调用失败 [股票:{stock_code}]: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
@@ -385,7 +388,7 @@ class AdjustmentCache:
             from config.env_config import get_env_config
             token = get_env_config().tushare_token
             if not token:
-                print(f"  [DEBUG] tushare token 未配置，跳过 tushare 兜底")
+                logger.debug(f"  [DEBUG] tushare token 未配置，跳过 tushare 兜底")
                 return pd.DataFrame()
         except Exception:
             return pd.DataFrame()
@@ -405,7 +408,7 @@ class AdjustmentCache:
             if not result.empty:
                 return result
         except Exception as e:
-            print(f"  [DEBUG] tushare adj_factor 计算失败: {e}")
+            logger.debug(f"  [DEBUG] tushare adj_factor 计算失败: {e}")
 
         # 方案A：pro_bar 直接获取
         try:
@@ -413,7 +416,7 @@ class AdjustmentCache:
             if not result.empty:
                 return result
         except Exception as e:
-            print(f"  [DEBUG] tushare pro_bar 也失败: {e}")
+            logger.debug(f"  [DEBUG] tushare pro_bar 也失败: {e}")
 
         return pd.DataFrame()
 
@@ -469,7 +472,7 @@ class AdjustmentCache:
         df = df.set_index('date')
         df.index.name = 'date'
 
-        print(f"  [OK] tushare adj_factor 计算复权成功 {len(df)} 条 [股票:{ts_code}]")
+        logger.info(f"  [OK] tushare adj_factor 计算复权成功 {len(df)} 条 [股票:{ts_code}]")
         return df[['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount']]
 
     def _tushare_pro_bar(self,
@@ -501,7 +504,7 @@ class AdjustmentCache:
         df = df.set_index('date')
         df.index.name = 'date'
 
-        print(f"  [OK] tushare pro_bar({adj}) 获取复权成功 {len(df)} 条 [股票:{ts_code}]")
+        logger.info(f"  [OK] tushare pro_bar({adj}) 获取复权成功 {len(df)} 条 [股票:{ts_code}]")
         return df[['stock_code', 'open', 'high', 'low', 'close', 'volume', 'amount']]
 
     @staticmethod
@@ -535,10 +538,10 @@ class AdjustmentCache:
         """
         try:
             if data.empty:
-                print(f"  [DEBUG] _format_qmt_data: 输入数据为空 [股票:{stock_code}]")
+                logger.debug(f"  [DEBUG] _format_qmt_data: 输入数据为空 [股票:{stock_code}]")
                 return pd.DataFrame()
 
-            print(f"  [DEBUG] _format_qmt_data: 输入数据形状={data.shape}, 列={list(data.columns)[:5]}...")
+            logger.debug(f"  [DEBUG] _format_qmt_data: 输入数据形状={data.shape}, 列={list(data.columns)[:5]}...")
 
             # 重置索引（如果有多级索引）
             if isinstance(data.index, pd.MultiIndex):
@@ -574,7 +577,7 @@ class AdjustmentCache:
 
             # 确保有stock_code列（强制覆盖，防止QMT返回错误的数据）
             data['stock_code'] = stock_code
-            print(f"  [DEBUG] _format_qmt_data: 设置stock_code={stock_code}, 行数={len(data)}")
+            logger.debug(f"  [DEBUG] _format_qmt_data: 设置stock_code={stock_code}, 行数={len(data)}")
 
             # 确保有period列
             if 'period' not in data.columns:
@@ -593,7 +596,7 @@ class AdjustmentCache:
             # 输出数据样本用于调试
             if not data.empty and 'close' in data.columns:
                 sample_close = data['close'].iloc[0] if len(data) > 0 else 'N/A'
-                print(f"  [DEBUG] _format_qmt_data: 股票={stock_code}, 行数={len(data)}, 首日收盘={sample_close:.2f}")
+                logger.debug(f"  [DEBUG] _format_qmt_data: 股票={stock_code}, 行数={len(data)}, 首日收盘={sample_close:.2f}")
 
             # 设置date为索引（确保索引类型一致）
             if 'date' in data.columns:
@@ -604,7 +607,7 @@ class AdjustmentCache:
             return data
 
         except Exception as e:
-            print(f"  [ERROR] _format_qmt_data 失败 [股票:{stock_code}]: {e}")
+            logger.error(f"  [ERROR] _format_qmt_data 失败 [股票:{stock_code}]: {e}")
             import traceback
             traceback.print_exc()
             return pd.DataFrame()
@@ -620,9 +623,9 @@ class AdjustmentCache:
 
 def test_adjustment_cache():
     """测试复权查询（QMT API方案）"""
-    print("=" * 60)
-    print("复权查询测试（QMT API方案）")
-    print("=" * 60)
+    logger.info("=" * 60)
+    logger.info("复权查询测试（QMT API方案）")
+    logger.info("=" * 60)
 
     db_path = get_default_db_path()
     cache = AdjustmentCache(db_path)
@@ -634,33 +637,33 @@ def test_adjustment_cache():
     end_date = '2024-01-31'
 
     # 测试1: 不复权
-    print("\n[1] 查询不复权数据（从DuckDB）...")
+    logger.info("\n[1] 查询不复权数据（从DuckDB）...")
     df_none = cache.get_adjusted_data(test_stock, start_date, end_date, 'none', con)
-    print(f"  返回 {len(df_none)} 条数据")
+    logger.info(f"  返回 {len(df_none)} 条数据")
     if not df_none.empty:
-        print(f"  列: {list(df_none.columns)}")
+        logger.info(f"  列: {list(df_none.columns)}")
 
     # 测试2: 前复权
-    print("\n[2] 查询前复权数据（从QMT API）...")
+    logger.info("\n[2] 查询前复权数据（从QMT API）...")
     df_front = cache.get_adjusted_data(test_stock, start_date, end_date, 'front', con)
-    print(f"  返回 {len(df_front)} 条数据")
+    logger.info(f"  返回 {len(df_front)} 条数据")
     if not df_front.empty:
-        print(f"  列: {list(df_front.columns)}")
+        logger.info(f"  列: {list(df_front.columns)}")
         # 验证价格是否被复权
         if 'close' in df_front.columns:
-            print(f"  最新收盘价: {df_front['close'].iloc[-1]:.3f}")
+            logger.info(f"  最新收盘价: {df_front['close'].iloc[-1]:.3f}")
 
     # 测试3: 后复权
-    print("\n[3] 查询后复权数据（从QMT API）...")
+    logger.info("\n[3] 查询后复权数据（从QMT API）...")
     df_back = cache.get_adjusted_data(test_stock, start_date, end_date, 'back', con)
-    print(f"  返回 {len(df_back)} 条数据")
+    logger.info(f"  返回 {len(df_back)} 条数据")
 
     con.close()
-    print("\n[OK] 测试完成")
-    print("\n核心优势:")
-    print("  - 无需本地计算复权")
-    print("  - 使用QMT官方算法")
-    print("  - 代码简洁易维护")
+    logger.info("\n[OK] 测试完成")
+    logger.info("\n核心优势:")
+    logger.info("  - 无需本地计算复权")
+    logger.info("  - 使用QMT官方算法")
+    logger.info("  - 代码简洁易维护")
 
 
 if __name__ == "__main__":

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 EasyXT 策略持续运行调度器
 ========================
@@ -184,7 +187,7 @@ class StrategyScheduler:
     def _log(self, level: str, message: str):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_line = f"[{timestamp}] [{level}] [{self.strategy_name}] {message}"
-        print(log_line)
+        logger.info(log_line)
         try:
             log_file = self.log_dir / f"scheduler_{self.strategy_name}_{datetime.now().strftime('%Y%m%d')}.log"
             with open(log_file, 'a', encoding='utf-8') as f:
@@ -411,7 +414,7 @@ def main():
     try:
         scheduler.start()
     except KeyboardInterrupt:
-        print("\n已停止")
+        logger.info("\n已停止")
 
 
 if __name__ == "__main__":

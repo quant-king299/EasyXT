@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 技术指标因子
 
@@ -53,7 +56,7 @@ class TechnicalFactor(BaseFactor):
                 return self._get_from_data_manager(stock_pool, date, factor_field)
 
         except Exception as e:
-            print(f"❌ 计算技术指标因子失败 [{self.field}]: {e}")
+            logger.info(f"❌ 计算技术指标因子失败 [{self.field}]: {e}")
             return pd.Series(index=stock_pool, dtype=float)
 
     def _calculate_momentum(self, stock_pool: List[str], date: str, params: dict) -> pd.Series:

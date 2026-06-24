@@ -4,6 +4,8 @@ import os
 import re
 from datetime import date
 
+logger = logging.getLogger(__name__)
+
 formatter = logging.Formatter('[%(asctime)s]%(message)s', datefmt='%Y-%m-%d %H:%M:%S')
 
 class RemoveAnsiEscapeCodes(logging.Filter):
@@ -52,7 +54,7 @@ class WeChatHandler(logging.Handler):
             response = requests.post(self.webhook_url, json=payload)
             response.raise_for_status()
         except requests.exceptions.RequestException as e:
-            print(f"Failed to send log to WeChat: {e}")
+            logger.info(f"Failed to send log to WeChat: {e}")
 
 def add_wechat_handler(logger, wechat_webhook_url):
 

@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 通用数据导入器
 支持全市场/板块/自定义股票池的数据导入
@@ -88,19 +91,19 @@ class UniversalDataImporter:
         Returns:
             Dict: 导入结果统计
         """
-        print(f"\n{'='*80}")
-        print(f"板块股票数据导入: {board_name}")
-        print(f"{'='*80}")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"板块股票数据导入: {board_name}")
+        logger.info(f"{'='*80}")
 
         # Step 1: 获取板块股票列表
-        print(f"\n步骤1: 获取板块股票列表...")
+        logger.info(f"\n步骤1: 获取板块股票列表...")
         stocks = self.board_loader.get_board_stocks(board_name)
 
         if not stocks:
-            print(f"[ERROR] 未获取到板块股票")
+            logger.error(f"[ERROR] 未获取到板块股票")
             return {'success': False, 'error': '未获取到板块股票'}
 
-        print(f"[OK] 获取到 {len(stocks)} 只股票")
+        logger.info(f"[OK] 获取到 {len(stocks)} 只股票")
 
         # Step 2: 批量导入数据
         return self._import_stocks_batch(
@@ -132,19 +135,19 @@ class UniversalDataImporter:
         Returns:
             Dict: 导入结果统计
         """
-        print(f"\n{'='*80}")
-        print(f"CSV股票列表导入: {csv_path}")
-        print(f"{'='*80}")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"CSV股票列表导入: {csv_path}")
+        logger.info(f"{'='*80}")
 
         # Step 1: 从CSV加载股票列表
-        print(f"\n步骤1: 从CSV加载股票列表...")
+        logger.info(f"\n步骤1: 从CSV加载股票列表...")
         stocks = self.csv_importer.load_stock_list(csv_path)
 
         if not stocks:
-            print(f"[ERROR] CSV中未找到股票代码")
+            logger.error(f"[ERROR] CSV中未找到股票代码")
             return {'success': False, 'error': 'CSV中未找到股票代码'}
 
-        print(f"[OK] 加载 {len(stocks)} 只股票")
+        logger.info(f"[OK] 加载 {len(stocks)} 只股票")
 
         # Step 2: 批量导入数据
         return self._import_stocks_batch(
@@ -174,9 +177,9 @@ class UniversalDataImporter:
         Returns:
             Dict: 导入结果统计
         """
-        print(f"\n{'='*80}")
-        print(f"自定义股票列表导入: {len(stocks)} 只股票")
-        print(f"{'='*80}")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"自定义股票列表导入: {len(stocks)} 只股票")
+        logger.info(f"{'='*80}")
 
         return self._import_stocks_batch(
             stocks=stocks,
@@ -226,12 +229,12 @@ class UniversalDataImporter:
             batch_num = i // batch_size + 1
             total_batches = (total_stocks + batch_size - 1) // batch_size
 
-            print(f"\n批次 {batch_num}/{total_batches} ({len(batch)} 只股票):")
+            logger.info(f"\n批次 {batch_num}/{total_batches} ({len(batch)} 只股票):")
 
             # 下载这批股票
             for j, stock in enumerate(batch, 1):
                 stock_index = i + j
-                print(f"  [{stock_index}/{total_stocks}] {stock}...", end='')
+                logger.info(f"  [{stock_index}/{total_stocks}] {stock}...", end='')
 
                 try:
                     # 使用统一接口获取数据
@@ -244,7 +247,7 @@ class UniversalDataImporter:
                     )
 
                     if not data.empty:
-                        print(f"[OK] ({len(data)}条)")
+                        logger.info(f"[OK] ({len(data)}条)")
                         results['success'] += 1
                         results['details'].append({
                             'stock': stock,
@@ -252,7 +255,7 @@ class UniversalDataImporter:
                             'count': len(data)
                         })
                     else:
-                        print(f"[SKIP] 无数据")
+                        logger.info(f"[SKIP] 无数据")
                         results['skipped'] += 1
                         results['details'].append({
                             'stock': stock,
@@ -261,7 +264,7 @@ class UniversalDataImporter:
                         })
 
                 except Exception as e:
-                    print(f"[ERROR] {str(e)[:50]}")
+                    logger.error(f"[ERROR] {str(e)[:50]}")
                     results['failed'] += 1
                     results['details'].append({
                         'stock': stock,
@@ -270,13 +273,13 @@ class UniversalDataImporter:
                     })
 
         # 打印总结
-        print(f"\n{'='*80}")
-        print(f"导入完成！")
-        print(f"{'='*80}")
-        print(f"总计: {results['total']} 只")
-        print(f"成功: {results['success']} 只")
-        print(f"跳过: {results['skipped']} 只")
-        print(f"失败: {results['failed']} 只")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"导入完成！")
+        logger.info(f"{'='*80}")
+        logger.info(f"总计: {results['total']} 只")
+        logger.info(f"成功: {results['success']} 只")
+        logger.info(f"跳过: {results['skipped']} 只")
+        logger.info(f"失败: {results['failed']} 只")
 
         return results
 
@@ -299,7 +302,7 @@ class UniversalDataImporter:
         Returns:
             DataFrame: 缺失数据报告
         """
-        print(f"\n检查数据完整性...")
+        logger.info(f"\n检查数据完整性...")
 
         if not self.detector:
             self.detector = SmartDataDetector()
@@ -318,10 +321,10 @@ class UniversalDataImporter:
 
         if all_missing:
             df = pd.DataFrame(all_missing)
-            print(f"发现 {len(df)} 只股票存在缺失数据")
+            logger.info(f"发现 {len(df)} 只股票存在缺失数据")
             return df
         else:
-            print("所有股票数据完整")
+            logger.info("所有股票数据完整")
             return pd.DataFrame()
 
     def resume_import(self, checkpoint_file: str = 'import_checkpoint.json'):
@@ -332,20 +335,20 @@ class UniversalDataImporter:
             checkpoint_file: 检查点文件路径
         """
         # TODO: 实现断点续传功能
-        print("[INFO] 断点续传功能开发中...")
+        logger.info("[INFO] 断点续传功能开发中...")
 
 
 # 测试代码
 if __name__ == "__main__":
-    print("="*80)
-    print("通用数据导入器测试")
-    print("="*80)
+    logger.info("="*80)
+    logger.info("通用数据导入器测试")
+    logger.info("="*80)
 
     importer = UniversalDataImporter()
     importer.connect()
 
     # 测试1：导入上证50
-    print("\n【测试1】导入上证50数据（2024年）")
+    logger.info("\n【测试1】导入上证50数据（2024年）")
     result = importer.import_board_stocks(
         board_name='上证50',
         start_date='2024-01-01',
@@ -355,7 +358,7 @@ if __name__ == "__main__":
     )
 
     # 测试2：从CSV导入
-    print("\n\n【测试2】从CSV导入")
+    logger.info("\n\n【测试2】从CSV导入")
     # 先创建测试CSV
     test_stocks = ['600000.SH', '000001.SZ', '511380.SH']
     importer.csv_importer.export_stock_list(test_stocks, 'test_import.csv')
@@ -368,7 +371,7 @@ if __name__ == "__main__":
     )
 
     # 测试3：自定义股票列表
-    print("\n\n【测试3】自定义股票列表导入")
+    logger.info("\n\n【测试3】自定义股票列表导入")
     result3 = importer.import_custom_stocks(
         stocks=['511380.SH', '511880.SH'],
         start_date='2024-01-01',
@@ -376,6 +379,6 @@ if __name__ == "__main__":
         period='1d'
     )
 
-    print("\n" + "="*80)
-    print("测试完成！")
-    print("="*80)
+    logger.info("\n" + "="*80)
+    logger.info("测试完成！")
+    logger.info("="*80)

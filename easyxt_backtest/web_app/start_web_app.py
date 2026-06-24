@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 启动101因子平台Web应用
 """
@@ -16,14 +19,14 @@ if sys.platform == 'win32':
 project_root = Path(__file__).parent.parent.parent.absolute()
 app_path = project_root / 'easyxt_backtest' / 'web_app' / 'streamlit_app.py'
 
-print("=" * 80)
-print("🚀 启动101因子平台Web应用")
-print("=" * 80)
-print(f"\n📁 应用路径: {app_path}")
-print(f"\n⏳ 正在启动Streamlit服务器...")
-print(f"\n💡 启动后请在浏览器中访问:")
-print(f"   - Local URL: http://localhost:8501")
-print(f"\n" + "=" * 80 + "\n")
+logger.info("=" * 80)
+logger.info("🚀 启动101因子平台Web应用")
+logger.info("=" * 80)
+logger.info(f"\n📁 应用路径: {app_path}")
+logger.info(f"\n⏳ 正在启动Streamlit服务器...")
+logger.info(f"\n💡 启动后请在浏览器中访问:")
+logger.info(f"   - Local URL: http://localhost:8501")
+logger.info(f"\n" + "=" * 80 + "\n")
 
 # 启动Streamlit
 subprocess.run([

@@ -96,9 +96,9 @@ class ATR动态网格策略:
 
     def initialize(self):
         """初始化策略"""
-        print("=" * 60)
-        print("ATR动态网格策略".center(50))
-        print("=" * 60)
+        logger.info("=" * 60)
+        logger.info("ATR动态网格策略".center(50))
+        logger.info("=" * 60)
 
         # 初始化API连接
         try:
@@ -107,42 +107,42 @@ class ATR动态网格策略:
             # 初始化数据服务
             if hasattr(self.api, 'init_data'):
                 if self.api.init_data():
-                    print("✓ 数据服务初始化成功")
+                    logger.info("✓ 数据服务初始化成功")
                 else:
-                    print("⚠ 警告: 数据服务初始化失败")
+                    logger.info("⚠ 警告: 数据服务初始化失败")
 
             # 初始化交易服务（需要QMT路径和会话ID）
             if hasattr(self.api, 'init_trade') and self.qmt_path:
                 try:
-                    print(f"尝试连接交易服务...")
-                    print(f"  QMT路径: {self.qmt_path}")
-                    print(f"  会话ID: {self.session_id}")
+                    logger.info(f"尝试连接交易服务...")
+                    logger.info(f"  QMT路径: {self.qmt_path}")
+                    logger.info(f"  会话ID: {self.session_id}")
 
                     if self.api.init_trade(self.qmt_path, self.session_id):
-                        print("✓ 交易服务初始化成功")
+                        logger.info("✓ 交易服务初始化成功")
 
                         # 添加交易账户
                         if hasattr(self.api, 'add_account'):
                             if self.api.add_account(self.account_id, self.account_type):
-                                print(f"✓ 交易账户 {self.account_id} 添加成功")
+                                logger.info(f"✓ 交易账户 {self.account_id} 添加成功")
                             else:
-                                print(f"⚠ 警告: 交易账户添加失败")
+                                logger.info(f"⚠ 警告: 交易账户添加失败")
                     else:
-                        print("⚠ 警告: 交易服务连接失败")
-                        print("   请检查：")
-                        print("   1. QMT客户端是否已启动")
-                        print("   2. QMT路径是否正确")
-                        print("   3. 账户是否已在QMT中登录")
+                        logger.info("⚠ 警告: 交易服务连接失败")
+                        logger.info("   请检查：")
+                        logger.info("   1. QMT客户端是否已启动")
+                        logger.info("   2. QMT路径是否正确")
+                        logger.info("   3. 账户是否已在QMT中登录")
 
                 except Exception as e:
                     print(f"⚠ 警告: 交易服务初始化异常 - {str(e)}")
-                    print("   提示: 请在QMT客户端手动登录交易账户")
+                    logger.info("   提示: 请在QMT客户端手动登录交易账户")
             else:
                 if not self.qmt_path:
-                    print("⚠ 警告: 未配置QMT路径，无法连接交易服务")
-                    print("   请在配置文件中添加 'QMT路径' 参数")
+                    logger.info("⚠ 警告: 未配置QMT路径，无法连接交易服务")
+                    logger.info("   请在配置文件中添加 'QMT路径' 参数")
                 else:
-                    print("⚠ 警告: API不支持init_trade方法")
+                    logger.info("⚠ 警告: API不支持init_trade方法")
 
         except Exception as e:
             print(f"✗ 错误: API初始化异常 - {str(e)}")
@@ -156,17 +156,17 @@ class ATR动态网格策略:
         # 加载或初始化基准价格
         self.load_state()
 
-        print(f"\n策略参数:")
-        print(f"  账户ID: {self.account_id}")
-        print(f"  账户类型: {self.account_type}")
-        print(f"  ATR周期: {self.atr_period}")
-        print(f"  ATR倍数: {self.atr_multiplier}")
-        print(f"  网格层数: {self.grid_layers}")
-        print(f"  最小网格间距: {self.min_grid_spacing}%")
-        print(f"  最大网格间距: {self.max_grid_spacing}%")
-        print(f"  均线周期: {self.ma_period}")
-        print(f"  股票池: {self.stock_pool}")
-        print("=" * 60 + "\n")
+        logger.info(f"\n策略参数:")
+        logger.info(f"  账户ID: {self.account_id}")
+        logger.info(f"  账户类型: {self.account_type}")
+        logger.info(f"  ATR周期: {self.atr_period}")
+        logger.info(f"  ATR倍数: {self.atr_multiplier}")
+        logger.info(f"  网格层数: {self.grid_layers}")
+        logger.info(f"  最小网格间距: {self.min_grid_spacing}%")
+        logger.info(f"  最大网格间距: {self.max_grid_spacing}%")
+        logger.info(f"  均线周期: {self.ma_period}")
+        logger.info(f"  股票池: {self.stock_pool}")
+        logger.info("=" * 60 + "\n")
 
     def calculate_atr(self, stock_code):
         """
@@ -387,7 +387,7 @@ class ATR动态网格策略:
                     self.last_trigger_price[stock_code] = price
                     return True
                 else:
-                    print(f"  ✗ 买入失败")
+                    logger.info(f"  ✗ 买入失败")
                     return False
 
             elif order_type == 'sell':
@@ -412,7 +412,7 @@ class ATR动态网格策略:
                     self.last_trigger_price[stock_code] = price
                     return True
                 else:
-                    print(f"  ✗ 卖出失败")
+                    logger.info(f"  ✗ 卖出失败")
                     return False
 
         except Exception as e:
@@ -452,7 +452,7 @@ class ATR动态网格策略:
                     self.last_trigger_price = state.get('上次触发价格', {})
                     print(f"✓ 已加载策略状态 (基准价格: {self.base_prices}, 上次触发价格: {self.last_trigger_price})")
             else:
-                print(f"ℹ 首次运行，将自动初始化基准价格")
+                logger.info(f"ℹ 首次运行，将自动初始化基准价格")
         except Exception as e:
             print(f"⚠ 加载状态失败: {str(e)}")
 
@@ -513,13 +513,13 @@ class ATR动态网格策略:
 
                 # 检查数据有效性
                 if price_df is None or price_df.empty:
-                    print(f"  {stock_code}: ⚠ 无法获取行情数据")
+                    logger.info(f"  {stock_code}: ⚠ 无法获取行情数据")
                     continue
 
                 # 从DataFrame中提取数据（使用英文列名）
                 stock_data = price_df[price_df['code'] == stock_code]
                 if stock_data.empty:
-                    print(f"  {stock_code}: ⚠ 未找到该股票数据")
+                    logger.info(f"  {stock_code}: ⚠ 未找到该股票数据")
                     continue
 
                 current_price = stock_data.iloc[0]['price']
@@ -542,7 +542,7 @@ class ATR动态网格策略:
                 # 初始化基准价格（首次运行）
                 if stock_code not in self.base_prices:
                     self.base_prices[stock_code] = current_price
-                    print(f"  {stock_code}: 初始化基准价 = {current_price:.3f}")
+                    logger.info(f"  {stock_code}: 初始化基准价 = {current_price:.3f}")
                     continue
 
                 # 更新基准价格（智能调整）
@@ -555,22 +555,22 @@ class ATR动态网格策略:
                 base_price = self.base_prices[stock_code]
                 position = self.get_position(stock_code)
 
-                print(f"  {stock_code}:")
-                print(f"    价格: {current_price:.3f} | 基准价: {base_price:.3f} | ATR: {atr:.4f} | 网格间距: {spacing:.3f}%")
-                print(f"    持仓: {position} | 网格: {self.grid_layers}层 x{self.position_size}")
+                logger.info(f"  {stock_code}:")
+                logger.info(f"    价格: {current_price:.3f} | 基准价: {base_price:.3f} | ATR: {atr:.4f} | 网格间距: {spacing:.3f}%")
+                logger.info(f"    持仓: {position} | 网格: {self.grid_layers}层 x{self.position_size}")
 
                 # 检查交易信号
                 signal = self.check_trade_signal(stock_code, current_price)
 
                 if signal == 'buy':
-                    print(f"    触发买入信号 @ {current_price:.3f}")
+                    logger.info(f"    触发买入信号 @ {current_price:.3f}")
                     self.place_order(stock_code, 'buy', current_price)
 
                 elif signal == 'sell':
-                    print(f"    触发卖出信号 @ {current_price:.3f}")
+                    logger.info(f"    触发卖出信号 @ {current_price:.3f}")
                     self.place_order(stock_code, 'sell', current_price)
                 else:
-                    print(f"    无交易信号")
+                    logger.info(f"    无交易信号")
 
             except Exception as e:
                 print(f"  {stock_code}: ✗ 处理异常 - {str(e)}")
@@ -582,12 +582,12 @@ class ATR动态网格策略:
 
     def start(self):
         """启动策略"""
-        print("\n" + "=" * 60)
-        print("策略启动".center(50))
-        print("=" * 60)
-        print("\n开始监控市场...")
-        print(f"交易时间: {self.trade_start_hour}:00 - {self.trade_end_hour}:00")
-        print(f"按 Ctrl+C 停止策略\n")
+        logger.info("\n" + "=" * 60)
+        logger.info("策略启动".center(50))
+        logger.info("=" * 60)
+        logger.info("\n开始监控市场...")
+        logger.info(f"交易时间: {self.trade_start_hour}:00 - {self.trade_end_hour}:00")
+        logger.info(f"按 Ctrl+C 停止策略\n")
 
         try:
             while True:
@@ -595,17 +595,17 @@ class ATR动态网格策略:
                 time.sleep(3)  # 3秒扫描一次
 
         except KeyboardInterrupt:
-            print("\n\n" + "=" * 60)
-            print("策略停止".center(50))
-            print("=" * 60)
+            logger.info("\n\n" + "=" * 60)
+            logger.info("策略停止".center(50))
+            logger.info("=" * 60)
 
             # 统计信息
             duration = (datetime.now() - self.start_time).total_seconds() / 60
-            print(f"\n运行时长: {duration:.1f}分钟")
-            print(f"交易次数: {self.trade_count}")
-            print(f"基准价格: {self.base_prices}")
+            logger.info(f"\n运行时长: {duration:.1f}分钟")
+            logger.info(f"交易次数: {self.trade_count}")
+            logger.info(f"基准价格: {self.base_prices}")
             print(f"\n状态已保存到: {self.log_file.replace('.json', '_state.json')}")
-            print("\n策略已安全退出")
+            logger.info("\n策略已安全退出")
 
 
 # 测试代码

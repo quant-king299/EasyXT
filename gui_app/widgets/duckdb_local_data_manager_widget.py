@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 DuckDB本地数据管理GUI组件
 提供基于DuckDB的数据下载、管理和查看功能
@@ -42,7 +45,7 @@ try:
     DUCKDB_MANAGER_AVAILABLE = True
 except ImportError:
     DUCKDB_MANAGER_AVAILABLE = False
-    print("警告: 统一DuckDB管理器未找到")
+    logger.info("警告: 统一DuckDB管理器未找到")
 
 
 class DuckDBDataDownloadThread(QThread):

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 Alpha101因子库
 
@@ -72,7 +75,7 @@ class Alpha101Factor(BaseFactor):
             return result
 
         except Exception as e:
-            print(f"❌ 计算Alpha101因子失败 [{self.factor_name}]: {e}")
+            logger.info(f"❌ 计算Alpha101因子失败 [{self.factor_name}]: {e}")
             return pd.Series(index=stock_pool, dtype=float)
 
     def _get_bars(self, stock_pool: List[str], date: str, window: int = 60) -> pd.DataFrame:
@@ -116,7 +119,7 @@ class Alpha101Factor(BaseFactor):
             return None
 
         except Exception as e:
-            print(f"⚠️ 获取历史数据失败: {e}")
+            logger.info(f"⚠️ 获取历史数据失败: {e}")
             return None
 
     # ==================== Alpha101因子实现 ====================

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 雪球Cookie管理工具
 用于获取和管理雪球网站的Cookie
@@ -197,28 +200,28 @@ cookiesu=xxx; device_id=xxx; xq_is_login=1; u=xxx; xq_a_token=xxx; ...
 - 历史配置/雪球跟单设置.json
 - strategies/xueqiu_follow/config/xueqiu_config.json
 """
-    print(guide)
+    logger.info(guide)
 
 
 if __name__ == "__main__":
     # 测试Cookie管理器
     manager = CookieManager()
     
-    print("🔧 测试Cookie管理器...")
+    logger.info("🔧 测试Cookie管理器...")
     
     # 获取Cookie
     cookie = manager.get_cookie()
     if cookie:
-        print("✅ 找到Cookie")
+        logger.info("✅ 找到Cookie")
         
         # 分析Cookie信息
         info = manager.get_cookie_info(cookie)
-        print(f"📊 Cookie信息:")
-        print(f"   有效性: {'✅' if info['valid'] else '❌'}")
-        print(f"   用户ID: {info['user_id']}")
-        print(f"   登录状态: {'✅' if info['login_status'] else '❌'}")
-        print(f"   Token存在: {'✅' if info['token_exists'] else '❌'}")
-        print(f"   字段数量: {len(info['fields'])}")
+        logger.info(f"📊 Cookie信息:")
+        logger.info(f"   有效性: {'✅' if info['valid'] else '❌'}")
+        logger.info(f"   用户ID: {info['user_id']}")
+        logger.info(f"   登录状态: {'✅' if info['login_status'] else '❌'}")
+        logger.info(f"   Token存在: {'✅' if info['token_exists'] else '❌'}")
+        logger.info(f"   字段数量: {len(info['fields'])}")
     else:
-        print("❌ 未找到有效Cookie")
+        logger.info("❌ 未找到有效Cookie")
         print_cookie_guide()

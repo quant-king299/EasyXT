@@ -1,5 +1,8 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python
 """
 简单小市值策略 - 实盘交易主程序
 
@@ -43,7 +46,7 @@ class 简单小市值策略StrategyLive:
 
     def initialize(self):
         """初始化"""
-        print(f"初始化简单小市值策略实盘策略...")
+        logger.info(f"初始化简单小市值策略实盘策略...")
 
         # TODO: 连接QMT
         # self.trader = XtQuantTrader(self.account_id)
@@ -58,12 +61,12 @@ class 简单小市值策略StrategyLive:
         risk_config = {}
         self.risk_controller = RiskController(risk_config)
 
-        print("✅ 初始化完成（模拟模式）")
+        logger.info("✅ 初始化完成（模拟模式）")
         return True
 
     def on_rebalance(self):
         """调仓回调"""
-        print(f"\n[{datetime.now()}] 🔔 触发调仓")
+        logger.info(f"\n[{datetime.now()}] 🔔 触发调仓")
 
         # 1. 获取当前持仓
         # current_positions = self.order_manager.get_positions()
@@ -72,8 +75,8 @@ class 简单小市值策略StrategyLive:
         date = datetime.now().strftime('%Y%m%d')
         target_portfolio = self.strategy.run_rebalance(date)
 
-        print(f"✅ 调仓完成（模拟模式）")
-        print(f"   目标持仓: {len(target_portfolio)} 只股票")
+        logger.info(f"✅ 调仓完成（模拟模式）")
+        logger.info(f"   目标持仓: {len(target_portfolio)} 只股票")
 
     def run(self):
         """运行实盘策略"""
@@ -82,18 +85,18 @@ class 简单小市值策略StrategyLive:
 
         self.is_running = True
 
-        print(f"\n开始运行简单小市值策略实盘策略...")
-        print(f"账户ID: {self.account_id}")
-        print(f"⚠️  模拟模式：不会执行实际交易")
+        logger.info(f"\n开始运行简单小市值策略实盘策略...")
+        logger.info(f"账户ID: {self.account_id}")
+        logger.info(f"⚠️  模拟模式：不会执行实际交易")
 
         # 执行一次调仓测试
         self.on_rebalance()
 
-        print(f"\n✅ 测试完成！")
-        print(f"\n💡 实盘使用时需要:")
-        print(f"   1. 配置QMT账户ID")
-        print(f"   2. 取消注释QMT相关代码")
-        print(f"   3. 运行策略: python main.py")
+        logger.info(f"\n✅ 测试完成！")
+        logger.info(f"\n💡 实盘使用时需要:")
+        logger.info(f"   1. 配置QMT账户ID")
+        logger.info(f"   2. 取消注释QMT相关代码")
+        logger.info(f"   3. 运行策略: python main.py")
 
 
 def main():

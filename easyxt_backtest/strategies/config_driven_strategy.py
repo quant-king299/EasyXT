@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 配置驱动策略
 
@@ -231,10 +234,10 @@ class ConfigDrivenStrategy(StrategyBase):
                                 monthly_first[year_month] = date_str
 
                         rebalance_dates = sorted(monthly_first.values())
-                        print(f"[INFO] 使用每月第一个交易日作为调仓日期: {len(rebalance_dates)} 个月")
+                        logger.info(f"[INFO] 使用每月第一个交易日作为调仓日期: {len(rebalance_dates)} 个月")
                     else:
                         # 备用方案：使用每月1日
-                        print(f"[WARN] 无法获取交易日列表，使用每月1日作为调仓日期")
+                        logger.warning(f"[WARN] 无法获取交易日列表，使用每月1日作为调仓日期")
                         current = start
                         while current <= end:
                             if current.day == 1:
@@ -246,7 +249,7 @@ class ConfigDrivenStrategy(StrategyBase):
                             else:
                                 current += timedelta(days=1)
                 except Exception as e:
-                    print(f"[WARN] 获取交易日列表失败: {e}")
+                    logger.warning(f"[WARN] 获取交易日列表失败: {e}")
                     # 备用方案
                     current = start
                     while current <= end:
@@ -291,7 +294,7 @@ class ConfigDrivenStrategy(StrategyBase):
 
         # 如果没有找到调仓日期，使用回测第一天作为初始调仓日期
         if not rebalance_dates:
-            print(f"[WARN] No rebalance dates found in {start_date} - {end_date}, using start date as initial rebalance date")
+            logger.warning(f"[WARN] No rebalance dates found in {start_date} - {end_date}, using start date as initial rebalance date")
             rebalance_dates.append(start_date)
 
         return rebalance_dates

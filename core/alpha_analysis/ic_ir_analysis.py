@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 IC/IR分析模块
 用于评估因子的预测能力
@@ -305,11 +308,11 @@ class ICIRAnalyzer:
         if self.ic_stats is None:
             self.calculate_ic_stats()
 
-        print("=" * 80)
-        print("IC/IR分析报告")
-        print("=" * 80)
-        print(f"{'指标':<20} {'数值':<15} {'说明'}")
-        print("-" * 80)
+        logger.info("=" * 80)
+        logger.info("IC/IR分析报告")
+        logger.info("=" * 80)
+        logger.info(f"{'指标':<20} {'数值':<15} {'说明'}")
+        logger.info("-" * 80)
 
         report_map = {
             'ic_mean': ('IC均值', 'IC均值越大，因子预测能力越强'),
@@ -331,27 +334,27 @@ class ICIRAnalyzer:
                 value_str = f"{value:.0f}"
             else:
                 value_str = f"{value:.4f}"
-            print(f"{name:<20} {value_str:<15} {desc}")
+            logger.info(f"{name:<20} {value_str:<15} {desc}")
 
-        print("=" * 80)
+        logger.info("=" * 80)
 
         # 因子评级
         ir = self.ic_stats['ir']
         ic_mean = self.ic_stats['ic_mean']
 
-        print("\n因子评级：", end="")
+        logger.info("\n因子评级：", end="")
         if abs(ir) >= 1.0 and abs(ic_mean) >= 0.05:
-            print("优秀 ⭐⭐⭐⭐⭐")
+            logger.info("优秀 ⭐⭐⭐⭐⭐")
         elif abs(ir) >= 0.7 and abs(ic_mean) >= 0.03:
-            print("良好 ⭐⭐⭐⭐")
+            logger.info("良好 ⭐⭐⭐⭐")
         elif abs(ir) >= 0.5 and abs(ic_mean) >= 0.02:
-            print("中等 ⭐⭐⭐")
+            logger.info("中等 ⭐⭐⭐")
         elif abs(ir) >= 0.3 and abs(ic_mean) >= 0.01:
-            print("一般 ⭐⭐")
+            logger.info("一般 ⭐⭐")
         else:
-            print("较差 ⭐")
+            logger.info("较差 ⭐")
 
-        print("=" * 80)
+        logger.info("=" * 80)
 
     def save_ic_series(self, filepath: str):
         """
@@ -366,7 +369,7 @@ class ICIRAnalyzer:
             raise ValueError("请先调用calculate_ic()计算IC值")
 
         self.ic_series.to_csv(filepath)
-        print(f"IC时间序列已保存到: {filepath}")
+        logger.info(f"IC时间序列已保存到: {filepath}")
 
     def save_report(self, filepath: str):
         """
@@ -379,7 +382,7 @@ class ICIRAnalyzer:
         """
         report = self.generate_report()
         report.to_csv(filepath, index=False, encoding='utf-8-sig')
-        print(f"分析报告已保存到: {filepath}")
+        logger.info(f"分析报告已保存到: {filepath}")
 
 
 # 使用示例
@@ -414,5 +417,5 @@ if __name__ == "__main__":
 
     # 生成报告
     report = analyzer.generate_report()
-    print("\n详细报告：")
-    print(report)
+    logger.info("\n详细报告：")
+    logger.info(report)

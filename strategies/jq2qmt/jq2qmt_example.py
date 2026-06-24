@@ -47,10 +47,10 @@ class QMTClient:
                     print(f"❌ 信号发送失败: {result.get('message')}")
                     return None
             else:
-                print(f"❌ HTTP错误: {response.status_code}")
+                logger.info(f"❌ HTTP错误: {response.status_code}")
                 return None
         except Exception as e:
-            print(f"❌ 异常: {e}")
+            logger.info(f"❌ 异常: {e}")
             return None
 
 try:
@@ -198,13 +198,13 @@ except (ImportError, NameError):
     # 如果不存在，创建模拟log函数
     class MockLogger:
         def info(self, *args):
-            print("INFO:", *args)
+            logger.info("INFO:", *args)
         
         def warning(self, *args):
-            print("WARNING:", *args)
+            logger.info("WARNING:", *args)
         
         def error(self, *args):
-            print("ERROR:", *args)
+            logger.info("ERROR:", *args)
     
     log = MockLogger()
 
@@ -492,7 +492,8 @@ def before_market_open(context):
             # 尝试获取股票信息来验证是否存在
             get_current_data()[stock]
             available_stocks.append(stock)
-        except Exception:            log.info('股票 %s 不存在或无法获取数据，跳过' % stock)
+        except Exception:
+            log.info('股票 %s 不存在或无法获取数据，跳过' % stock)
             continue
     
     if available_stocks:
@@ -530,7 +531,8 @@ def market_open(context):
             # 安全获取持仓数量
             try:
                 position_amount = context.portfolio.positions[security].total_amount
-            except Exception:                position_amount = 0
+            except Exception:
+                position_amount = 0
             
             # 更敏感的交易条件（0.2%的价格波动就触发交易）
             # 价格上涨0.2%以上且有资金则测试买入

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 地域过滤器
 
@@ -86,8 +89,8 @@ class RegionFilter(BaseFilter):
                 return self.data_manager.get_stock_region(stock_pool, date)
             else:
                 # 如果data_manager不支持地域数据，返回None
-                print("⚠️ 当前data_manager不支持地域数据过滤")
+                logger.info("⚠️ 当前data_manager不支持地域数据过滤")
                 return None
         except Exception as e:
-            print(f"⚠️ 获取地域数据失败: {e}")
+            logger.info(f"⚠️ 获取地域数据失败: {e}")
             return None

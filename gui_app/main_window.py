@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 EasyXT量化交易策略管理平台
 基于PyQt5的专业量化交易策略参数设置和管理界面
@@ -58,7 +61,7 @@ try:
     EASYXT_AVAILABLE = True
 except ImportError:
     EASYXT_AVAILABLE = False
-    print("警告: easy_xt未安装，部分功能将不可用")
+    logger.info("警告: easy_xt未安装，部分功能将不可用")
 
 # 导入各个功能组件
 from gui_app.widgets.jq2qmt_widget import JQ2QMTWidget
@@ -201,91 +204,91 @@ class MainWindow(QMainWindow):
 
     def on_connection_status_clicked(self, event):
         """连接状态标签被点击事件"""
-        print("手动刷新连接状态...")
+        logger.info("手动刷新连接状态...")
         self.check_connection_status()
 
     def check_connection_status(self):
         """检查MiniQMT连接状态"""
-        print("\n" + "="*60)
-        print("开始检查MiniQMT连接状态...")
-        print("="*60)
+        logger.info("\n" + "="*60)
+        logger.info("开始检查MiniQMT连接状态...")
+        logger.info("="*60)
 
         try:
             # 检查easy_xt是否可用
             if not EASYXT_AVAILABLE:
-                print("❌ EasyXT不可用")
+                logger.info("❌ EasyXT不可用")
                 self.update_connection_status(False)
                 return
 
-            print("✓ EasyXT可用")
+            logger.info("✓ EasyXT可用")
 
             try:
                 api = easy_xt.get_api()
-                print("✓ 成功获取API实例")
+                logger.info("✓ 成功获取API实例")
             except Exception as e:
-                print(f"❌ 获取API失败: {str(e)}")
+                logger.info(f"❌ 获取API失败: {str(e)}")
                 self.update_connection_status(False)
                 return
 
             # 检查data服务
             if not hasattr(api, 'data'):
-                print("❌ API没有data属性")
+                logger.info("❌ API没有data属性")
                 self.update_connection_status(False)
                 return
 
-            print("✓ API有data属性")
+            logger.info("✓ API有data属性")
 
             # 初始化数据服务
-            print("\n正在初始化数据服务...")
+            logger.info("\n正在初始化数据服务...")
             try:
                 init_result = api.init_data()
                 if init_result:
-                    print("✓ 数据服务初始化成功")
+                    logger.info("✓ 数据服务初始化成功")
                 else:
-                    print("ℹ️  数据服务初始化返回False")
-                    print("ℹ️  GUI功能正常，可使用Tushare下载获取数据")
+                    logger.info("ℹ️  数据服务初始化返回False")
+                    logger.info("ℹ️  GUI功能正常，可使用Tushare下载获取数据")
             except Exception as e:
-                print(f"ℹ️  数据服务初始化异常: {str(e)}")
-                print("ℹ️  这不影响GUI使用，可以通过Tushare下载数据")
+                logger.info(f"ℹ️  数据服务初始化异常: {str(e)}")
+                logger.info("ℹ️  这不影响GUI使用，可以通过Tushare下载数据")
 
             # 验证数据连接
-            print("\n尝试验证数据连接...")
+            logger.info("\n尝试验证数据连接...")
             test_codes = ['000001.SZ']
             connected = False
 
             for code in test_codes:
                 try:
-                    print(f"  测试 {code}...")
+                    logger.info(f"  测试 {code}...")
                     price_df = api.data.get_current_price([code])
 
                     if price_df is not None and hasattr(price_df, 'empty') and not price_df.empty:
                         connected = True
-                        print(f"✓ 数据连接验证成功")
+                        logger.info(f"✓ 数据连接验证成功")
                         break
                     else:
-                        print(f"  ℹ️  {code} 数据为空")
+                        logger.info(f"  ℹ️  {code} 数据为空")
 
                 except Exception as e:
                     # 只在有严重错误时才显示
                     if "数据服务未连接" not in str(e):
-                        print(f"  ℹ️  连接测试失败: {str(e)[:50]}")
+                        logger.info(f"  ℹ️  连接测试失败: {str(e)[:50]}")
                     break  # 只测试一个代码就够了
 
-            print("\n" + "="*60)
+            logger.info("\n" + "="*60)
             if connected:
-                print("✅ MiniQMT已连接，可使用实时数据功能")
+                logger.info("✅ MiniQMT已连接，可使用实时数据功能")
             else:
-                print("ℹ️ MiniQMT未连接，但GUI功能正常可用")
-                print("ℹ️ 可以使用Tushare下载功能获取数据")
-            print("="*60 + "\n")
+                logger.info("ℹ️ MiniQMT未连接，但GUI功能正常可用")
+                logger.info("ℹ️ 可以使用Tushare下载功能获取数据")
+            logger.info("="*60 + "\n")
 
             self.update_connection_status(connected)
 
         except Exception as e:
-            print(f"\n❌ 检查连接状态异常: {str(e)}")
+            logger.info(f"\n❌ 检查连接状态异常: {str(e)}")
             import traceback
-            print(f"详细错误堆栈:\n{traceback.format_exc()}")
-            print("="*60 + "\n")
+            logger.info(f"详细错误堆栈:\n{traceback.format_exc()}")
+            logger.info("="*60 + "\n")
             self.update_connection_status(False)
 
     def update_connection_status(self, connected: bool):

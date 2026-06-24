@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 因子计算器
 
@@ -189,7 +192,7 @@ class FactorCalculator:
             else:
                 return pd.Series(index=stock_pool, dtype=str)
         except Exception as e:
-            print(f"⚠️ 获取行业数据失败: {e}")
+            logger.info(f"⚠️ 获取行业数据失败: {e}")
             return pd.Series(index=stock_pool, dtype=str)
 
     def _get_market_cap_data(self, stock_pool: List[str], date: str) -> pd.Series:
@@ -214,7 +217,7 @@ class FactorCalculator:
             else:
                 return pd.Series(index=stock_pool, dtype=float)
         except Exception as e:
-            print(f"⚠️ 获取市值数据失败: {e}")
+            logger.info(f"⚠️ 获取市值数据失败: {e}")
             return pd.Series(index=stock_pool, dtype=float)
 
     def clear_cache(self):

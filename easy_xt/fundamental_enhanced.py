@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 增强版基本面因子分析器
 
@@ -45,7 +48,7 @@ class FundamentalAnalyzerEnhanced:
             pd.DataFrame: 价格数据
         """
         if self.duckdb_reader is None:
-            print("[ERROR] 需要提供DuckDBDataReader实例")
+            logger.error("[ERROR] 需要提供DuckDBDataReader实例")
             return pd.DataFrame()
 
         try:
@@ -67,7 +70,7 @@ class FundamentalAnalyzerEnhanced:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取 {stock_code} 数据失败: {e}")
+            logger.error(f"[ERROR] 获取 {stock_code} 数据失败: {e}")
             return pd.DataFrame()
 
     # ============================================================
@@ -110,7 +113,7 @@ class FundamentalAnalyzerEnhanced:
                 factors['dist_from_high_252'] = (df_price['close'].iloc[-1] / high_252 - 1) * 100
 
         except Exception as e:
-            print(f"[INFO] 计算估值因子失败: {e}")
+            logger.info(f"[INFO] 计算估值因子失败: {e}")
 
         return factors
 
@@ -168,7 +171,7 @@ class FundamentalAnalyzerEnhanced:
                     factors['rsi_14'] = 100
 
         except Exception as e:
-            print(f"[INFO] 计算动量因子失败: {e}")
+            logger.info(f"[INFO] 计算动量因子失败: {e}")
 
         return factors
 
@@ -221,7 +224,7 @@ class FundamentalAnalyzerEnhanced:
                 factors['volatility_percentile'] = vol_percentile
 
         except Exception as e:
-            print(f"[INFO] 计算波动率因子失败: {e}")
+            logger.info(f"[INFO] 计算波动率因子失败: {e}")
 
         return factors
 
@@ -284,7 +287,7 @@ class FundamentalAnalyzerEnhanced:
                 factors['price_position_52w'] = (latest - low_52w) / (high_52w - low_52w) if (high_52w - low_52w) > 0 else np.nan
 
         except Exception as e:
-            print(f"[INFO] 计算质量因子失败: {e}")
+            logger.info(f"[INFO] 计算质量因子失败: {e}")
 
         return factors
 
@@ -335,7 +338,7 @@ class FundamentalAnalyzerEnhanced:
                                 factors[f'turnover_{period}d'] = turnover
 
         except Exception as e:
-            print(f"[INFO] 计算流动性因子失败: {e}")
+            logger.info(f"[INFO] 计算流动性因子失败: {e}")
 
         return factors
 
@@ -360,7 +363,7 @@ class FundamentalAnalyzerEnhanced:
         df_price = self.get_price_data(stock_code, days=252)
 
         if df_price.empty:
-            print(f"[INFO] 未找到 {stock_code} 的数据")
+            logger.info(f"[INFO] 未找到 {stock_code} 的数据")
             return pd.DataFrame()
 
         # 计算各类因子
@@ -416,7 +419,7 @@ class FundamentalAnalyzerEnhanced:
                 if not df.empty:
                     results.append(df)
             except Exception as e:
-                print(f"[INFO] 跳过 {stock_code}: {e}")
+                logger.info(f"[INFO] 跳过 {stock_code}: {e}")
                 continue
 
         if results:
@@ -461,18 +464,18 @@ def get_batch_enhanced_factors(stock_list: List[str], duckdb_reader=None) -> pd.
 
 if __name__ == "__main__":
     """测试代码"""
-    print("=" * 70)
-    print("  增强版基本面因子分析器测试")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("  增强版基本面因子分析器测试")
+    logger.info("=" * 70)
 
-    print("\n[说明]")
-    print("基于DuckDB stock_daily表（767万条记录）")
-    print("数据范围：2015-10-26 到 2026-02-02")
-    print("覆盖股票：5190只")
-    print("\n因子类型：")
-    print("1. 估值因子：相对估值、价格分位数、距离高点")
-    print("2. 动量因子：多周期动量、动量加速度、RSI")
-    print("3. 波动率因子：历史波动率、ATR、波动率分位数")
-    print("4. 质量因子：价格稳定性、趋势强度、连续涨跌")
-    print("5. 流动性因子：成交量均值、换手率")
-    print("\n" + "=" * 70)
+    logger.info("\n[说明]")
+    logger.info("基于DuckDB stock_daily表（767万条记录）")
+    logger.info("数据范围：2015-10-26 到 2026-02-02")
+    logger.info("覆盖股票：5190只")
+    logger.info("\n因子类型：")
+    logger.info("1. 估值因子：相对估值、价格分位数、距离高点")
+    logger.info("2. 动量因子：多周期动量、动量加速度、RSI")
+    logger.info("3. 波动率因子：历史波动率、ATR、波动率分位数")
+    logger.info("4. 质量因子：价格稳定性、趋势强度、连续涨跌")
+    logger.info("5. 流动性因子：成交量均值、换手率")
+    logger.info("\n" + "=" * 70)

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 因子中性化
 
@@ -126,7 +129,7 @@ class FactorNeutralization:
             return result
 
         except Exception as e:
-            print(f"⚠️ 回归中性化失败: {e}")
+            logger.info(f"⚠️ 回归中性化失败: {e}")
             return factor_values
 
     @staticmethod

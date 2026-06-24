@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 网格交易策略 API
 
@@ -54,7 +57,7 @@ class GridBacktestEngine:
                 from core.data_manager import HybridDataManager
                 self.data_manager = HybridDataManager()
             except ImportError:
-                print("[WARNING] 无法导入HybridDataManager，部分功能可能受限")
+                logger.warning("[WARNING] 无法导入HybridDataManager，部分功能可能受限")
                 self.data_manager = None
 
     def run_backtest(self,
@@ -132,8 +135,8 @@ class GridBacktestEngine:
                 base_price=base_price,
                 enable_trailing=enable_trailing
             )
-            print(f"[策略模式] 固定网格")
-            print(f"[参数] 网格数={grid_count}, 区间={price_range*100:.1f}%, 动态调整={enable_trailing}")
+            logger.info(f"[策略模式] 固定网格")
+            logger.info(f"[参数] 网格数={grid_count}, 区间={price_range*100:.1f}%, 动态调整={enable_trailing}")
 
         elif strategy_mode == 'adaptive':
             cerebro.addstrategy(
@@ -144,8 +147,8 @@ class GridBacktestEngine:
                 base_price=base_price,
                 max_position=max_position
             )
-            print(f"[策略模式] 自适应网格")
-            print(f"[参数] 买入阈值={buy_threshold*100:.2f}%, 卖出阈值={sell_threshold*100:.2f}%")
+            logger.info(f"[策略模式] 自适应网格")
+            logger.info(f"[参数] 买入阈值={buy_threshold*100:.2f}%, 卖出阈值={sell_threshold*100:.2f}%")
 
         elif strategy_mode == 'atr':
             cerebro.addstrategy(
@@ -157,8 +160,8 @@ class GridBacktestEngine:
                 enable_trailing=enable_trailing,
                 trailing_period=trailing_period
             )
-            print(f"[策略模式] ATR动态网格")
-            print(f"[参数] ATR周期={atr_period}, ATR倍数={atr_multiplier}")
+            logger.info(f"[策略模式] ATR动态网格")
+            logger.info(f"[参数] ATR周期={atr_period}, ATR倍数={atr_multiplier}")
 
         else:
             raise ValueError(f"未知的策略模式: {strategy_mode}")
@@ -171,15 +174,15 @@ class GridBacktestEngine:
             cerebro.addanalyzer(btanalyzers.Returns, _name='returns')
             cerebro.addanalyzer(btanalyzers.TradeAnalyzer, _name='trades')
         except ImportError:
-            print("[WARNING] Backtrader分析器导入失败")
+            logger.warning("[WARNING] Backtrader分析器导入失败")
 
         # 运行回测
-        print(f"\n{'='*60}")
-        print(f"开始回测: {stock_code}")
-        print(f"时间范围: {start_date} ~ {end_date}")
-        print(f"初始资金: {self.initial_cash:,.2f}")
-        print(f"每格交易数量: {position_size}股")
-        print(f"{'='*60}\n")
+        logger.info(f"\n{'='*60}")
+        logger.info(f"开始回测: {stock_code}")
+        logger.info(f"时间范围: {start_date} ~ {end_date}")
+        logger.info(f"初始资金: {self.initial_cash:,.2f}")
+        logger.info(f"每格交易数量: {position_size}股")
+        logger.info(f"{'='*60}\n")
 
         results = cerebro.run()
         strategy = results[0]
@@ -263,8 +266,8 @@ class GridBacktestEngine:
             if df.empty:
                 raise Exception(f"没有{stock_code}的数据")
 
-            print(f"[数据加载] 原始数据形状: {df.shape}, 列: {df.columns.tolist()}")
-            print(f"[数据加载] 前3行数据:\n{df.head(3)}")
+            logger.info(f"[数据加载] 原始数据形状: {df.shape}, 列: {df.columns.tolist()}")
+            logger.info(f"[数据加载] 前3行数据:\n{df.head(3)}")
 
             # 保存原始数据用于调试
             df_original = df.copy()
@@ -274,11 +277,11 @@ class GridBacktestEngine:
 
             # QMT数据格式处理：symbol列是多余的，date列包含实际日期
             if 'date' in df.columns:
-                print(f"[数据加载] 检测到 date 列，类型: {df['date'].dtype}")
+                logger.info(f"[数据加载] 检测到 date 列，类型: {df['date'].dtype}")
 
                 # 如果date列是整数（Unix时间戳毫秒），需要转换
                 if df['date'].dtype in ['int64', 'int32', 'uint64', 'uint32']:
-                    print(f"[数据加载] date列是Unix时间戳，转换为datetime")
+                    logger.info(f"[数据加载] date列是Unix时间戳，转换为datetime")
                     df['date'] = pd.to_datetime(df['date'], unit='ms')
                 else:
                     # 尝试直接转换
@@ -292,7 +295,7 @@ class GridBacktestEngine:
                 df.index.name = 'datetime'
 
             elif isinstance(df.index, pd.MultiIndex):
-                print(f"[数据加载] 检测到MultiIndex")
+                logger.info(f"[数据加载] 检测到MultiIndex")
                 # 提取日期索引（level 0）
                 df.index = df.index.get_level_values(0)
                 # 如果是Unix时间戳，需要转换
@@ -308,7 +311,7 @@ class GridBacktestEngine:
                     df.index = pd.to_datetime(df.index)
                     df.index.name = 'datetime'
                 except Exception as e:
-                    print(f"[WARNING] 索引转换失败: {e}")
+                    logger.warning(f"[WARNING] 索引转换失败: {e}")
 
             # 删除不需要的列
             cols_to_drop = ['symbol', 'amount']
@@ -335,14 +338,14 @@ class GridBacktestEngine:
                 except (ValueError, TypeError):
                     raise ValueError(f"无法将索引转换为DatetimeIndex，当前类型: {type(df.index)}")
 
-            print(f"[数据加载] 成功加载 {len(df)} 条数据")
-            print(f"[数据范围] {df.index[0]} ~ {df.index[-1]}")
-            print(f"[数据验证] 数据类型: {df.dtypes.to_dict()}")
+            logger.info(f"[数据加载] 成功加载 {len(df)} 条数据")
+            logger.info(f"[数据范围] {df.index[0]} ~ {df.index[-1]}")
+            logger.info(f"[数据验证] 数据类型: {df.dtypes.to_dict()}")
 
             return df
 
         except Exception as e:
-            print(f"[ERROR] 数据加载失败: {e}")
+            logger.error(f"[ERROR] 数据加载失败: {e}")
             raise
 
     def _extract_metrics(self, cerebro, results, strategy) -> Dict[str, Any]:
@@ -369,49 +372,49 @@ class GridBacktestEngine:
 
             # 打印调试信息
             if hasattr(strat_result, 'analyzers'):
-                print(f"[分析器] 分析器对象类型: {type(strat_result.analyzers)}")
+                logger.info(f"[分析器] 分析器对象类型: {type(strat_result.analyzers)}")
                 try:
                     # 遍历可用的分析器
                     analyzer_names = []
                     for analyzer in strat_result.analyzers:
                         analyzer_names.append(analyzer.alias)
-                    print(f"[分析器] 可用的分析器: {analyzer_names}")
+                    logger.info(f"[分析器] 可用的分析器: {analyzer_names}")
                 except (ValueError, TypeError):
-                    print(f"[分析器] 无法获取分析器名称列表")
+                    logger.info(f"[分析器] 无法获取分析器名称列表")
             else:
-                print(f"[WARNING] 策略没有analyzers属性")
+                logger.warning(f"[WARNING] 策略没有analyzers属性")
 
             # 夏普比率
             sharpe_from_analyzer = None
             try:
                 sharpe_analyzer = strat_result.analyzers.sharpe
                 sharpe_analysis = sharpe_analyzer.get_analysis()
-                print(f"[分析器] 夏普比率分析结果: {sharpe_analysis}")
+                logger.info(f"[分析器] 夏普比率分析结果: {sharpe_analysis}")
                 if sharpe_analysis and 'sharperatio' in sharpe_analysis:
                     sharpe_from_analyzer = sharpe_analysis['sharperatio']
                     if sharpe_from_analyzer is not None:
                         metrics['sharpe_ratio'] = sharpe_from_analyzer
-                        print(f"[分析器] 夏普比率: {metrics['sharpe_ratio']}")
+                        logger.info(f"[分析器] 夏普比率: {metrics['sharpe_ratio']}")
                     else:
-                        print(f"[WARNING] 分析器返回的夏普比率为 None，将手动计算")
+                        logger.warning(f"[WARNING] 分析器返回的夏普比率为 None，将手动计算")
                 else:
-                    print(f"[WARNING] 夏普比率分析结果中没有sharperatio键，将手动计算")
+                    logger.warning(f"[WARNING] 夏普比率分析结果中没有sharperatio键，将手动计算")
             except (AttributeError, KeyError) as e:
-                print(f"[WARNING] 提取夏普比率失败: {e}，将手动计算")
+                logger.warning(f"[WARNING] 提取夏普比率失败: {e}，将手动计算")
 
             # 回撤
             try:
                 drawdown_analyzer = strat_result.analyzers.drawdown
                 drawdown = drawdown_analyzer.get_analysis()
-                print(f"[分析器] 回撤分析结果: {drawdown}")
+                logger.info(f"[分析器] 回撤分析结果: {drawdown}")
                 if drawdown and 'max' in drawdown:
                     metrics['max_drawdown'] = drawdown['max'].get('drawdown', 0)
                     metrics['max_drawdown_len'] = drawdown['max'].get('len', 0)
             except (AttributeError, KeyError) as e:
-                print(f"[WARNING] 提取回撤失败: {e}")
+                logger.warning(f"[WARNING] 提取回撤失败: {e}")
 
         except Exception as e:
-            print(f"[WARNING] 提取分析器指标失败: {e}")
+            logger.warning(f"[WARNING] 提取分析器指标失败: {e}")
             import traceback
             traceback.print_exc()
 
@@ -431,7 +434,7 @@ class GridBacktestEngine:
 
         # 如果分析器没有返回夏普比率，手动计算
         if 'sharpe_ratio' not in metrics or metrics['sharpe_ratio'] is None:
-            print(f"[夏普比率] 手动计算夏普比率...")
+            logger.info(f"[夏普比率] 手动计算夏普比率...")
             equity_curve = strategy.get_equity_curve()
             if not equity_curve.empty and len(equity_curve) > 2:
                 # 计算日收益率
@@ -466,16 +469,16 @@ class GridBacktestEngine:
                     sharpe = (daily_return * annual_factor) / (daily_vol * np.sqrt(annual_factor))
 
                     metrics['sharpe_ratio'] = sharpe
-                    print(f"[夏普比率] 手动计算完成: {sharpe:.4f}")
-                    print(f"  日均收益率: {daily_return:.6f}")
-                    print(f"  日波动率: {daily_vol:.6f}")
-                    print(f"  年化系数: {annual_factor}")
+                    logger.info(f"[夏普比率] 手动计算完成: {sharpe:.4f}")
+                    logger.info(f"  日均收益率: {daily_return:.6f}")
+                    logger.info(f"  日波动率: {daily_vol:.6f}")
+                    logger.info(f"  年化系数: {annual_factor}")
                 else:
                     metrics['sharpe_ratio'] = None
-                    print(f"[WARNING] 无法计算夏普比率：数据点太少({len(returns)})或波动率为0")
+                    logger.warning(f"[WARNING] 无法计算夏普比率：数据点太少({len(returns)})或波动率为0")
             else:
                 metrics['sharpe_ratio'] = None
-                print(f"[WARNING] 无法计算夏普比率：净值曲线数据不足")
+                logger.warning(f"[WARNING] 无法计算夏普比率：净值曲线数据不足")
 
         return metrics
 
@@ -513,7 +516,7 @@ class GridBacktestEngine:
         total_pairs = won_count + lost_count
         win_rate = won_count / total_pairs if total_pairs > 0 else 0.0
 
-        print(f"[胜率统计] 总交易对: {total_pairs}, 盈利: {won_count}, 亏损: {lost_count}, 胜率: {win_rate*100:.1f}%")
+        logger.info(f"[胜率统计] 总交易对: {total_pairs}, 盈利: {won_count}, 亏损: {lost_count}, 胜率: {win_rate*100:.1f}%")
 
         return won_count, lost_count, win_rate
 

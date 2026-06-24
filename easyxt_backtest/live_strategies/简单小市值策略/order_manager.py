@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 订单管理模块
 
@@ -64,7 +67,7 @@ class OrderManager:
         """
         order = self.current_orders.get(order_id)
         if not order:
-            print(f"订单不存在: {order_id}")
+            logger.info(f"订单不存在: {order_id}")
             return False
 
         try:
@@ -91,7 +94,7 @@ class OrderManager:
             return True
 
         except Exception as e:
-            print(f"执行订单失败: {e}")
+            logger.info(f"执行订单失败: {e}")
             order['status'] = 'failed'
             return False
 
@@ -117,7 +120,7 @@ class OrderManager:
         positions = {}
 
         if self.trader is None:
-            print("[INFO] 未连接QMT，返回空持仓")
+            logger.info("[INFO] 未连接QMT，返回空持仓")
             return positions
 
         try:
@@ -126,11 +129,11 @@ class OrderManager:
             if pos:
                 for p in pos:
                     positions[p.stock_code] = p.volume
-                print(f"[OK] 获取持仓: {len(positions)} 只股票")
+                logger.info(f"[OK] 获取持仓: {len(positions)} 只股票")
             else:
-                print("[INFO] 当前无持仓")
+                logger.info("[INFO] 当前无持仓")
         except Exception as e:
-            print(f"[WARN] 获取持仓失败: {e}")
+            logger.warning(f"[WARN] 获取持仓失败: {e}")
 
         return positions
 
@@ -149,7 +152,7 @@ class OrderManager:
                 'total_asset': account.get('total_asset', 0)
             }
         except Exception as e:
-            print(f"获取账户信息失败: {e}")
+            logger.info(f"获取账户信息失败: {e}")
             return {}
 
     def generate_orders(self, current_positions: Dict[str, int], target_portfolio: Dict[str, float]) -> List[Dict]:

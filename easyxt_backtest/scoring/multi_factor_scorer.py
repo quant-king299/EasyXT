@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 多因子打分器
 
@@ -55,9 +58,9 @@ class MultiFactorScorer:
             Series: 股票代码到综合得分的映射
         """
         if verbose:
-            print(f"\n📊 计算多因子得分 @ {date}")
-            print(f"  股票池数量: {len(stock_pool)}")
-            print(f"  因子数量: {len(self.factor_configs)}")
+            logger.info(f"\n📊 计算多因子得分 @ {date}")
+            logger.info(f"  股票池数量: {len(stock_pool)}")
+            logger.info(f"  因子数量: {len(self.factor_configs)}")
 
         all_scores = {}
 
@@ -66,12 +69,12 @@ class MultiFactorScorer:
             # 跳过权重为0的因子
             if factor_config.weight == 0:
                 if verbose:
-                    print(f"  ⏭️  跳过因子 [{factor_config.name}] (权重=0)")
+                    logger.info(f"  ⏭️  跳过因子 [{factor_config.name}] (权重=0)")
                 continue
 
             # 计算因子值
             if verbose:
-                print(f"  📈 计算因子 [{factor_config.name}] (权重={factor_config.weight:.1%})...")
+                logger.info(f"  📈 计算因子 [{factor_config.name}] (权重={factor_config.weight:.1%})...")
 
             factor_values = self.factor_calculator.calculate(
                 stock_pool, date, factor_config
@@ -88,7 +91,7 @@ class MultiFactorScorer:
 
             if verbose:
                 valid_count = weighted_values.notna().sum()
-                print(f"     ✅ 有效股票数: {valid_count}/{len(stock_pool)}")
+                logger.info(f"     ✅ 有效股票数: {valid_count}/{len(stock_pool)}")
 
         # 综合打分（加权求和）
         if all_scores:
@@ -99,9 +102,9 @@ class MultiFactorScorer:
             final_scores = (final_scores - final_scores.mean()) / final_scores.std()
 
             if verbose:
-                print(f"  ✅ 综合得分计算完成")
-                print(f"     有效股票数: {final_scores.notna().sum()}/{len(stock_pool)}")
-                print(f"     得分范围: [{final_scores.min():.2f}, {final_scores.max():.2f}]")
+                logger.info(f"  ✅ 综合得分计算完成")
+                logger.info(f"     有效股票数: {final_scores.notna().sum()}/{len(stock_pool)}")
+                logger.info(f"     得分范围: [{final_scores.min():.2f}, {final_scores.max():.2f}]")
 
             return final_scores
         else:
@@ -143,7 +146,7 @@ class MultiFactorScorer:
         total_weight = sum(f.weight for f in self.factor_configs)
 
         if abs(total_weight - 1.0) > 0.01:
-            print(f"⚠️ 警告: 因子权重和为{total_weight:.3f}，建议调整为1.0")
+            logger.info(f"⚠️ 警告: 因子权重和为{total_weight:.3f}，建议调整为1.0")
 
         # 检查权重范围
         for config in self.factor_configs:

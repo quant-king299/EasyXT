@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 网格交易GUI组件
 提供网格交易策略的可视化配置、监控和管理界面
@@ -48,7 +51,7 @@ try:
     EASYXT_AVAILABLE = True
 except ImportError:
     EASYXT_AVAILABLE = False
-    print("EasyXT未安装，部分功能将不可用")
+    logger.info("EasyXT未安装，部分功能将不可用")
 
 
 class StrategyThread(QThread):

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 股票状态过滤器
 
@@ -93,5 +96,5 @@ class StockStatusFilter(BaseFilter):
                 # 如果data_manager没有相关方法，返回空
                 return None
         except Exception as e:
-            print(f"⚠️ 获取股票信息失败: {e}")
+            logger.info(f"⚠️ 获取股票信息失败: {e}")
             return None

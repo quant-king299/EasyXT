@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 RESTful API服务器
 
@@ -16,7 +19,7 @@ try:
     from aiohttp.web import middleware
     from aiohttp_cors import setup as cors_setup, ResourceOptions
 except ImportError:
-    print("需要安装aiohttp: pip install aiohttp aiohttp-cors")
+    logger.info("需要安装aiohttp: pip install aiohttp aiohttp-cors")
     raise
 
 from .unified_api import UnifiedDataAPI
@@ -633,20 +636,20 @@ async def main():
         # 启动服务器
         await server.start_server()
         
-        print(f"🚀 API服务器已启动: http://{server.host}:{server.port}")
-        print(f"📖 API文档: http://{server.host}:{server.port}/docs")
-        print("按 Ctrl+C 停止服务器")
+        logger.info(f"🚀 API服务器已启动: http://{server.host}:{server.port}")
+        logger.info(f"📖 API文档: http://{server.host}:{server.port}/docs")
+        logger.info("按 Ctrl+C 停止服务器")
         
         # 保持运行
         while server.is_running():
             await asyncio.sleep(1)
             
     except KeyboardInterrupt:
-        print("\n正在停止服务器...")
+        logger.info("\n正在停止服务器...")
         await server.stop_server()
-        print("服务器已停止")
+        logger.info("服务器已停止")
     except Exception as e:
-        print(f"服务器错误: {e}")
+        logger.info(f"服务器错误: {e}")
         await server.stop_server()
 
 

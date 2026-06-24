@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 超高速A股市值数据下载器
 
@@ -124,8 +127,8 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
     resolved_path = get_db_path(db_path)
     os.makedirs(os.path.dirname(resolved_path) if os.path.dirname(resolved_path) else '.', exist_ok=True)
 
-    print(f"数据库路径: {resolved_path}")
-    print(f"下载范围: {start_date} ~ {end_date}")
+    logger.info(f"数据库路径: {resolved_path}")
+    logger.info(f"下载范围: {start_date} ~ {end_date}")
 
     conn = duckdb.connect(resolved_path)
 
@@ -138,12 +141,12 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             FROM stock_market_cap
             WHERE date BETWEEN '{start_fmt}' AND '{end_fmt}'
         """).fetchone()
-        print(f"已有数据: {existing[0]} 个交易日")
+        logger.info(f"已有数据: {existing[0]} 个交易日")
     except (ValueError, TypeError):        print("已有数据: 0 个交易日")
         existing = (0,)
 
     # 获取交易日历
-    print("获取交易日历...")
+    logger.info("获取交易日历...")
     trade_cal = pro.trade_cal(
         exchange='SSE',
         start_date=start_date,
@@ -153,7 +156,7 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
 
     all_dates = trade_cal['cal_date'].tolist()
     total = len(all_dates)
-    print(f"共 {total} 个交易日")
+    logger.info(f"共 {total} 个交易日")
 
     # 找出缺失的日期
     try:
@@ -162,17 +165,17 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             WHERE date BETWEEN '{start_fmt}' AND '{end_fmt}'
         """).fetchall())
         missing_dates = [d for d in all_dates if d not in existing_dates]
-        print(f"需要下载: {len(missing_dates)} 个交易日")
+        logger.info(f"需要下载: {len(missing_dates)} 个交易日")
 
         if len(missing_dates) == 0:
-            print("所有数据已存在！无需下载")
+            logger.info("所有数据已存在！无需下载")
             conn.close()
             return {'total_inserted': 0, 'total_days': 0, 'elapsed': 0}
     except (ValueError, TypeError):        missing_dates = all_dates
-        print(f"需要下载: {len(missing_dates)} 个交易日")
+        logger.info(f"需要下载: {len(missing_dates)} 个交易日")
 
     # 开始下载
-    print("开始下载...")
+    logger.info("开始下载...")
     total_inserted = 0
     start_time = time.time()
 
@@ -196,42 +199,42 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
                 speed = idx / elapsed if elapsed > 0 else 0
                 eta = (len(missing_dates) - idx) / speed if speed > 0 else 0
                 msg = f"[{idx}/{len(missing_dates)}] {trade_date} | 已插入: {total_inserted:,}条 | 速度: {speed:.1f}天/秒 | 剩余: {eta/60:.1f}分钟"
-                print(msg)
+                logger.info(msg)
                 if progress_callback:
                     progress_callback(idx, len(missing_dates), msg)
 
         except Exception as e:
-            print(f"[{idx}/{len(missing_dates)}] {trade_date} | 失败: {str(e)[:30]}")
+            logger.info(f"[{idx}/{len(missing_dates)}] {trade_date} | 失败: {str(e)[:30]}")
             continue
 
     elapsed = time.time() - start_time
     conn.close()
 
-    print(f"下载完成！总记录数: {total_inserted:,}, 耗时: {elapsed/60:.1f} 分钟")
+    logger.info(f"下载完成！总记录数: {total_inserted:,}, 耗时: {elapsed/60:.1f} 分钟")
     return {'total_inserted': total_inserted, 'total_days': len(missing_dates), 'elapsed': elapsed}
 
 
 def main():
     """命令行交互式入口"""
-    print("=" * 70)
-    print("超高速A股市值数据下载器")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("超高速A股市值数据下载器")
+    logger.info("=" * 70)
 
     if not TUSHARE_AVAILABLE:
-        print("请先安装 tushare: pip install tushare")
+        logger.info("请先安装 tushare: pip install tushare")
         sys.exit(1)
 
     token = get_tushare_token()
     if not token:
-        print("\n请输入 Tushare Token:")
-        print("获取地址: https://tushare.pro/user/token")
+        logger.info("\n请输入 Tushare Token:")
+        logger.info("获取地址: https://tushare.pro/user/token")
         token = input("Token: ").strip()
         if not token:
-            print("未输入 Token，退出")
+            logger.info("未输入 Token，退出")
             sys.exit(1)
         os.environ['TUSHARE_TOKEN'] = token
 
-    print(f"Token: {token[:10]}...{token[-4:]}")
+    logger.info(f"Token: {token[:10]}...{token[-4:]}")
 
     start_date = input("\n开始日期 (YYYYMMDD, 默认: 20240101): ").strip() or "20240101"
     end_date = input("结束日期 (YYYYMMDD, 默认: 今天): ").strip() or datetime.now().strftime('%Y%m%d')

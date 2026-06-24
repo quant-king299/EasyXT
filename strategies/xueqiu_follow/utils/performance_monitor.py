@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 性能监控工具
 """
@@ -405,9 +408,9 @@ if __name__ == "__main__":
         
         # 获取性能摘要
         summary = monitor.get_performance_summary()
-        print("性能摘要:")
+        logger.info("性能摘要:")
         import json
-        print(json.dumps(summary, indent=2, ensure_ascii=False))
+        logger.info(json.dumps(summary, indent=2, ensure_ascii=False))
         
         # 停止监控
         await monitor.stop_monitoring()

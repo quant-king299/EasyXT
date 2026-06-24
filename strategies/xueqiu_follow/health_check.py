@@ -1,5 +1,8 @@
-#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
+#!/usr/bin/env python3
 """
 雪球跟单系统健康检查工具
 """
@@ -39,8 +42,8 @@ class SystemHealthChecker:
         
     async def run_health_check(self):
         """运行完整的健康检查"""
-        print("🔍 开始系统健康检查...")
-        print("=" * 50)
+        logger.info("🔍 开始系统健康检查...")
+        logger.info("=" * 50)
         
         # 检查各个组件
         await self._check_config_manager()
@@ -58,7 +61,7 @@ class SystemHealthChecker:
     
     async def _check_config_manager(self):
         """检查配置管理器"""
-        print("📋 检查配置管理器...")
+        logger.info("📋 检查配置管理器...")
         
         try:
             config = ConfigManager()
@@ -78,16 +81,16 @@ class SystemHealthChecker:
                 self.warnings.append("没有启用的跟单组合")
             
             self.results['config_manager'] = '✅ 正常'
-            print("   ✅ 配置管理器正常")
+            logger.info("   ✅ 配置管理器正常")
             
         except Exception as e:
             self.errors.append(f"配置管理器错误: {e}")
             self.results['config_manager'] = f'❌ 错误: {e}'
-            print(f"   ❌ 配置管理器错误: {e}")
+            logger.info(f"   ❌ 配置管理器错误: {e}")
     
     async def _check_qmt_connection(self):
         """检查QMT连接"""
-        print("🔌 检查QMT连接...")
+        logger.info("🔌 检查QMT连接...")
         
         try:
             from xtquant import xtdata
@@ -97,24 +100,24 @@ class SystemHealthChecker:
             
             if test_data and len(test_data) > 0:
                 self.results['qmt_connection'] = '✅ 正常'
-                print("   ✅ QMT连接正常")
+                logger.info("   ✅ QMT连接正常")
             else:
                 self.warnings.append("QMT数据获取异常")
                 self.results['qmt_connection'] = '⚠️ 数据异常'
-                print("   ⚠️ QMT数据获取异常")
+                logger.info("   ⚠️ QMT数据获取异常")
                 
         except ImportError:
             self.errors.append("QMT模块未安装或路径错误")
             self.results['qmt_connection'] = '❌ 模块未找到'
-            print("   ❌ QMT模块未安装或路径错误")
+            logger.info("   ❌ QMT模块未安装或路径错误")
         except Exception as e:
             self.errors.append(f"QMT连接错误: {e}")
             self.results['qmt_connection'] = f'❌ 错误: {e}'
-            print(f"   ❌ QMT连接错误: {e}")
+            logger.info(f"   ❌ QMT连接错误: {e}")
     
     async def _check_xueqiu_connection(self):
         """检查雪球连接"""
-        print("🌐 检查雪球连接...")
+        logger.info("🌐 检查雪球连接...")
         
         try:
             collector = XueqiuCollector()
@@ -122,16 +125,16 @@ class SystemHealthChecker:
             
             # 测试网络连接（不实际请求数据）
             self.results['xueqiu_connection'] = '✅ 正常'
-            print("   ✅ 雪球连接初始化正常")
+            logger.info("   ✅ 雪球连接初始化正常")
             
         except Exception as e:
             self.warnings.append(f"雪球连接警告: {e}")
             self.results['xueqiu_connection'] = f'⚠️ 警告: {e}'
-            print(f"   ⚠️ 雪球连接警告: {e}")
+            logger.info(f"   ⚠️ 雪球连接警告: {e}")
     
     async def _check_risk_manager(self):
         """检查风险管理器"""
-        print("🛡️ 检查风险管理器...")
+        logger.info("🛡️ 检查风险管理器...")
         
         try:
             config = ConfigManager()
@@ -145,20 +148,20 @@ class SystemHealthChecker:
             
             if 'allowed' in test_result:
                 self.results['risk_manager'] = '✅ 正常'
-                print("   ✅ 风险管理器正常")
+                logger.info("   ✅ 风险管理器正常")
             else:
                 self.warnings.append("风险管理器返回格式异常")
                 self.results['risk_manager'] = '⚠️ 格式异常'
-                print("   ⚠️ 风险管理器返回格式异常")
+                logger.info("   ⚠️ 风险管理器返回格式异常")
                 
         except Exception as e:
             self.errors.append(f"风险管理器错误: {e}")
             self.results['risk_manager'] = f'❌ 错误: {e}'
-            print(f"   ❌ 风险管理器错误: {e}")
+            logger.info(f"   ❌ 风险管理器错误: {e}")
     
     async def _check_strategy_engine(self):
         """检查策略引擎"""
-        print("⚙️ 检查策略引擎...")
+        logger.info("⚙️ 检查策略引擎...")
         
         try:
             config = ConfigManager()
@@ -166,16 +169,16 @@ class SystemHealthChecker:
             
             # 检查初始化（不实际连接）
             self.results['strategy_engine'] = '✅ 正常'
-            print("   ✅ 策略引擎初始化正常")
+            logger.info("   ✅ 策略引擎初始化正常")
             
         except Exception as e:
             self.errors.append(f"策略引擎错误: {e}")
             self.results['strategy_engine'] = f'❌ 错误: {e}'
-            print(f"   ❌ 策略引擎错误: {e}")
+            logger.info(f"   ❌ 策略引擎错误: {e}")
     
     async def _check_system_resources(self):
         """检查系统资源"""
-        print("💻 检查系统资源...")
+        logger.info("💻 检查系统资源...")
         
         try:
             import psutil
@@ -211,20 +214,20 @@ class SystemHealthChecker:
             else:
                 self.results['system_resources'] = '✅ 正常'
             
-            print(f"   CPU: {cpu_percent}%, 内存: {memory.percent}%, 可用磁盘: {disk.free / (1024**3):.1f}GB")
+            logger.info(f"   CPU: {cpu_percent}%, 内存: {memory.percent}%, 可用磁盘: {disk.free / (1024**3):.1f}GB")
             
         except ImportError:
             self.warnings.append("psutil模块未安装，无法检查系统资源")
             self.results['system_resources'] = '⚠️ 无法检查'
-            print("   ⚠️ psutil模块未安装，无法检查系统资源")
+            logger.info("   ⚠️ psutil模块未安装，无法检查系统资源")
         except Exception as e:
             self.warnings.append(f"系统资源检查错误: {e}")
             self.results['system_resources'] = f'⚠️ 错误: {e}'
-            print(f"   ⚠️ 系统资源检查错误: {e}")
+            logger.info(f"   ⚠️ 系统资源检查错误: {e}")
     
     async def _check_log_files(self):
         """检查日志文件"""
-        print("📝 检查日志文件...")
+        logger.info("📝 检查日志文件...")
         
         try:
             log_dir = Path('logs')
@@ -232,7 +235,7 @@ class SystemHealthChecker:
             if not log_dir.exists():
                 self.warnings.append("日志目录不存在")
                 self.results['log_files'] = '⚠️ 目录不存在'
-                print("   ⚠️ 日志目录不存在")
+                logger.info("   ⚠️ 日志目录不存在")
                 return
             
             # 检查日志文件
@@ -241,7 +244,7 @@ class SystemHealthChecker:
             if not log_files:
                 self.warnings.append("没有找到日志文件")
                 self.results['log_files'] = '⚠️ 无日志文件'
-                print("   ⚠️ 没有找到日志文件")
+                logger.info("   ⚠️ 没有找到日志文件")
                 return
             
             # 检查日志文件大小
@@ -257,18 +260,18 @@ class SystemHealthChecker:
             else:
                 self.results['log_files'] = '✅ 正常'
             
-            print(f"   找到 {len(log_files)} 个日志文件")
+            logger.info(f"   找到 {len(log_files)} 个日志文件")
             
         except Exception as e:
             self.warnings.append(f"日志文件检查错误: {e}")
             self.results['log_files'] = f'⚠️ 错误: {e}'
-            print(f"   ⚠️ 日志文件检查错误: {e}")
+            logger.info(f"   ⚠️ 日志文件检查错误: {e}")
     
     def _generate_report(self):
         """生成健康检查报告"""
-        print("\n" + "=" * 50)
-        print("📊 健康检查报告")
-        print("=" * 50)
+        logger.info("\n" + "=" * 50)
+        logger.info("📊 健康检查报告")
+        logger.info("=" * 50)
         
         # 显示检查结果
         for component, status in self.results.items():
@@ -282,31 +285,31 @@ class SystemHealthChecker:
                 'log_files': '日志文件'
             }.get(component, component)
             
-            print(f"{component_name}: {status}")
+            logger.info(f"{component_name}: {status}")
         
         # 显示错误
         if self.errors:
-            print(f"\n❌ 发现 {len(self.errors)} 个错误:")
+            logger.info(f"\n❌ 发现 {len(self.errors)} 个错误:")
             for i, error in enumerate(self.errors, 1):
-                print(f"   {i}. {error}")
+                logger.info(f"   {i}. {error}")
         
         # 显示警告
         if self.warnings:
-            print(f"\n⚠️ 发现 {len(self.warnings)} 个警告:")
+            logger.info(f"\n⚠️ 发现 {len(self.warnings)} 个警告:")
             for i, warning in enumerate(self.warnings, 1):
-                print(f"   {i}. {warning}")
+                logger.info(f"   {i}. {warning}")
         
         # 总体状态
-        print("\n" + "=" * 50)
+        logger.info("\n" + "=" * 50)
         if not self.errors and not self.warnings:
-            print("🎉 系统状态: 完全正常")
+            logger.info("🎉 系统状态: 完全正常")
         elif not self.errors:
-            print("✅ 系统状态: 正常 (有警告)")
+            logger.info("✅ 系统状态: 正常 (有警告)")
         else:
-            print("❌ 系统状态: 有错误需要修复")
+            logger.info("❌ 系统状态: 有错误需要修复")
         
-        print(f"检查时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 50)
+        logger.info(f"检查时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        logger.info("=" * 50)
 
 
 async def main():
@@ -317,10 +320,10 @@ async def main():
         success = await checker.run_health_check()
         return 0 if success else 1
     except KeyboardInterrupt:
-        print("\n检查被用户中断")
+        logger.info("\n检查被用户中断")
         return 1
     except Exception as e:
-        print(f"\n健康检查过程中发生错误: {e}")
+        logger.info(f"\n健康检查过程中发生错误: {e}")
         return 1
 
 

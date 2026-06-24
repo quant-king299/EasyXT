@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 简单策略端到端测试
 
@@ -67,12 +70,12 @@ class SimpleFilterEngine:
             filtered_count = before_count - after_count
 
             if verbose and filtered_count > 0:
-                print(f"  📊 过滤器 [{config.name}]: {before_count} -> {after_count} (过滤{filtered_count}只)")
+                logger.info(f"  📊 过滤器 [{config.name}]: {before_count} -> {after_count} (过滤{filtered_count}只)")
 
         if verbose:
             final_count = len(result)
             total_filtered = initial_count - final_count
-            print(f"  ✅ 过滤完成: {initial_count} -> {final_count} (总共过滤{total_filtered}只)")
+            logger.info(f"  ✅ 过滤完成: {initial_count} -> {final_count} (总共过滤{total_filtered}只)")
 
         return result
 
@@ -168,9 +171,9 @@ class SimpleScorer:
 
     def calculate_scores(self, stock_pool, date, verbose=False):
         if verbose:
-            print(f"\n📈 计算因子得分 @ {date}")
-            print(f"  股票池数量: {len(stock_pool)}")
-            print(f"  因子数量: {len(self.factor_configs)}")
+            logger.info(f"\n📈 计算因子得分 @ {date}")
+            logger.info(f"  股票池数量: {len(stock_pool)}")
+            logger.info(f"  因子数量: {len(self.factor_configs)}")
 
         all_scores = {}
 
@@ -179,7 +182,7 @@ class SimpleScorer:
                 continue
 
             if verbose:
-                print(f"  📊 计算因子 [{factor_config.name}] (权重={factor_config.weight:.1%})...")
+                logger.info(f"  📊 计算因子 [{factor_config.name}] (权重={factor_config.weight:.1%})...")
 
             # 计算因子值
             factor_values = self.calculator.calculate(stock_pool, date, factor_config)
@@ -197,7 +200,7 @@ class SimpleScorer:
 
             if verbose:
                 valid_count = weighted_values.notna().sum()
-                print(f"     ✅ 有效股票数: {valid_count}/{len(stock_pool)}")
+                logger.info(f"     ✅ 有效股票数: {valid_count}/{len(stock_pool)}")
 
         # 综合得分
         if all_scores:
@@ -208,8 +211,8 @@ class SimpleScorer:
             final_scores = (final_scores - final_scores.mean()) / final_scores.std()
 
             if verbose:
-                print(f"  ✅ 综合得分计算完成")
-                print(f"     有效股票数: {final_scores.notna().sum()}/{len(stock_pool)}")
+                logger.info(f"  ✅ 综合得分计算完成")
+                logger.info(f"     有效股票数: {final_scores.notna().sum()}/{len(stock_pool)}")
 
             return final_scores
         else:
@@ -320,95 +323,95 @@ class MockDataManager:
 def test_simple_small_cap_strategy():
     """测试简单小市值策略"""
 
-    print("=" * 80)
-    print("101因子平台 - 简单策略端到端测试")
-    print("=" * 80)
+    logger.info("=" * 80)
+    logger.info("101因子平台 - 简单策略端到端测试")
+    logger.info("=" * 80)
 
     # 1. 创建模拟数据管理器
-    print("\n📊 步骤1: 创建模拟数据")
-    print("-" * 80)
+    logger.info("\n📊 步骤1: 创建模拟数据")
+    logger.info("-" * 80)
     data_manager = MockDataManager()
-    print(f"✅ 模拟股票池: {len(data_manager.mock_stocks)} 只股票")
-    print(f"   市值范围: {data_manager.mock_fundamentals['market_cap'].min()/1e8:.0f}亿 - {data_manager.mock_fundamentals['market_cap'].max()/1e8:.0f}亿")
-    print(f"   ST股票: {len(data_manager.mock_stock_status[data_manager.mock_stock_status['stock_status'].str.contains('ST')])} 只")
+    logger.info(f"✅ 模拟股票池: {len(data_manager.mock_stocks)} 只股票")
+    logger.info(f"   市值范围: {data_manager.mock_fundamentals['market_cap'].min()/1e8:.0f}亿 - {data_manager.mock_fundamentals['market_cap'].max()/1e8:.0f}亿")
+    logger.info(f"   ST股票: {len(data_manager.mock_stock_status[data_manager.mock_stock_status['stock_status'].str.contains('ST')])} 只")
 
     # 2. 加载配置
-    print("\n📄 步骤2: 加载YAML配置")
-    print("-" * 80)
+    logger.info("\n📄 步骤2: 加载YAML配置")
+    logger.info("-" * 80)
     config_path = project_root / 'easyxt_backtest' / 'config' / 'examples' / 'simple_small_cap.yaml'
     config = StrategyConfigLoader.load_from_yaml(str(config_path))
-    print(f"✅ 策略名称: {config.name}")
+    logger.info(f"✅ 策略名称: {config.name}")
 
     # 3. 获取股票池
-    print("\n🔍 步骤3: 获取股票池")
-    print("-" * 80)
+    logger.info("\n🔍 步骤3: 获取股票池")
+    logger.info("-" * 80)
     test_date = '20230101'
     stock_pool = data_manager.get_index_components(config.universe_config['index_code'], test_date)
-    print(f"✅ 股票池数量: {len(stock_pool)} 只")
+    logger.info(f"✅ 股票池数量: {len(stock_pool)} 只")
 
     # 4. 应用排除条件过滤
-    print("\n🚫 步骤4: 应用排除条件过滤")
-    print("-" * 80)
+    logger.info("\n🚫 步骤4: 应用排除条件过滤")
+    logger.info("-" * 80)
     filter_engine = SimpleFilterEngine(config.exclude_filters, data_manager)
     filtered_stocks = filter_engine.filter(stock_pool, test_date, verbose=True)
-    print(f"\n✅ 过滤后股票数: {len(filtered_stocks)} 只")
+    logger.info(f"\n✅ 过滤后股票数: {len(filtered_stocks)} 只")
 
     # 5. 计算因子得分
-    print("\n📈 步骤5: 计算因子得分")
-    print("-" * 80)
+    logger.info("\n📈 步骤5: 计算因子得分")
+    logger.info("-" * 80)
     scorer = SimpleScorer(config.scoring_factors, data_manager)
     scores = scorer.calculate_scores(filtered_stocks, test_date, verbose=True)
 
-    print(f"\n因子得分统计:")
-    print(f"  有效数量: {scores.notna().sum()}")
-    print(f"  均值: {scores.mean():.3f}")
-    print(f"  标准差: {scores.std():.3f}")
+    logger.info(f"\n因子得分统计:")
+    logger.info(f"  有效数量: {scores.notna().sum()}")
+    logger.info(f"  均值: {scores.mean():.3f}")
+    logger.info(f"  标准差: {scores.std():.3f}")
 
-    print(f"\n得分最高的10只股票:")
+    logger.info(f"\n得分最高的10只股票:")
     top_10 = scores.nlargest(10)
     for i, (stock, score) in enumerate(top_10.items(), 1):
         market_cap = data_manager.mock_fundamentals.loc[stock, 'market_cap'] / 1e8
-        print(f"  {i}. {stock} - 得分: {score:.3f}, 市值: {market_cap:.1f}亿")
+        logger.info(f"  {i}. {stock} - 得分: {score:.3f}, 市值: {market_cap:.1f}亿")
 
     # 6. 构建投资组合
-    print("\n💼 步骤6: 构建投资组合")
-    print("-" * 80)
+    logger.info("\n💼 步骤6: 构建投资组合")
+    logger.info("-" * 80)
     portfolio_builder = SimplePortfolioBuilder(config.portfolio_config, data_manager)
     portfolio = portfolio_builder.build_portfolio(scores, test_date)
 
-    print(f"\n✅ 组合构建完成:")
-    print(f"  持仓数量: {len(portfolio)}")
+    logger.info(f"\n✅ 组合构建完成:")
+    logger.info(f"  持仓数量: {len(portfolio)}")
 
-    print(f"\n持仓明细:")
+    logger.info(f"\n持仓明细:")
     sorted_portfolio = sorted(portfolio.items(), key=lambda x: x[1], reverse=True)
     for i, (stock, weight) in enumerate(sorted_portfolio, 1):
         market_cap = data_manager.mock_fundamentals.loc[stock, 'market_cap'] / 1e8
-        print(f"  {i}. {stock} - 权重: {weight:.2%}, 市值: {market_cap:.1f}亿")
+        logger.info(f"  {i}. {stock} - 权重: {weight:.2%}, 市值: {market_cap:.1f}亿")
 
     # 7. 验证组合特征
-    print("\n📊 步骤7: 验证组合特征")
-    print("-" * 80)
+    logger.info("\n📊 步骤7: 验证组合特征")
+    logger.info("-" * 80)
     portfolio_stocks = list(portfolio.keys())
     portfolio_mc = data_manager.mock_fundamentals.loc[portfolio_stocks, 'market_cap'] / 1e8
     pool_mc = data_manager.mock_fundamentals.loc[filtered_stocks, 'market_cap'] / 1e8
 
-    print(f"\n组合市值: {portfolio_mc.mean():.0f}亿")
-    print(f"股票池市值: {pool_mc.mean():.0f}亿")
+    logger.info(f"\n组合市值: {portfolio_mc.mean():.0f}亿")
+    logger.info(f"股票池市值: {pool_mc.mean():.0f}亿")
 
     if portfolio_mc.mean() < pool_mc.mean():
-        print(f"✅ 小市值选股成功！组合市值显著小于股票池")
+        logger.info(f"✅ 小市值选股成功！组合市值显著小于股票池")
 
     # 8. 总结
-    print("\n" + "=" * 80)
-    print("✅ 测试完成！")
-    print("=" * 80)
+    logger.info("\n" + "=" * 80)
+    logger.info("✅ 测试完成！")
+    logger.info("=" * 80)
 
-    print(f"\n📝 测试结果:")
-    print(f"  ✅ 配置加载: 通过")
-    print(f"  ✅ 股票池获取: 通过")
-    print(f"  ✅ 排除条件过滤: 通过")
-    print(f"  ✅ 因子计算: 通过")
-    print(f"  ✅ 组合构建: 通过")
+    logger.info(f"\n📝 测试结果:")
+    logger.info(f"  ✅ 配置加载: 通过")
+    logger.info(f"  ✅ 股票池获取: 通过")
+    logger.info(f"  ✅ 排除条件过滤: 通过")
+    logger.info(f"  ✅ 因子计算: 通过")
+    logger.info(f"  ✅ 组合构建: 通过")
 
     return portfolio
 

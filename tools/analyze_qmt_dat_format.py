@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 QMT Local Data File Format Analyzer
 Analyzes .dat file structure in userdata_mini/datadir/
@@ -19,17 +22,17 @@ class QMTDatAnalyzer:
 
     def analyze_header(self, header_size=1024):
         """Analyze file header information"""
-        print(f"\n{'='*80}")
-        print(f"File Analysis: {self.file_path.name}")
-        print(f"{'='*80}")
-        print(f"File Size: {self.file_size:,} bytes ({self.file_size / 1024 / 1024:.2f} MB)")
-        print(f"File Path: {self.file_path}")
+        logger.info(f"\n{'='*80}")
+        logger.info(f"File Analysis: {self.file_path.name}")
+        logger.info(f"{'='*80}")
+        logger.info(f"File Size: {self.file_size:,} bytes ({self.file_size / 1024 / 1024:.2f} MB)")
+        logger.info(f"File Path: {self.file_path}")
 
         with open(self.file_path, 'rb') as f:
             header_data = f.read(header_size)
 
-        print(f"\nFirst {header_size} bytes of file header:")
-        print("-" * 80)
+        logger.info(f"\nFirst {header_size} bytes of file header:")
+        logger.info("-" * 80)
 
         # Try different parsing methods
         self._try_parse_as_struct(header_data)
@@ -38,7 +41,7 @@ class QMTDatAnalyzer:
 
     def _try_parse_as_struct(self, data):
         """Try parsing as structured binary data"""
-        print("\n[Attempt 1] Parse as structured binary format:")
+        logger.info("\n[Attempt 1] Parse as structured binary format:")
 
         # Common stock data formats
         formats_to_try = [
@@ -70,9 +73,9 @@ class QMTDatAnalyzer:
                 record_size = struct.calcsize(fmt_calc)
                 num_records = len(data) // record_size
 
-                print(f"\n  {desc}")
-                print(f"    Record Size: {record_size} bytes")
-                print(f"    Possible Records: {num_records:,}")
+                logger.info(f"\n  {desc}")
+                logger.info(f"    Record Size: {record_size} bytes")
+                logger.info(f"    Possible Records: {num_records:,}")
 
                 if num_records > 0:
                     # Try to parse first few records
@@ -80,22 +83,22 @@ class QMTDatAnalyzer:
                     for i in range(min(3, num_records)):
                         try:
                             record = struct.unpack_from(fmt_calc, data, offset)
-                            print(f"    Record #{i+1}: {record}")
+                            logger.info(f"    Record #{i+1}: {record}")
                             offset += record_size
                         except Exception as e:
-                            print(f"    Parse error at record #{i+1}: {e}")
+                            logger.info(f"    Parse error at record #{i+1}: {e}")
                             break
 
                     # Check if reasonable
                     if num_records > 10 and num_records < 1000000:
-                        print(f"    [OK] Record count looks reasonable")
+                        logger.info(f"    [OK] Record count looks reasonable")
             except struct.error as e:
-                print(f"\n  {desc}")
-                print(f"    [X] Invalid format: {e}")
+                logger.info(f"\n  {desc}")
+                logger.info(f"    [X] Invalid format: {e}")
 
     def _try_parse_as_csv(self, data):
         """Try parsing as CSV format"""
-        print("\n[Attempt 2] Parse as text/CSV format:")
+        logger.info("\n[Attempt 2] Parse as text/CSV format:")
 
         try:
             # Try decoding as text
@@ -106,30 +109,30 @@ class QMTDatAnalyzer:
             for sep in separators:
                 first_line = text.split('\n')[0]
                 if sep in first_line:
-                    print(f"    Found separator: '{sep}'")
-                    print(f"    First line: {first_line[:100]}")
+                    logger.info(f"    Found separator: '{sep}'")
+                    logger.info(f"    First line: {first_line[:100]}")
                     break
             else:
-                print("    No obvious separator found")
-                print(f"    Text content (first 100 chars): {text[:100]}")
+                logger.info("    No obvious separator found")
+                logger.info(f"    Text content (first 100 chars): {text[:100]}")
         except Exception as e:
-            print(f"    Not text format: {e}")
+            logger.info(f"    Not text format: {e}")
 
     def _print_hex_dump(self, data, size=256):
         """Print hex dump"""
-        print(f"\n[Hex Dump] First {size} bytes:")
-        print("-" * 80)
+        logger.info(f"\n[Hex Dump] First {size} bytes:")
+        logger.info("-" * 80)
 
         for i in range(0, min(size, len(data)), 16):
             hex_part = ' '.join(f'{b:02x}' for b in data[i:i+16])
             ascii_part = ''.join(chr(b) if 32 <= b < 127 else '.' for b in data[i:i+16])
-            print(f"{i:04x}: {hex_part:<48} {ascii_part}")
+            logger.info(f"{i:04x}: {hex_part:<48} {ascii_part}")
 
     def analyze_complete_file(self):
         """Analyze complete file structure"""
-        print(f"\n{'='*80}")
-        print("Complete File Structure Analysis")
-        print(f"{'='*80}")
+        logger.info(f"\n{'='*80}")
+        logger.info("Complete File Structure Analysis")
+        logger.info(f"{'='*80}")
 
         with open(self.file_path, 'rb') as f:
             file_data = f.read()
@@ -137,20 +140,20 @@ class QMTDatAnalyzer:
         # Try different record sizes
         possible_record_sizes = [28, 32, 36, 40, 44, 48, 52, 56, 60, 64]
 
-        print(f"\nTrying different record sizes:")
-        print("-" * 80)
+        logger.info(f"\nTrying different record sizes:")
+        logger.info("-" * 80)
 
         for record_size in possible_record_sizes:
             num_records = len(file_data) // record_size
             remainder = len(file_data) % record_size
 
             if num_records > 0 and remainder < 100:  # Allow small header/footer
-                print(f"\nRecord Size: {record_size} bytes")
-                print(f"  Records: {num_records:,}")
-                print(f"  Remaining Bytes: {remainder}")
+                logger.info(f"\nRecord Size: {record_size} bytes")
+                logger.info(f"  Records: {num_records:,}")
+                logger.info(f"  Remaining Bytes: {remainder}")
 
                 if remainder > 0:
-                    print(f"  Possible Header Size: {remainder} bytes")
+                    logger.info(f"  Possible Header Size: {remainder} bytes")
 
     def estimate_records_per_day(self):
         """Estimate records per day (for format validation)"""
@@ -164,8 +167,8 @@ class QMTDatAnalyzer:
             '1d': 1
         }
 
-        print(f"\nEstimated Record Count (for validation):")
-        print("-" * 80)
+        logger.info(f"\nEstimated Record Count (for validation):")
+        logger.info("-" * 80)
         for period, records_per_day in estimates.items():
             # Assume ~1 year of data (250 trading days)
             total_records = records_per_day * 250
@@ -173,15 +176,15 @@ class QMTDatAnalyzer:
             for record_size in [28, 32, 40, 48, 56, 64]:
                 file_size_estimate = total_records * record_size
                 if abs(file_size_estimate - self.file_size) < self.file_size * 0.1:  # 10% tolerance
-                    print(f"  {period}: {records_per_day} records/day x 250 days = {total_records:,} records")
-                    print(f"    Record size {record_size} bytes -> file size {file_size_estimate/1024/1024:.2f} MB [OK]")
+                    logger.info(f"  {period}: {records_per_day} records/day x 250 days = {total_records:,} records")
+                    logger.info(f"    Record size {record_size} bytes -> file size {file_size_estimate/1024/1024:.2f} MB [OK]")
 
 
 def main():
     """Main function"""
-    print("\n" + "="*80)
-    print("QMT .dat File Format Analyzer")
-    print("="*80)
+    logger.info("\n" + "="*80)
+    logger.info("QMT .dat File Format Analyzer")
+    logger.info("="*80)
 
     # Analyze 1-minute data file
     minute_files = [
@@ -192,8 +195,8 @@ def main():
     existing_files = [f for f in minute_files if Path(f).exists()]
 
     if not existing_files:
-        print("\nError: QMT data files not found")
-        print("Please ensure QMT path is correct and data has been downloaded")
+        logger.info("\nError: QMT data files not found")
+        logger.info("Please ensure QMT path is correct and data has been downloaded")
         return
 
     # Analyze each file
@@ -209,9 +212,9 @@ def main():
         # Estimate record count
         analyzer.estimate_records_per_day()
 
-    print("\n" + "="*80)
-    print("Analysis Complete")
-    print("="*80)
+    logger.info("\n" + "="*80)
+    logger.info("Analysis Complete")
+    logger.info("="*80)
 
 
 if __name__ == '__main__':

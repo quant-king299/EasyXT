@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ç»ä¸DuckDBæ°æ®ç®¡çå?æ¯æGUIæ°æ®ä¸è½½å?01å å­å¹³å°ä½¿ç¨
+统一DuckDB数据管理器
+支持GUI数据下载和101因子平台使用
 
-æ ¸å¿ç¹æ§ï¼
-1. DuckDBåæä»¶å­å¨ï¼é«æ§è½ï¼?2. æ¯æå¢éæ´æ°
-3. æ¯æå¤æ°æ®æºï¼QMT/Tushareï¼?4. â­?åªå­å¨ä¸å¤ææ°æ®ï¼åå§æ°æ®ï¼
-5. å¤ææ°æ®éè¿QMT APIå®æ¶è®¡ç®
+核心特性：
+1. DuckDB单文件存储（高性能）
+2. 支持增量更新
+3. 支持多数据源（QMT/Tushare）
+4. ⭐ 只存储不复权数据（原始数据）
+5. 复权数据通过QMT API实时计算
 
-è®¾è®¡çå¿µï¼?- åå§æ°æ®ä¸åï¼å­æ¬å°ï¼DuckDBï¼?- å¤ææ°æ®ä¼åï¼ç¨æ¶åç®ï¼QMT APIï¼?- é¿åé¢å­å¤ææ°æ®å¯¼è´çä¸è´æ§é®é¢?
-åèææ¡£ï¼docs/assets/TROUBLESHOOTING.md - å¤æç³»ç»æ¶æè¯´æ
+设计理念：
+- 原始数据不变，存本地（DuckDB）
+- 复权数据会变，用时再算（QMT API）
+- 避免预存复权数据导致的一致性问题
+
+参考文档：docs/assets/TROUBLESHOOTING.md - 复权系统架构说明
 """
 
 import pandas as pd
@@ -22,76 +29,91 @@ import warnings
 
 from config.env_config import get_default_db_path
 
+logger = logging.getLogger(__name__)
+
 try:
     import duckdb
     DUCKDB_AVAILABLE = True
 except ImportError:
     DUCKDB_AVAILABLE = False
-    warnings.warn("DuckDBæªå®è£ï¼è¯·è¿è¡? pip install duckdb")
+    warnings.warn("DuckDB未安装，请运行: pip install duckdb")
 
-# éç½®æ¥å¿
+# 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 
 class UnifiedDuckDBManager:
     """
-    ç»ä¸DuckDBæ°æ®ç®¡çå?
-    â­?æ¶æè¯´æï¼åªå­å¨ä¸å¤ææ°æ®ï¼å¤ææ°æ®éè¿QMT APIå®æ¶è®¡ç®
+    统一DuckDB数据管理器
 
-    ä½¿ç¨ç¤ºä¾ï¼?    ```python
-    # åå»ºç®¡çå?    manager = UnifiedDuckDBManager()
+    ⭐ 架构说明：只存储不复权数据，复权数据通过QMT API实时计算
 
-    # ä¸è½½æ°æ®ï¼åªå­å¨ä¸å¤ææ°æ®ï¼
+    使用示例：
+    ```python
+    # 创建管理器
+    manager = UnifiedDuckDBManager()
+
+    # 下载数据（只存储不复权数据）
     manager.download_data(['000001.SZ', '600000.SH'], '2020-01-01', '2024-12-31')
 
-    # æ¥è¯¢ä¸å¤ææ°æ®ï¼ä»DuckDBï¼?    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='none')
+    # 查询不复权数据（从DuckDB）
+    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='none')
 
-    # æ¥è¯¢å¤ææ°æ®ï¼èªå¨ä»QMT APIè·åï¼?    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='qfq')
+    # 查询复权数据（自动从QMT API获取）
+    df = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='qfq')
 
-    # æ´æ°æ°æ®
+    # 更新数据
     manager.update_data(['000001.SZ'])
 
-    # ç»è®¡ä¿¡æ¯
+    # 统计信息
     stats = manager.get_statistics()
     ```
     """
 
-    # å¸¸éå®ä¹
-    ADJUST_NONE = 'none'  # ä¸å¤æï¼å­å¨å°DuckDBï¼?    ADJUST_QFQ = 'qfq'    # åå¤æï¼å®æ¶è®¡ç®ï¼?    ADJUST_HFQ = 'hfq'    # åå¤æï¼å®æ¶è®¡ç®ï¼?
+    # 常量定义
+    ADJUST_NONE = 'none'  # 不复权（存储到DuckDB）
+    ADJUST_QFQ = 'qfq'    # 前复权（实时计算）
+    ADJUST_HFQ = 'hfq'    # 后复权（实时计算）
+
     def __init__(self, db_path: str = None,
                  threads: int = 4, memory_limit: str = '4GB'):
         """
-        åå§åDuckDBæ°æ®ç®¡çå?
+        初始化DuckDB数据管理器
+
         Args:
-            db_path: æ°æ®åºæä»¶è·¯å¾?            threads: DuckDBçº¿ç¨æ?            memory_limit: åå­éå¶
+            db_path: 数据库文件路径
+            threads: DuckDB线程数
+            memory_limit: 内存限制
         """
         if db_path is None:
             db_path = get_default_db_path()
         if not DUCKDB_AVAILABLE:
-            raise ImportError("DuckDBæªå®è£ï¼è¯·è¿è¡? pip install duckdb")
+            raise ImportError("DuckDB未安装，请运行: pip install duckdb")
 
         self.db_path = Path(db_path)
         self.threads = threads
         self.memory_limit = memory_limit
 
-        # åå»ºæ°æ®åºç®å½?        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        # 创建数据库目录
+        self.db_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # åå§åæ°æ®åºè¿æ¥
+        # 初始化数据库连接
         self.conn = None
         self._init_database()
 
-        logger.info(f"DuckDBæ°æ®ç®¡çå¨åå§åå®æ: {self.db_path}")
-        logger.info("æ¶ææ¨¡å¼ï¼åªå­å¨ä¸å¤ææ°æ®ï¼å¤ææ°æ®éè¿QMT APIå®æ¶è®¡ç®")
+        logger.info(f"DuckDB数据管理器初始化完成: {self.db_path}")
+        logger.info("架构模式：只存储不复权数据，复权数据通过QMT API实时计算")
 
     def _init_database(self):
-        """åå§åæ°æ®åºç»æ"""
+        """初始化数据库结构"""
         try:
-            # åå»ºè¿æ¥ï¼ä½¿ç¨sharedæ¨¡å¼é¿åéå®ï¼?            # å°è¯å¤ç§è¿æ¥æ¹å¼
+            # 创建连接（使用shared模式避免锁定）
+            # 尝试多种连接方式
             connection_attempts = [
-                # æ¹å¼1: è¯»åæ¨¡å¼ï¼æ­£å¸¸ä½¿ç¨ï¼
+                # 方式1: 读写模式（正常使用）
                 lambda: duckdb.connect(str(self.db_path), read_only=False),
-                # æ¹å¼2: åå­æ¨¡å¼ï¼æä»¶è¢«éæè·¯å¾ä¸å¯åæ¶çååºï¼
+                # 方式2: 内存模式（文件被锁或路径不可写时的兜底）
                 lambda: duckdb.connect(':memory:'),
             ]
 
@@ -104,52 +126,65 @@ class UnifiedDuckDBManager:
                     continue
 
             if not self.conn:
-                raise Exception("æ æ³è¿æ¥å°DuckDBæ°æ®åº?)
+                raise Exception("无法连接到DuckDB数据库")
 
-            # éç½®æ§è½åæ°
+            # 配置性能参数
             self.conn.execute(f"PRAGMA threads={self.threads}")
             self.conn.execute(f"PRAGMA memory_limit='{self.memory_limit}'")
 
-            # æ£æ¥è¡¨æ¯å¦å­å¨
+            # 检查表是否存在
             tables = self.conn.execute("SHOW TABLES").fetchdf()
             table_names = tables['name'].values
             if 'stock_data' not in table_names:
                 self._create_tables()
             elif 'stock_daily' not in table_names:
-                # stock_data å­å¨ä½?stock_daily VIEW ç¼ºå¤±ï¼è¡¥å»?VIEW
+                # stock_data 存在但 stock_daily VIEW 缺失，补建 VIEW
                 self._ensure_stock_daily_view()
 
         except Exception as e:
-            logger.warning(f"æ°æ®åºåå§åè­¦å: {e}")
-            # åå»ºåå­æ°æ®åºä½ä¸ºå¤ç?            self.conn = duckdb.connect(':memory:')
+            logger.warning(f"数据库初始化警告: {e}")
+            # 创建内存数据库作为备用
+            self.conn = duckdb.connect(':memory:')
             self.conn.execute(f"PRAGMA threads={self.threads}")
             self.conn.execute(f"PRAGMA memory_limit='{self.memory_limit}'")
             self._create_tables()
 
     def _create_tables(self):
-        """åå»ºæ°æ®è¡?""
-        logger.info("åå»ºæ°æ®è¡?..")
+        """创建数据表"""
+        logger.info("创建数据表...")
 
-        # åå»ºä¸»æ°æ®è¡¨ - â­?åªå­å¨ä¸å¤ææ°æ®
+        # 创建主数据表 - ⭐ 只存储不复权数据
         self.conn.execute("""
             CREATE TABLE stock_data (
-                symbol VARCHAR,           -- è¡ç¥¨ä»£ç 
-                date DATE,               -- æ¥æ
-                period VARCHAR,           -- å¨æï¼?d, 1w, 1mï¼?
-                -- OHLCæ°æ®ï¼ä¸å¤æï¼?                open DOUBLE,             -- å¼çä»·
-                high DOUBLE,             -- æé«ä»·
-                low DOUBLE,              -- æä½ä»·
-                close DOUBLE,            -- æ¶çä»?                volume DOUBLE,           -- æäº¤é?                amount DOUBLE,           -- æäº¤é¢?
-                -- æ©å±æ°æ®
-                turnover DOUBLE,         -- æ¢æç?                pe_ratio DOUBLE,         -- å¸çç?                pb_ratio DOUBLE,         -- å¸åç?                market_cap DOUBLE,       -- æ»å¸å?                circulating_cap DOUBLE,  -- æµéå¸å?
-                -- åæ°æ?                created_at TIMESTAMP,    -- åå»ºæ¶é´
-                updated_at TIMESTAMP,    -- æ´æ°æ¶é´
+                symbol VARCHAR,           -- 股票代码
+                date DATE,               -- 日期
+                period VARCHAR,           -- 周期（1d, 1w, 1m）
+
+                -- OHLC数据（不复权）
+                open DOUBLE,             -- 开盘价
+                high DOUBLE,             -- 最高价
+                low DOUBLE,              -- 最低价
+                close DOUBLE,            -- 收盘价
+                volume DOUBLE,           -- 成交量
+                amount DOUBLE,           -- 成交额
+
+                -- 扩展数据
+                turnover DOUBLE,         -- 换手率
+                pe_ratio DOUBLE,         -- 市盈率
+                pb_ratio DOUBLE,         -- 市净率
+                market_cap DOUBLE,       -- 总市值
+                circulating_cap DOUBLE,  -- 流通市值
+
+                -- 元数据
+                created_at TIMESTAMP,    -- 创建时间
+                updated_at TIMESTAMP,    -- 更新时间
 
                 PRIMARY KEY (symbol, date, period)
             )
         """)
 
-        # åå»ºå¼å®¹æ§è§å¾ï¼ä¸ºæ§GUIä»£ç æä¾è¡¨åå¼å®¹ï¼?        # æ å°ï¼symbol â?stock_code, è¡¥å symbol_type
+        # 创建兼容性视图（为旧GUI代码提供表名兼容）
+        # 映射：symbol → stock_code, 补充 symbol_type
         try:
             tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
             if 'stock_daily' not in tables:
@@ -168,13 +203,13 @@ class UnifiedDuckDBManager:
                         created_at, updated_at
                     FROM stock_data
                 """)
-                logger.info("å·²åå»?stock_daily å¼å®¹æ§è§å?)
+                logger.info("已创建 stock_daily 兼容性视图")
             else:
-                logger.info("stock_daily å·²å­å¨ï¼TABLEæVIEWï¼ï¼è·³è¿åå»º")
+                logger.info("stock_daily 已存在（TABLE或VIEW），跳过创建")
         except Exception as e:
-            logger.warning(f"åå»º stock_daily è§å¾æ¶è·³è¿? {e}")
+            logger.warning(f"创建 stock_daily 视图时跳过: {e}")
 
-        # åå»ºstock_market_capè§å¾
+        # 创建stock_market_cap视图
         self.conn.execute("""
             CREATE OR REPLACE VIEW stock_market_cap AS
             SELECT
@@ -188,16 +223,16 @@ class UnifiedDuckDBManager:
             FROM stock_data
         """)
 
-        # åå»ºç´¢å¼
+        # 创建索引
         self.conn.execute("CREATE INDEX idx_symbol ON stock_data(symbol)")
         self.conn.execute("CREATE INDEX idx_date ON stock_data(date)")
         self.conn.execute("CREATE INDEX idx_symbol_date ON stock_data(symbol, date)")
         self.conn.execute("CREATE INDEX idx_period ON stock_data(period)")
 
-        logger.info("æ°æ®è¡¨åå»ºå®æï¼ä»å­å¨ä¸å¤ææ°æ®ï¼?)
+        logger.info("数据表创建完成（仅存储不复权数据）")
 
     def _ensure_stock_daily_view(self):
-        """ç¡®ä¿ stock_daily å¼å®¹æ§è§å¾å­å?""
+        """确保 stock_daily 兼容性视图存在"""
         try:
             tables = [row[0] for row in self.conn.execute("SHOW TABLES").fetchall()]
             if 'stock_daily' in tables:
@@ -217,71 +252,77 @@ class UnifiedDuckDBManager:
                     created_at, updated_at
                 FROM stock_data
             """)
-            logger.info("å·²è¡¥å»?stock_daily å¼å®¹æ§è§å?)
+            logger.info("已补建 stock_daily 兼容性视图")
         except Exception as e:
-            logger.warning(f"åå»º stock_daily è§å¾å¤±è´¥ï¼éè´å½ï¼? {e}")
+            logger.warning(f"创建 stock_daily 视图失败（非致命）: {e}")
 
     def download_data(self, symbols: Union[str, List[str]],
                      start_date: str, end_date: str,
                      period: str = '1d',
                      data_source: str = 'qmt') -> Dict[str, pd.DataFrame]:
         """
-        ä¸è½½æ°æ®å°DuckDBï¼â­ åªä¸è½½ä¸å¤ææ°æ®ï¼?
+        下载数据到DuckDB（⭐ 只下载不复权数据）
+
         Args:
-            symbols: è¡ç¥¨ä»£ç æä»£ç åè¡?            start_date: å¼å§æ¥æ?            end_date: ç»ææ¥æ
-            period: å¨æï¼?dæ¥çº¿, 1wå¨çº¿, 1mæçº¿ï¼?            data_source: æ°æ®æºï¼qmt, tushareï¼?
+            symbols: 股票代码或代码列表
+            start_date: 开始日期
+            end_date: 结束日期
+            period: 周期（1d日线, 1w周线, 1m月线）
+            data_source: 数据源（qmt, tushare）
+
         Returns:
-            ä¸è½½çæ°æ®å­å?{symbol: DataFrame}
+            下载的数据字典 {symbol: DataFrame}
         """
         if isinstance(symbols, str):
             symbols = [symbols]
 
-        logger.info(f"å¼å§ä¸è½½æ°æ? {len(symbols)}åªè¡ç¥? {start_date}~{end_date}")
-        logger.info("â­?æ³¨æï¼åªä¸è½½ä¸å¤ææ°æ®ï¼å¤ææ°æ®æ¥è¯¢æ¶å®æ¶è®¡ç®?)
+        logger.info(f"开始下载数据: {len(symbols)}只股票, {start_date}~{end_date}")
+        logger.info("⭐ 注意：只下载不复权数据，复权数据查询时实时计算")
 
         results = {}
         success_count = 0
 
         for i, symbol in enumerate(symbols):
             try:
-                logger.info(f"[{i+1}/{len(symbols)}] ä¸è½½ {symbol}...")
+                logger.info(f"[{i+1}/{len(symbols)}] 下载 {symbol}...")
 
-                # ä»æ°æ®æºè·åæ°æ®ï¼â­ å¼ºå¶ä½¿ç¨ä¸å¤æï¼
+                # 从数据源获取数据（⭐ 强制使用不复权）
                 df = self._fetch_from_source(symbol, start_date, end_date,
                                            period, self.ADJUST_NONE, data_source)
 
                 if df is not None and not df.empty:
-                    # ä¿å­å°æ°æ®åºï¼â­ åªå­å¨ä¸å¤ææ°æ®ï¼?                    self.save_data(df, symbol, period, self.ADJUST_NONE)
+                    # 保存到数据库（⭐ 只存储不复权数据）
+                    self.save_data(df, symbol, period, self.ADJUST_NONE)
                     results[symbol] = df
                     success_count += 1
-                    logger.info(f"  â?{symbol} ({len(df)}æ¡è®°å½?")
+                    logger.info(f"  ✓ {symbol} ({len(df)}条记录)")
                 else:
-                    logger.warning(f"  â?{symbol} æ°æ®ä¸ºç©º")
+                    logger.warning(f"  ✗ {symbol} 数据为空")
 
             except Exception as e:
-                logger.error(f"  â?{symbol} ä¸è½½å¤±è´¥: {e}")
+                logger.error(f"  ✗ {symbol} 下载失败: {e}")
 
-        logger.info(f"ä¸è½½å®æ: {success_count}/{len(symbols)}")
+        logger.info(f"下载完成: {success_count}/{len(symbols)}")
         return results
 
     def _fetch_from_source(self, symbol: str, start_date: str, end_date: str,
                           period: str, adjust_type: str, data_source: str) -> pd.DataFrame:
-        """ä»æ°æ®æºè·åæ°æ®"""
+        """从数据源获取数据"""
         if data_source == 'qmt':
             return self._fetch_from_qmt(symbol, start_date, end_date, period, adjust_type)
         elif data_source == 'tushare':
             return self._fetch_from_tushare(symbol, start_date, end_date, period, adjust_type)
         else:
-            raise ValueError(f"ä¸æ¯æçæ°æ®æº? {data_source}")
+            raise ValueError(f"不支持的数据源: {data_source}")
 
     def _fetch_from_qmt(self, symbol: str, start_date: str, end_date: str,
                        period: str, adjust_type: str) -> pd.DataFrame:
-        """ä»QMTè·åæ°æ®"""
+        """从QMT获取数据"""
         try:
             import sys
             from pathlib import Path
 
-            # æ·»å é¡¹ç®è·¯å¾
+            # 添加项目路径
             project_root = Path(__file__).parent.parent
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
@@ -289,23 +330,27 @@ class UnifiedDuckDBManager:
             import easy_xt
             api = easy_xt.get_api()
 
-            # åå§åæ°æ®æå?            try:
+            # 初始化数据服务
+            try:
                 api.init_data()
-            except (ImportError, AttributeError):                pass
+            except Exception:
+                pass
 
-            # è½¬æ¢æ¥ææ ¼å¼ï¼å¼å®?YYYY-MM-DD å?YYYYMMDDï¼?            start_date_clean = start_date.replace('-', '')
+            # 转换日期格式（兼容 YYYY-MM-DD 和 YYYYMMDD）
+            start_date_clean = start_date.replace('-', '')
             end_date_clean = end_date.replace('-', '')
             start_dt = datetime.strptime(start_date_clean, '%Y%m%d')
             end_dt = datetime.strptime(end_date_clean, '%Y%m%d')
-            days = (end_dt - start_dt).days + 500  # å¤åä¸äºç¡®ä¿è¦ç?
-            # â­?å¼ºå¶ä½¿ç¨ä¸å¤ææ°æ®ï¼QMT APIçdividend_type=0è¡¨ç¤ºä¸å¤æï¼
-            # å³ä½¿ä¼ å¥adjust_type='qfq'æ?hfq'ï¼è¿éä¹åªè·åä¸å¤ææ°æ®
+            days = (end_dt - start_dt).days + 500  # 多取一些确保覆盖
+
+            # ⭐ 强制使用不复权数据（QMT API的dividend_type=0表示不复权）
+            # 即使传入adjust_type='qfq'或'hfq'，这里也只获取不复权数据
             df = api.get_price(symbol, period=period, count=days)
 
             if df is None or df.empty:
                 return pd.DataFrame()
 
-            # è¿æ»¤æ¥æèå´
+            # 过滤日期范围
             if 'time' in df.columns:
                 df['time'] = pd.to_datetime(df['time'])
                 df = df[(df['time'] >= start_dt) & (df['time'] <= end_dt)]
@@ -314,53 +359,59 @@ class UnifiedDuckDBManager:
                 df.index = pd.to_datetime(df.index)
                 df = df.loc[start_dt:end_dt]
 
-            # æ åååå?            df.columns = df.columns.str.lower()
+            # 标准化列名
+            df.columns = df.columns.str.lower()
             df.index.name = 'date'
 
-            # ç¡®ä¿amountåå­å?            if 'amount' not in df.columns and 'volume' in df.columns and 'close' in df.columns:
+            # 确保amount列存在
+            if 'amount' not in df.columns and 'volume' in df.columns and 'close' in df.columns:
                 df['amount'] = df['volume'] * df['close']
 
-            # æ·»å åæ°æ?            df['symbol'] = symbol
+            # 添加元数据
+            df['symbol'] = symbol
             df['period'] = period
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
-            # éç½®ç´¢å¼
+            # 重置索引
             df = df.reset_index()
 
             return df
 
         except Exception as e:
-            logger.error(f"QMTè·åæ°æ®å¤±è´¥: {e}")
+            logger.error(f"QMT获取数据失败: {e}")
             return pd.DataFrame()
 
     def _fetch_from_tushare(self, symbol: str, start_date: str, end_date: str,
                            period: str, adjust_type: str) -> pd.DataFrame:
-        """ä»Tushareè·åæ°æ®ï¼â­ åªè·åä¸å¤ææ°æ®ï¼?""
+        """从Tushare获取数据（⭐ 只获取不复权数据）"""
         try:
             import tushare as ts
 
-            # ä»ç¯å¢åéæéç½®æä»¶è¯»åtoken
+            # 从环境变量或配置文件读取token
             import os
             token = os.environ.get('TUSHARE_TOKEN')
             if not token:
-                raise ValueError("æªè®¾ç½®TUSHARE_TOKENç¯å¢åé")
+                raise ValueError("未设置TUSHARE_TOKEN环境变量")
 
             ts.set_token(token)
             pro = ts.pro_api()
 
-            # è½¬æ¢è¡ç¥¨ä»£ç æ ¼å¼ï¼?00001.SZ -> 000001.SZï¼?            ts_code = symbol
+            # 转换股票代码格式（000001.SZ -> 000001.SZ）
+            ts_code = symbol
 
-            # è½¬æ¢æ¥ææ ¼å¼
+            # 转换日期格式
             start_str = start_date.replace('-', '')
             end_str = end_date.replace('-', '')
 
-            # â­?Tushareé»è®¤è¿åä¸å¤ææ°æ?            df = pro.daily(ts_code=ts_code, start_date=start_str, end_date=end_str)
+            # ⭐ Tushare默认返回不复权数据
+            df = pro.daily(ts_code=ts_code, start_date=start_str, end_date=end_str)
 
             if df.empty:
                 return pd.DataFrame()
 
-            # æ åååå?            df = df.rename(columns={
+            # 标准化列名
+            df = df.rename(columns={
                 'ts_code': 'symbol',
                 'trade_date': 'date',
                 'open': 'open',
@@ -371,14 +422,16 @@ class UnifiedDuckDBManager:
                 'amount': 'amount'
             })
 
-            # è½¬æ¢æ¥ææ ¼å¼
+            # 转换日期格式
             df['date'] = pd.to_datetime(df['date'], format='%Y%m%d')
 
-            # æ·»å åæ°æ?            df['period'] = period
+            # 添加元数据
+            df['period'] = period
             df['created_at'] = datetime.now()
             df['updated_at'] = datetime.now()
 
-            # éæ©éè¦çå?            columns = ['symbol', 'date', 'period',
+            # 选择需要的列
+            columns = ['symbol', 'date', 'period',
                       'open', 'high', 'low', 'close', 'volume', 'amount',
                       'created_at', 'updated_at']
             df = df[columns]
@@ -386,23 +439,25 @@ class UnifiedDuckDBManager:
             return df
 
         except Exception as e:
-            logger.error(f"Tushareè·åæ°æ®å¤±è´¥: {e}")
+            logger.error(f"Tushare获取数据失败: {e}")
             return pd.DataFrame()
 
     def save_data(self, df: pd.DataFrame, symbol: str = None,
                  period: str = '1d', adjust_type: str = None):
         """
-        ä¿å­æ°æ®å°DuckDBï¼â­ åªåè®¸å­å¨ä¸å¤ææ°æ®ï¼?
+        保存数据到DuckDB（⭐ 只允许存储不复权数据）
+
         Args:
-            df: è¦ä¿å­çæ°æ®
-            symbol: è¡ç¥¨ä»£ç ï¼å¦ædfä¸­æ²¡æsymbolåï¼
-            period: å¨æ
-            adjust_type: å·²åºå¼ï¼ä¿çåæ°å¼å®¹æ§ï¼ä¸åä½¿ç¨ï¼?        """
+            df: 要保存的数据
+            symbol: 股票代码（如果df中没有symbol列）
+            period: 周期
+            adjust_type: 已废弃（保留参数兼容性，不再使用）
+        """
         if df.empty:
-            logger.warning("æ°æ®ä¸ºç©ºï¼è·³è¿ä¿å­?)
+            logger.warning("数据为空，跳过保存")
             return
 
-        # æ·»å åæ°æ®å
+        # 添加元数据列
         if symbol and 'symbol' not in df.columns:
             df['symbol'] = symbol
         if 'period' not in df.columns:
@@ -412,7 +467,8 @@ class UnifiedDuckDBManager:
         if 'updated_at' not in df.columns:
             df['updated_at'] = datetime.now()
 
-        # åè·åè¡¨ç»æï¼äºå¡å¤ï¼?        actual_cols = [row[0] for row in self.conn.execute("DESCRIBE stock_data").fetchall()]
+        # 先获取表结构（事务外）
+        actual_cols = [row[0] for row in self.conn.execute("DESCRIBE stock_data").fetchall()]
         df_columns = [c for c in actual_cols if c in df.columns]
         col_list = ', '.join(df_columns)
         placeholders = ', '.join(['?'] * len(df_columns))
@@ -421,7 +477,8 @@ class UnifiedDuckDBManager:
         try:
             self.conn.execute("BEGIN TRANSACTION")
 
-            # åªå é¤æ¥æèå´åçæ§æ°æ®ï¼å¢éæ´æ°æ¶ä¿çåå²æ°æ®ï¼?            if symbol and 'date' in df.columns:
+            # 只删除日期范围内的旧数据（增量更新时保留历史数据）
+            if symbol and 'date' in df.columns:
                 min_date = pd.to_datetime(df['date']).min()
                 max_date = pd.to_datetime(df['date']).max()
                 self.conn.execute(f"""
@@ -438,16 +495,17 @@ class UnifiedDuckDBManager:
                     AND period = '{period}'
                 """)
 
-            # ç¨åæ°åæå¥ï¼é¿åregister/unregisterå¼å®¹æ§é®é¢?            rows = df[df_columns].where(df[df_columns].notna(), None).values.tolist()
+            # 用参数化插入，避免register/unregister兼容性问题
+            rows = df[df_columns].where(df[df_columns].notna(), None).values.tolist()
             self.conn.executemany(insert_sql, rows)
 
             self.conn.execute("COMMIT")
 
-            logger.info(f"æ°æ®ä¿å­æå: {len(df)}æ¡è®°å½ï¼ä¸å¤ææ°æ®ï¼")
+            logger.info(f"数据保存成功: {len(df)}条记录（不复权数据）")
 
         except Exception as e:
             self.conn.execute("ROLLBACK")
-            logger.error(f"æ°æ®ä¿å­å¤±è´¥: {e}")
+            logger.error(f"数据保存失败: {e}")
             raise
 
     def get_data(self, symbols: Union[str, List[str]] = None,
@@ -455,27 +513,32 @@ class UnifiedDuckDBManager:
                 period: str = '1d',
                 adjust_type: str = 'none') -> pd.DataFrame:
         """
-        æ¥è¯¢æ°æ®ï¼â­ æ¯æä¸å¤æåå¤ææ°æ®ï¼?
+        查询数据（⭐ 支持不复权和复权数据）
+
         Args:
-            symbols: è¡ç¥¨ä»£ç æä»£ç åè¡¨ï¼Noneè¡¨ç¤ºå¨é¨ï¼?            start_date: å¼å§æ¥æ?            end_date: ç»ææ¥æ
-            period: å¨æ
-            adjust_type: å¤æç±»åï¼?none'=ä¸å¤æä»DuckDB, 'qfq'/'hfq'=å¤æä»QMT APIï¼?
+            symbols: 股票代码或代码列表（None表示全部）
+            start_date: 开始日期
+            end_date: 结束日期
+            period: 周期
+            adjust_type: 复权类型（'none'=不复权从DuckDB, 'qfq'/'hfq'=复权从QMT API）
+
         Returns:
-            æ¥è¯¢ç»æDataFrame
+            查询结果DataFrame
         """
-        # â­?æ ¹æ®adjust_typeå³å®æ°æ®æº?        if adjust_type == self.ADJUST_NONE:
-            # ä¸å¤ææ°æ®ï¼ä»DuckDBè¯»å
+        # ⭐ 根据adjust_type决定数据源
+        if adjust_type == self.ADJUST_NONE:
+            # 不复权数据：从DuckDB读取
             return self._get_data_from_duckdb(symbols, start_date, end_date, period)
         else:
-            # å¤ææ°æ®ï¼ä»QMT APIå®æ¶è·å
-            logger.info(f"è·å{adjust_type}å¤ææ°æ®ï¼ä»QMT APIå®æ¶è®¡ç®ï¼?..")
+            # 复权数据：从QMT API实时获取
+            logger.info(f"获取{adjust_type}复权数据（从QMT API实时计算）...")
             return self._get_adjusted_data_from_qmt(symbols, start_date, end_date, period, adjust_type)
 
     def _get_data_from_duckdb(self, symbols: Union[str, List[str]] = None,
                              start_date: str = None, end_date: str = None,
                              period: str = '1d') -> pd.DataFrame:
-        """ä»DuckDBè·åä¸å¤ææ°æ?""
-        # æå»ºæ¥è¯¢æ¡ä»¶
+        """从DuckDB获取不复权数据"""
+        # 构建查询条件
         conditions = []
 
         if symbols:
@@ -495,7 +558,7 @@ class UnifiedDuckDBManager:
 
         where_clause = " AND ".join(conditions) if conditions else "1=1"
 
-        # æ§è¡æ¥è¯¢
+        # 执行查询
         query = f"""
             SELECT
                 symbol, date, period,
@@ -510,18 +573,18 @@ class UnifiedDuckDBManager:
             df = self.conn.execute(query).fetchdf()
             return df
         except Exception as e:
-            logger.error(f"æ¥è¯¢å¤±è´¥: {e}")
+            logger.error(f"查询失败: {e}")
             return pd.DataFrame()
 
     def _get_adjusted_data_from_qmt(self, symbols: Union[str, List[str]],
                                    start_date: str, end_date: str,
                                    period: str, adjust_type: str) -> pd.DataFrame:
-        """ä»QMT APIè·åå¤ææ°æ®ï¼å®æ¶è®¡ç®ï¼"""
+        """从QMT API获取复权数据（实时计算）"""
         try:
             import sys
             from pathlib import Path
 
-            # æ·»å é¡¹ç®è·¯å¾
+            # 添加项目路径
             project_root = Path(__file__).parent.parent
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
@@ -529,9 +592,11 @@ class UnifiedDuckDBManager:
             import easy_xt
             api = easy_xt.get_api()
 
-            # åå§åæ°æ®æå?            try:
+            # 初始化数据服务
+            try:
                 api.init_data()
-            except (ImportError, AttributeError):                pass
+            except Exception:
+                pass
 
             if isinstance(symbols, str):
                 symbols = [symbols]
@@ -540,17 +605,17 @@ class UnifiedDuckDBManager:
 
             for symbol in symbols:
                 try:
-                    # è½¬æ¢æ¥ææ ¼å¼
+                    # 转换日期格式
                     start_dt = datetime.strptime(start_date, '%Y-%m-%d') if start_date else None
                     end_dt = datetime.strptime(end_date, '%Y-%m-%d') if end_date else None
                     days = (end_dt - start_dt).days + 500 if start_dt and end_dt else 1000
 
-                    # â­?è°ç¨QMT APIè·åå¤ææ°æ®
-                    # QMTçget_priceæ¯æå¤æåæ°ï¼ä¼å®æ¶è®¡ç®å¤ææ°æ®
+                    # ⭐ 调用QMT API获取复权数据
+                    # QMT的get_price支持复权参数，会实时计算复权数据
                     df = api.get_price(symbol, period=period, count=days)
 
                     if df is not None and not df.empty:
-                        # è¿æ»¤æ¥æèå´
+                        # 过滤日期范围
                         if 'time' in df.columns:
                             df['time'] = pd.to_datetime(df['time'])
                             if start_dt and end_dt:
@@ -561,7 +626,8 @@ class UnifiedDuckDBManager:
                             if start_dt and end_dt:
                                 df = df.loc[start_dt:end_dt]
 
-                        # æ åååå?                        df.columns = df.columns.str.lower()
+                        # 标准化列名
+                        df.columns = df.columns.str.lower()
                         df.index.name = 'date'
                         df['symbol'] = symbol
                         df = df.reset_index()
@@ -569,7 +635,7 @@ class UnifiedDuckDBManager:
                         all_data.append(df)
 
                 except Exception as e:
-                    logger.error(f"è·å{symbol}å¤ææ°æ®å¤±è´¥: {e}")
+                    logger.error(f"获取{symbol}复权数据失败: {e}")
 
             if all_data:
                 result = pd.concat(all_data, ignore_index=True)
@@ -578,37 +644,40 @@ class UnifiedDuckDBManager:
                 return pd.DataFrame()
 
         except Exception as e:
-            logger.error(f"ä»QMTè·åå¤ææ°æ®å¤±è´¥: {e}")
+            logger.error(f"从QMT获取复权数据失败: {e}")
             return pd.DataFrame()
 
     def update_data(self, symbols: Union[str, List[str]],
                    period: str = '1d',
                    days_back: int = 5) -> Dict[str, pd.DataFrame]:
         """
-        å¢éæ´æ°æ°æ®ï¼â­ åªæ´æ°ä¸å¤ææ°æ®ï¼?
+        增量更新数据（⭐ 只更新不复权数据）
+
         Args:
-            symbols: è¡ç¥¨ä»£ç æä»£ç åè¡?            period: å¨æ
-            days_back: åæº¯å¤©æ°
+            symbols: 股票代码或代码列表
+            period: 周期
+            days_back: 回溯天数
 
         Returns:
-            æ´æ°çæ°æ®å­å?        """
+            更新的数据字典
+        """
         end_date = datetime.now().strftime('%Y-%m-%d')
         start_date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
 
-        logger.info(f"å¢éæ´æ°æ°æ®: {start_date}~{end_date}ï¼ä»ä¸å¤ææ°æ®ï¼")
+        logger.info(f"增量更新数据: {start_date}~{end_date}（仅不复权数据）")
 
         return self.download_data(symbols, start_date, end_date, period)
 
     def get_statistics(self) -> Dict:
-        """è·åæ°æ®åºç»è®¡ä¿¡æ?""
+        """获取数据库统计信息"""
         try:
-            # æ»è®°å½æ°
+            # 总记录数
             total_records = self.conn.execute("SELECT COUNT(*) FROM stock_data").fetchone()[0]
 
-            # è¡ç¥¨æ°é
+            # 股票数量
             total_symbols = self.conn.execute("SELECT COUNT(DISTINCT symbol) FROM stock_data").fetchone()[0]
 
-            # æ¥æèå´
+            # 日期范围
             date_range = self.conn.execute("""
                 SELECT
                     MIN(date) as min_date,
@@ -616,7 +685,8 @@ class UnifiedDuckDBManager:
                 FROM stock_data
             """).fetchdf()
 
-            # æ°æ®åºæä»¶å¤§å°?            file_size = self.db_path.stat().st_size / (1024**2)  # MB
+            # 数据库文件大小
+            file_size = self.db_path.stat().st_size / (1024**2)  # MB
 
             stats = {
                 'total_records': total_records,
@@ -625,83 +695,87 @@ class UnifiedDuckDBManager:
                 'max_date': str(date_range.iloc[0]['max_date']),
                 'file_size_mb': round(file_size, 2),
                 'db_path': str(self.db_path),
-                'architecture': 'åªå­å¨ä¸å¤ææ°æ®ï¼å¤ææ°æ®éè¿QMT APIå®æ¶è®¡ç®'
+                'architecture': '只存储不复权数据，复权数据通过QMT API实时计算'
             }
 
             return stats
 
         except Exception as e:
-            logger.error(f"è·åç»è®¡ä¿¡æ¯å¤±è´¥: {e}")
+            logger.error(f"获取统计信息失败: {e}")
             return {}
 
     def get_all_symbols(self) -> List[str]:
-        """è·åææè¡ç¥¨ä»£ç ?""
+        """获取所有股票代码"""
         try:
             result = self.conn.execute("SELECT DISTINCT symbol FROM stock_data ORDER BY symbol").fetchdf()
             return result['symbol'].tolist()
         except Exception as e:
-            logger.error(f"è·åè¡ç¥¨åè¡¨å¤±è´¥: {e}")
+            logger.error(f"获取股票列表失败: {e}")
             return []
 
     def get_all_stocks_list(self, include_st: bool = False, include_sz: bool = True,
                            include_bj: bool = True, exclude_st: bool = True,
                            exclude_delisted: bool = True) -> List[str]:
         """
-        è·åAè¡åè¡¨ï¼å¼å®¹æ§çæ¬æ¥å£ï¼
+        获取A股列表（兼容旧版本接口）
 
         Args:
-            include_st: æ¯å¦åå«STè¡ç¥¨
-            include_sz: æ¯å¦åå«æ·±å³è¡ç¥¨
-            include_bj: æ¯å¦åå«åäº¬è¡ç¥¨
-            exclude_st: æ¯å¦æé¤STè¡ç¥¨
-            exclude_delisted: æ¯å¦æé¤éå¸è¡ç¥?
+            include_st: 是否包含ST股票
+            include_sz: 是否包含深圳股票
+            include_bj: 是否包含北京股票
+            exclude_st: 是否排除ST股票
+            exclude_delisted: 是否排除退市股票
+
         Returns:
-            è¡ç¥¨ä»£ç åè¡¨
+            股票代码列表
         """
         try:
-            # ä¼åä»æ°æ®åºè·åï¼å¦ææ°æ®åºä¸ºç©ºåä»QMTè·å
+            # 优先从数据库获取，如果数据库为空则从QMT获取
             symbols = self.get_all_symbols()
 
-            # å¦ææ°æ®åºä¸ºç©ºï¼ä»QMTè·åè¡ç¥¨åè¡¨
+            # 如果数据库为空，从QMT获取股票列表
             if not symbols:
-                logger.info("æ°æ®åºä¸ºç©ºï¼ä»QMTè·åAè¡åè¡?..")
+                logger.info("数据库为空，从QMT获取A股列表...")
                 symbols = self._fetch_stock_list_from_qmt()
 
-            # è¿æ»¤æ¡ä»¶
+            # 过滤条件
             filtered = []
             for symbol in symbols:
-                # åºæ¬æ ¼å¼æ£æ?                if not symbol or '.' not in symbol:
+                # 基本格式检查
+                if not symbol or '.' not in symbol:
                     continue
 
-                # æé¤å¯è½¬åºï¼123å¼å¤´çï¼?                if symbol.startswith('123'):
+                # 排除可转债（123开头的）
+                if symbol.startswith('123'):
                     continue
 
-                # å¸åºè¿æ»¤
+                # 市场过滤
                 if not include_sz and symbol.endswith('.SZ'):
                     continue
                 if not include_bj and symbol.endswith('.BJ'):
                     continue
 
-                # STè¿æ»¤
+                # ST过滤
                 if exclude_st:
-                    # è¿éå¯ä»¥æ·»å æ´å¤æçSTå¤æ­é»è¾
-                    # ææ¶ç®åå¤ç?                    pass
+                    # 这里可以添加更复杂的ST判断逻辑
+                    # 暂时简单处理
+                    pass
 
                 filtered.append(symbol)
 
             return filtered
 
         except Exception as e:
-            logger.error(f"è·åAè¡åè¡¨å¤±è´? {e}")
+            logger.error(f"获取A股列表失败: {e}")
             return []
 
     def _fetch_stock_list_from_qmt(self) -> List[str]:
-        """ä»QMTè·åAè¡åè¡?""
+        """从QMT获取A股列表"""
         try:
             import sys
             from pathlib import Path
 
-            # æ·»å é¡¹ç®è·¯å¾
+            # 添加项目路径
             project_root = Path(__file__).parent.parent
             if str(project_root) not in sys.path:
                 sys.path.insert(0, str(project_root))
@@ -709,76 +783,89 @@ class UnifiedDuckDBManager:
             import easy_xt
             api = easy_xt.get_api()
 
-            # åå§åæ°æ®æå?            try:
+            # 初始化数据服务
+            try:
                 api.init_data()
-            except (ImportError, AttributeError):                pass
+            except Exception:
+                pass
 
-            # è·åææè¡ç¥¨åè¡?            all_stocks = api.get_stock_list()
+            # 获取所有股票列表
+            all_stocks = api.get_stock_list()
 
             if not all_stocks:
-                logger.warning("QMTè¿åç©ºè¡ç¥¨åè¡?)
+                logger.warning("QMT返回空股票列表")
                 return []
 
-            # QMTè¿åçæ ¼å¼å·²ç»æ¯å¸¦å¸åºåç¼çè¡ç¥¨ä»£ç åè¡?            # éè¦è¿æ»¤åºçº¯Aè¡ï¼æé¤ETFãå¯è½¬åºç­ï¼?            stock_list = []
+            # QMT返回的格式已经是带市场后缀的股票代码列表
+            # 需要过滤出纯A股（排除ETF、可转债等）
+            stock_list = []
             etf_patterns = [
-                '5',     # ä¸æµ·ETFååºéï¼5xxxxx
-                '15',    # æ·±å³åºéï¼?5xxxx
-                '16',    # æ·±å³åºéï¼?6xxxx
-                '18',    # æ·±å³åºéï¼?8xxxx
-                '50',    # ä¸æµ·50å¼å¤´çETF
-                '56',    # ä¸æµ·56å¼å¤´çETF
-                '58',    # ä¸æµ·58å¼å¤´çETF
-                '588',   # ç§åæ¿ETF
-                '688',   # ç§åæ¿è¡ç¥¨ï¼ææ¶æé¤ï¼å¦æéè¦å¯ä»¥åå«ï¼
-                '11',    # å¯è½¬åºï¼11xxxx
-                '12',    # å¯è½¬åºï¼12xxxx
-                '13',    # å¯è½¬åºï¼13xxxx
+                '5',     # 上海ETF和基金：5xxxxx
+                '15',    # 深圳基金：15xxxx
+                '16',    # 深圳基金：16xxxx
+                '18',    # 深圳基金：18xxxx
+                '50',    # 上海50开头的ETF
+                '56',    # 上海56开头的ETF
+                '58',    # 上海58开头的ETF
+                '588',   # 科创板ETF
+                '688',   # 科创板股票（暂时排除，如果需要可以包含）
+                '11',    # 可转债：11xxxx
+                '12',    # 可转债：12xxxx
+                '13',    # 可转债：13xxxx
             ]
 
             for stock in all_stocks:
                 stock_str = str(stock).strip()
 
-                # æ£æ¥æ ¼å¼?                if '.' not in stock_str:
+                # 检查格式
+                if '.' not in stock_str:
                     continue
 
-                # åç¦»ä»£ç åå¸å?                code, market = stock_str.split('.')
+                # 分离代码和市场
+                code, market = stock_str.split('.')
 
-                # è¿æ»¤ETFãåºéãå¯è½¬å?                is_etf_or_bond = False
+                # 过滤ETF、基金、可转债
+                is_etf_or_bond = False
                 for pattern in etf_patterns:
                     if code.startswith(pattern):
                         is_etf_or_bond = True
                         break
 
-                # åªä¿ççº¯Aè?                # ä¸æµ·ï¼?00xxx, 601xxx, 603xxx, 605xxx (ä¸»æ¿)
-                # æ·±å³ï¼?00xxx, 001xxx, 002xxx, 003xxx (ä¸»æ¿/ä¸­å°æ?
-                #       300xxx (åä¸æ?
-                # åäº¬ï¼?xxxxx (åäº¤æ)
+                # 只保留纯A股
+                # 上海：600xxx, 601xxx, 603xxx, 605xxx (主板)
+                # 深圳：000xxx, 001xxx, 002xxx, 003xxx (主板/中小板)
+                #       300xxx (创业板)
+                # 北京：8xxxxx (北交所)
                 if not is_etf_or_bond:
-                    # è¿ä¸æ­¥è¿æ»¤ï¼ç¡®ä¿æ¯çº¯è¡ç¥¨
+                    # 进一步过滤，确保是纯股票
                     if code.startswith('600') or code.startswith('601') or code.startswith('603') or code.startswith('605'):
-                        stock_list.append(stock_str)  # ä¸æµ·ä¸»æ¿
+                        stock_list.append(stock_str)  # 上海主板
                     elif code.startswith('000') or code.startswith('001') or code.startswith('002') or code.startswith('003'):
-                        stock_list.append(stock_str)  # æ·±å³ä¸»æ¿/ä¸­å°æ?                    elif code.startswith('300'):
-                        stock_list.append(stock_str)  # åä¸æ?                    elif code.startswith('8') and len(code) == 6:
-                        stock_list.append(stock_str)  # åäº¤æ
+                        stock_list.append(stock_str)  # 深圳主板/中小板
+                    elif code.startswith('300'):
+                        stock_list.append(stock_str)  # 创业板
+                    elif code.startswith('8') and len(code) == 6:
+                        stock_list.append(stock_str)  # 北交所
 
-            logger.info(f"ä»QMTè·åå?{len(stock_list)} åªAè¡ï¼å·²è¿æ»¤ETFåå¯è½¬åºï¼")
+            logger.info(f"从QMT获取到 {len(stock_list)} 只A股（已过滤ETF和可转债）")
             return stock_list
 
         except Exception as e:
-            logger.error(f"ä»QMTè·åè¡ç¥¨åè¡¨å¤±è´¥: {e}")
-            # è¿åä¸äºå¸¸è§è¡ç¥¨ä½ä¸ºå¤ç?            return [
-                '000001.SZ',  # å¹³å®é¶è¡
-                '000002.SZ',  # ä¸ç§A
-                '600000.SH',  # æµ¦åé¶è¡
-                '600036.SH',  # æåé¶è¡
-                '600519.SH',  # è´µå·èå°
+            logger.error(f"从QMT获取股票列表失败: {e}")
+            # 返回一些常见股票作为备用
+            return [
+                '000001.SZ',  # 平安银行
+                '000002.SZ',  # 万科A
+                '600000.SH',  # 浦发银行
+                '600036.SH',  # 招商银行
+                '600519.SH',  # 贵州茅台
             ]
 
     def check_data_integrity(self) -> Dict:
-        """æ£æ¥æ°æ®å®æ´æ?""
+        """检查数据完整性"""
         try:
-            # æ£æ¥ç¼ºå¤±æ°æ?            missing = self.conn.execute("""
+            # 检查缺失数据
+            missing = self.conn.execute("""
                 SELECT
                     symbol,
                     COUNT(*) as record_count,
@@ -789,7 +876,8 @@ class UnifiedDuckDBManager:
                 HAVING record_count < 200
             """).fetchdf()
 
-            # æ£æ¥å¼å¸¸æ°æ?            abnormal = self.conn.execute("""
+            # 检查异常数据
+            abnormal = self.conn.execute("""
                 SELECT COUNT(*) as count
                 FROM stock_data
                 WHERE high < low
@@ -804,24 +892,26 @@ class UnifiedDuckDBManager:
             }
 
         except Exception as e:
-            logger.error(f"æ°æ®å®æ´æ§æ£æ¥å¤±è´? {e}")
+            logger.error(f"数据完整性检查失败: {e}")
             return {}
 
     def close(self):
-        """å³é­æ°æ®åºè¿æ?""
+        """关闭数据库连接"""
         if self.conn:
             self.conn.close()
-            logger.info("æ°æ®åºè¿æ¥å·²å³é­")
+            logger.info("数据库连接已关闭")
 
 
-# ä¾¿æ·å½æ°
+# 便捷函数
 def get_duckdb_manager(db_path: str = None) -> UnifiedDuckDBManager:
     """
-    è·åDuckDBæ°æ®ç®¡çå¨å®ä¾?
+    获取DuckDB数据管理器实例
+
     Args:
-        db_path: æ°æ®åºæä»¶è·¯å¾?
+        db_path: 数据库文件路径
+
     Returns:
-        UnifiedDuckDBManagerå®ä¾
+        UnifiedDuckDBManager实例
     """
     if db_path is None:
         db_path = get_default_db_path()
@@ -829,36 +919,38 @@ def get_duckdb_manager(db_path: str = None) -> UnifiedDuckDBManager:
 
 
 if __name__ == '__main__':
-    # æµè¯ä»£ç 
+    # 测试代码
     import time
 
-    print("="*70)
-    print("ç»ä¸DuckDBæ°æ®ç®¡çå?- æµè¯")
-    print("="*70)
-    print("\nâ­?æ¶ææ¨¡å¼ï¼åªå­å¨ä¸å¤ææ°æ®ï¼å¤ææ°æ®éè¿QMT APIå®æ¶è®¡ç®")
-    print("="*70)
+    logger.info("="*70)
+    logger.info("统一DuckDB数据管理器 - 测试")
+    logger.info("="*70)
+    logger.info("\n⭐ 架构模式：只存储不复权数据，复权数据通过QMT API实时计算")
+    logger.info("="*70)
 
-    # åå»ºç®¡çå?    manager = UnifiedDuckDBManager(get_default_db_path())
+    # 创建管理器
+    manager = UnifiedDuckDBManager(get_default_db_path())
 
-    # æµè¯ä¸è½½
-    print("\n[æµè¯1] ä¸è½½ä¸å¤ææ°æ?..")
+    # 测试下载
+    logger.info("\n[测试1] 下载不复权数据...")
     manager.download_data(['000001.SZ'], '2024-01-01', '2024-12-31')
 
-    # æµè¯æ¥è¯¢ä¸å¤ææ°æ?    print("\n[æµè¯2] æ¥è¯¢ä¸å¤ææ°æ®ï¼ä»DuckDBï¼?..")
+    # 测试查询不复权数据
+    logger.info("\n[测试2] 查询不复权数据（从DuckDB）...")
     df_none = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='none')
-    print(f"æ¥è¯¢ç»æ: {len(df_none)}æ¡è®°å½?)
+    logger.info(f"查询结果: {len(df_none)}条记录")
 
-    # æµè¯æ¥è¯¢å¤ææ°æ®
-    print("\n[æµè¯3] æ¥è¯¢åå¤ææ°æ®ï¼ä»QMT APIå®æ¶è®¡ç®ï¼?..")
+    # 测试查询复权数据
+    logger.info("\n[测试3] 查询前复权数据（从QMT API实时计算）...")
     df_qfq = manager.get_data('000001.SZ', '2024-01-01', '2024-12-31', adjust_type='qfq')
-    print(f"æ¥è¯¢ç»æ: {len(df_qfq)}æ¡è®°å½?)
+    logger.info(f"查询结果: {len(df_qfq)}条记录")
 
-    # ç»è®¡ä¿¡æ¯
-    print("\n[æµè¯4] ç»è®¡ä¿¡æ¯...")
+    # 统计信息
+    logger.info("\n[测试4] 统计信息...")
     stats = manager.get_statistics()
     for k, v in stats.items():
-        print(f"  {k}: {v}")
+        logger.info(f"  {k}: {v}")
 
-    # å³é­
+    # 关闭
     manager.close()
-    print("\nâ?æµè¯å®æ")
+    logger.info("\n✅ 测试完成")

@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 板块数据模块
 
@@ -39,8 +42,8 @@ class SectorData:
         except ImportError:
             self.ak = None
             self.ak_available = False
-            print("[WARNING] 未安装akshare，板块数据功能不可用")
-            print("[TIPS] 运行: pip install akshare")
+            logger.warning("[WARNING] 未安装akshare，板块数据功能不可用")
+            logger.info("[TIPS] 运行: pip install akshare")
 
     # ============================================================
     # 板块列表
@@ -84,7 +87,7 @@ class SectorData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取行业板块失败: {e}")
+            logger.error(f"[ERROR] 获取行业板块失败: {e}")
             return pd.DataFrame()
 
     def get_concept_sectors(self) -> pd.DataFrame:
@@ -119,7 +122,7 @@ class SectorData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取概念板块失败: {e}")
+            logger.error(f"[ERROR] 获取概念板块失败: {e}")
             return pd.DataFrame()
 
     def get_all_sectors(self) -> Dict[str, pd.DataFrame]:
@@ -137,12 +140,12 @@ class SectorData:
         try:
             result['industry'] = self.get_industry_sectors()
         except Exception as e:
-            print(f"[ERROR] 获取行业板块失败: {e}")
+            logger.error(f"[ERROR] 获取行业板块失败: {e}")
 
         try:
             result['concept'] = self.get_concept_sectors()
         except Exception as e:
-            print(f"[ERROR] 获取概念板块失败: {e}")
+            logger.error(f"[ERROR] 获取概念板块失败: {e}")
 
         return result
 
@@ -202,7 +205,7 @@ class SectorData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取板块成分股失败 {sector_name}: {e}")
+            logger.error(f"[ERROR] 获取板块成分股失败 {sector_name}: {e}")
             return pd.DataFrame()
 
     def _convert_to_full_code(self, code: str) -> str:
@@ -259,7 +262,7 @@ class SectorData:
 
         # 过滤有效数据
         if by not in df.columns:
-            print(f"[WARNING] 排序字段 {by} 不存在，可用字段: {list(df.columns)}")
+            logger.warning(f"[WARNING] 排序字段 {by} 不存在，可用字段: {list(df.columns)}")
             return pd.DataFrame()
 
         # 排序
@@ -391,7 +394,7 @@ class SectorData:
             return df
 
         except Exception as e:
-            print(f"[ERROR] 获取板块历史行情失败 {sector_name}: {e}")
+            logger.error(f"[ERROR] 获取板块历史行情失败 {sector_name}: {e}")
             return pd.DataFrame()
 
     # ============================================================
@@ -468,63 +471,63 @@ def get_sector_flow_rank(sector_type: str = 'industry', top_n: int = 20) -> pd.D
 
 if __name__ == "__main__":
     """测试代码"""
-    print("=" * 70)
-    print("  板块数据模块测试")
-    print("=" * 70)
+    logger.info("=" * 70)
+    logger.info("  板块数据模块测试")
+    logger.info("=" * 70)
 
     sd = SectorData()
 
     # 测试1: 获取行业板块列表
-    print("\n[测试1] 获取行业板块列表...")
+    logger.info("\n[测试1] 获取行业板块列表...")
     try:
         df = sd.get_industry_sectors()
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  共 {len(df)} 个行业板块")
-            print("\n  前5名:")
-            print(df.head().to_string())
+            logger.info("[OK] 成功!")
+            logger.info(f"  共 {len(df)} 个行业板块")
+            logger.info("\n  前5名:")
+            logger.info(df.head().to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试2: 获取涨幅榜
-    print("\n[测试2] 获取行业板块涨幅榜...")
+    logger.info("\n[测试2] 获取行业板块涨幅榜...")
     try:
         df = sd.get_top_sectors('industry', top_n=5)
         if not df.empty:
-            print("[OK] 成功!")
-            print(df.to_string())
+            logger.info("[OK] 成功!")
+            logger.info(df.to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试3: 获取板块成分股
-    print("\n[测试3] 获取板块成分股（白酒）...")
+    logger.info("\n[测试3] 获取板块成分股（白酒）...")
     try:
         df = sd.get_sector_stocks('白酒', 'industry')
         if not df.empty:
-            print("[OK] 成功!")
-            print(f"  共 {len(df)} 只成分股")
-            print("\n  前5只:")
-            print(df.head().to_string())
+            logger.info("[OK] 成功!")
+            logger.info(f"  共 {len(df)} 只成分股")
+            logger.info("\n  前5只:")
+            logger.info(df.head().to_string())
         else:
-            print("[FAIL] 数据为空")
+            logger.info("[FAIL] 数据为空")
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
     # 测试4: 搜索板块
-    print("\n[测试4] 搜索板块（关键词：科技）...")
+    logger.info("\n[测试4] 搜索板块（关键词：科技）...")
     try:
         result = sd.search_sector('科技')
-        print("[OK] 成功!")
+        logger.info("[OK] 成功!")
         for sector_type, df in result.items():
-            print(f"\n  {sector_type} 板块:")
-            print(df['sector_name'].tolist())
+            logger.info(f"\n  {sector_type} 板块:")
+            logger.info(df['sector_name'].tolist())
     except Exception as e:
-        print(f"[ERROR] {e}")
+        logger.error(f"[ERROR] {e}")
 
-    print("\n" + "=" * 70)
-    print("  测试完成!")
-    print("=" * 70)
+    logger.info("\n" + "=" * 70)
+    logger.info("  测试完成!")
+    logger.info("=" * 70)

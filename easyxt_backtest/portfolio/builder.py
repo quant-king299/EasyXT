@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 组合构建器
 
@@ -66,7 +69,7 @@ class PortfolioBuilder:
         selected_stocks = self._select_stocks(scores)
 
         if len(selected_stocks) == 0:
-            print("⚠️ 没有股票被选中")
+            logger.info("⚠️ 没有股票被选中")
             return {}
 
         # 2. 分配权重
@@ -143,7 +146,7 @@ class PortfolioBuilder:
                 market_cap_data = self._get_market_cap_data(stocks, date)
                 weights = WeightMethods.market_cap_weight(stocks, market_cap_data)
             else:
-                print("⚠️ 未提供data_manager，使用等权重")
+                logger.info("⚠️ 未提供data_manager，使用等权重")
                 weights = WeightMethods.equal_weight(stocks)
 
         elif self.weight_method == 'factor_score':
@@ -156,7 +159,7 @@ class PortfolioBuilder:
                 returns_data = self._get_returns_data(stocks, date)
                 weights = WeightMethods.equal_risk_weight(stocks, returns_data)
             else:
-                print("⚠️ 未提供data_manager，使用等权重")
+                logger.info("⚠️ 未提供data_manager，使用等权重")
                 weights = WeightMethods.equal_weight(stocks)
 
         else:
@@ -218,7 +221,7 @@ class PortfolioBuilder:
             else:
                 return pd.Series(index=stocks, dtype=float)
         except Exception as e:
-            print(f"⚠️ 获取市值数据失败: {e}")
+            logger.info(f"⚠️ 获取市值数据失败: {e}")
             return pd.Series(index=stocks, dtype=float)
 
     def _get_returns_data(self, stocks: List[str], date: str) -> pd.DataFrame:
@@ -253,7 +256,7 @@ class PortfolioBuilder:
             else:
                 return pd.Series(index=stocks, dtype=str)
         except Exception as e:
-            print(f"⚠️ 获取行业数据失败: {e}")
+            logger.info(f"⚠️ 获取行业数据失败: {e}")
             return pd.Series(index=stocks, dtype=str)
 
     def get_portfolio_summary(self, portfolio: Dict[str, float]) -> str:

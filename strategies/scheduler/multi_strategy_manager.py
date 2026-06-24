@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 EasyXT 多策略管理框架
 ====================
@@ -111,7 +114,7 @@ class StrategyMonitor:
     def log(self, level: str, strategy: str, message: str):
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         log_line = f"[{timestamp}] [{level}] [{strategy}] {message}\n"
-        print(log_line.strip())
+        logger.info(log_line.strip())
         try:
             with open(self.log_file, 'a', encoding='utf-8') as f:
                 f.write(log_line)
@@ -644,11 +647,11 @@ class MultiStrategyManager:
 
     def print_status(self):
         """打印策略状态（通过 PID 文件检测实际运行状态）"""
-        print("\n" + "=" * 80)
-        print("EasyXT Strategy Status Report")
-        print("=" * 80)
-        print(f"{'Strategy Name':<20} {'Status':<14} {'Mode':<12} {'PID':<10} {'Enabled':<8}")
-        print("-" * 80)
+        logger.info("\n" + "=" * 80)
+        logger.info("EasyXT Strategy Status Report")
+        logger.info("=" * 80)
+        logger.info(f"{'Strategy Name':<20} {'Status':<14} {'Mode':<12} {'PID':<10} {'Enabled':<8}")
+        logger.info("-" * 80)
 
         for name in sorted(self.configs.keys(), key=lambda x: self.configs[x].priority, reverse=True):
             state = self.states.get(name)
@@ -670,10 +673,10 @@ class MultiStrategyManager:
                 mode_text = "持续运行" if config.run_params.get("continuous_run", False) else "一次性"
 
             enabled_text = "是" if config.enabled else "否"
-            print(f"{name:<20} {status_text:<14} {mode_text:<12} {pid_text:<10} {enabled_text:<8}")
+            logger.info(f"{name:<20} {status_text:<14} {mode_text:<12} {pid_text:<10} {enabled_text:<8}")
 
-        print("-" * 80)
-        print("=" * 80 + "\n")
+        logger.info("-" * 80)
+        logger.info("=" * 80 + "\n")
 
     def generate_report(self) -> str:
         """生成运行报告"""
@@ -743,7 +746,7 @@ def main():
     )
 
     if args.stop:
-        print("正在停止所有策略...")
+        logger.info("正在停止所有策略...")
         manager.stop_all()
         return
 
@@ -753,7 +756,7 @@ def main():
 
     if args.report:
         report = manager.generate_report()
-        print(report)
+        logger.info(report)
         manager.save_report(report)
         return
 
@@ -771,12 +774,12 @@ def main():
                 manager.start_strategy(name, dry_run=dry_run)
     else:
         manager.print_status()
-        print("提示: 使用 --help 查看所有命令")
-        print("  一次性执行:   python multi_strategy_manager.py --start etf_trend")
-        print("  持续运行:     python multi_strategy_manager.py --start --live --continuous")
-        print("  查看状态:     python multi_strategy_manager.py --status")
-        print("  生成报告:     python multi_strategy_manager.py --report")
-        print("  停止所有:     python multi_strategy_manager.py --stop")
+        logger.info("提示: 使用 --help 查看所有命令")
+        logger.info("  一次性执行:   python multi_strategy_manager.py --start etf_trend")
+        logger.info("  持续运行:     python multi_strategy_manager.py --start --live --continuous")
+        logger.info("  查看状态:     python multi_strategy_manager.py --status")
+        logger.info("  生成报告:     python multi_strategy_manager.py --report")
+        logger.info("  停止所有:     python multi_strategy_manager.py --stop")
 
 
 if __name__ == "__main__":

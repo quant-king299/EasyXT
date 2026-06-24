@@ -1,3 +1,6 @@
+import logging
+
+logger = logging.getLogger(__name__)
 """
 交易API封装模块
 简化xtquant交易接口的调用
@@ -51,7 +54,7 @@ def _ensure_xt_trader():
         xt_type = xt_type_mod  # 兼容旧代码
         xt_const = xt_const_mod  # 兼容旧代码
         _xt_trader_available = True
-        print("[OK] xtquant.xttrader 导入成功")
+        logger.info("[OK] xtquant.xttrader 导入成功")
         return True
     except ImportError:
         pass
@@ -71,13 +74,13 @@ def _ensure_xt_trader():
                 # trader通过create_trader获取，存储client供后续使用
                 _xqshare_client = client
                 _xt_trader_available = True
-                print("[OK] 使用 xqshare 作为交易后端")
+                logger.info("[OK] 使用 xqshare 作为交易后端")
                 return True
         except Exception as e:
-            print(f"[INFO] xqshare 不可用: {e}")
+            logger.info(f"[INFO] xqshare 不可用: {e}")
 
-    print("[INFO] xtquant.xttrader 未安装或不可用")
-    print("[INFO] 如需交易功能，请安装QMT客户端或配置xqshare")
+    logger.info("[INFO] xtquant.xttrader 未安装或不可用")
+    logger.info("[INFO] 如需交易功能，请安装QMT客户端或配置xqshare")
     return False
 
 # 旧代码保持兼容（已弃用）
@@ -119,12 +122,12 @@ if xt_trader is not None:
         def on_connected(self):
             """连接成功"""
             self.connected = True
-            print("交易连接成功")
+            logger.info("交易连接成功")
 
         def on_disconnected(self):
             """连接断开"""
             self.connected = False
-            print("交易连接断开")
+            logger.info("交易连接断开")
 
         def on_stock_order(self, order):
             """委托回调"""
@@ -148,7 +151,7 @@ if xt_trader is not None:
         def on_order_error(self, order_error):
             """委托错误回调"""
             self.errors.append(order_error)
-            print(f"委托错误: {order_error.error_msg}")
+            logger.info(f"委托错误: {order_error.error_msg}")
 else:
     # xtquant不可用时的占位符类
     class SimpleCallback:
@@ -216,7 +219,7 @@ class TradeAPI:
                 except (ValueError, TypeError):
                     session_int = 123456  # 默认session ID
 
-                print(f"[OK] 使用session_id: {session_int}")
+                logger.info(f"[OK] 使用session_id: {session_int}")
 
                 # 创建交易对象
                 if _xt_trader:
@@ -235,14 +238,14 @@ class TradeAPI:
                 return False
 
             # 启动交易
-            print("🚀 启动交易服务...")
+            logger.info("🚀 启动交易服务...")
             self.trader.start()
 
             # 连接
-            print("🔗 连接交易服务...")
+            logger.info("🔗 连接交易服务...")
             result = self.trader.connect()
             if result == 0:
-                print("[OK] 交易服务连接成功")
+                logger.info("[OK] 交易服务连接成功")
                 return True
             else:
                 ErrorHandler.log_error(f"交易服务连接失败，错误码: {result}")
@@ -268,18 +271,18 @@ class TradeAPI:
             return False
             
         try:
-            print(f"➕ 添加账户: {account_id}")
+            logger.info(f"➕ 添加账户: {account_id}")
             account = xt_type.StockAccount(account_id, account_type)
             if isinstance(account, str):  # 错误信息
                 ErrorHandler.log_error(account)
                 return False
                 
             # 订阅账户
-            print("📡 订阅账户...")
+            logger.info("📡 订阅账户...")
             result = self.trader.subscribe(account)
             if result == 0:
                 self.accounts[account_id] = account
-                print(f"[OK] 账户 {account_id} 添加成功")
+                logger.info(f"[OK] 账户 {account_id} 添加成功")
                 return True
             else:
                 ErrorHandler.log_error(f"订阅账户失败，错误码: {result}")
@@ -327,7 +330,7 @@ class TradeAPI:
         xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
         
         try:
-            print(f"🛒 买入 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
+            logger.info(f"🛒 买入 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
                 account=account,
                 stock_code=code,
@@ -340,7 +343,7 @@ class TradeAPI:
             )
             
             if order_id > 0:
-                print(f"[OK] 买入委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
+                logger.info(f"[OK] 买入委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
                 ErrorHandler.log_error(f"买入委托失败，返回值: {order_id}")
@@ -388,7 +391,7 @@ class TradeAPI:
         xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
         
         try:
-            print(f"💰 卖出 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
+            logger.info(f"💰 卖出 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
                 account=account,
                 stock_code=code,
@@ -401,7 +404,7 @@ class TradeAPI:
             )
             
             if order_id > 0:
-                print(f"[OK] 卖出委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
+                logger.info(f"[OK] 卖出委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
                 ErrorHandler.log_error(f"卖出委托失败，返回值: {order_id}")
@@ -432,7 +435,7 @@ class TradeAPI:
         try:
             result = self.trader.cancel_order_stock(account, order_id)
             if result == 0:
-                print(f"[OK] 撤单成功: {order_id}")
+                logger.info(f"[OK] 撤单成功: {order_id}")
                 return True
             else:
                 ErrorHandler.log_error(f"撤单失败，错误码: {result}")
@@ -601,44 +604,44 @@ class TradeAPI:
             DataFrame: 成交信息
         """
         if not self.trader or account_id not in self.accounts:
-            print("[ERROR] 交易服务未连接或账户未添加")
+            logger.error("[ERROR] 交易服务未连接或账户未添加")
             return pd.DataFrame()
             
         account = self.accounts[account_id]
         
-        print(f"🔍 正在查询成交信息...")
+        logger.info(f"🔍 正在查询成交信息...")
         
         try:
             # 方法1：直接查询成交
-            print("  📡 尝试方法1：直接查询成交...")
+            logger.info("  📡 尝试方法1：直接查询成交...")
             trades = self.trader.query_stock_trades(account)
             
             if trades and len(trades) > 0:
-                print(f"[OK] 直接查询成功，找到 {len(trades)} 条成交记录")
+                logger.info(f"[OK] 直接查询成功，找到 {len(trades)} 条成交记录")
                 return self._process_trades_data(trades)
             else:
-                print("[WARNING] 直接查询无成交记录")
+                logger.warning("[WARNING] 直接查询无成交记录")
             
             # 方法2：从委托信息推断成交
-            print("  🔄 尝试方法2：从委托信息推断成交...")
+            logger.info("  🔄 尝试方法2：从委托信息推断成交...")
             trades_from_orders = self.get_trades_from_orders(account_id)
             if not trades_from_orders.empty:
-                print(f"[OK] 从委托推断成功，找到 {len(trades_from_orders)} 条成交记录")
+                logger.info(f"[OK] 从委托推断成功，找到 {len(trades_from_orders)} 条成交记录")
                 return trades_from_orders
             
             # 方法3：使用回调中的成交信息
-            print("  🔄 尝试方法3：使用回调成交信息...")
+            logger.info("  🔄 尝试方法3：使用回调成交信息...")
             if self.callback and self.callback.trades:
                 callback_trades = list(self.callback.trades.values())
                 if callback_trades:
-                    print(f"[OK] 回调查询成功，找到 {len(callback_trades)} 条成交记录")
+                    logger.info(f"[OK] 回调查询成功，找到 {len(callback_trades)} 条成交记录")
                     return self._process_trades_data(callback_trades)
             
-            print("📝 所有方法均未找到成交记录")
+            logger.info("📝 所有方法均未找到成交记录")
             return pd.DataFrame()
             
         except Exception as e:
-            print(f"[ERROR] 成交查询异常: {e}")
+            logger.error(f"[ERROR] 成交查询异常: {e}")
             # 异常时也尝试从委托推断
             try:
                 return self.get_trades_from_orders(account_id)
@@ -650,7 +653,7 @@ class TradeAPI:
         if not trades:
             return pd.DataFrame()
         
-        print("📊 正在处理成交数据...")
+        logger.info("📊 正在处理成交数据...")
         data = []
         
         for trade in trades:
@@ -671,7 +674,7 @@ class TradeAPI:
             })
         
         result_df = pd.DataFrame(data)
-        print(f"[OK] 成交数据处理完成，共 {len(result_df)} 条记录")
+        logger.info(f"[OK] 成交数据处理完成，共 {len(result_df)} 条记录")
         return result_df
     
     def get_trades_from_orders(self, account_id: str) -> pd.DataFrame:
@@ -684,18 +687,18 @@ class TradeAPI:
         Returns:
             DataFrame: 推断的成交信息
         """
-        print("🔄 使用备用方案：从委托信息推断成交...")
+        logger.info("🔄 使用备用方案：从委托信息推断成交...")
         
         orders_df = self.get_orders(account_id)
         if orders_df.empty:
-            print("📝 无委托信息，无法推断成交")
+            logger.info("📝 无委托信息，无法推断成交")
             return pd.DataFrame()
         
         # 筛选已成交的委托
         filled_orders = orders_df[orders_df['status'].isin(['已成', '部成'])]
         
         if filled_orders.empty:
-            print("📝 无已成交委托")
+            logger.info("📝 无已成交委托")
             return pd.DataFrame()
         
         # 转换为成交格式
@@ -714,10 +717,10 @@ class TradeAPI:
         
         if trades_data:
             result_df = pd.DataFrame(trades_data)
-            print(f"[OK] 从委托推断出 {len(result_df)} 条成交记录")
+            logger.info(f"[OK] 从委托推断出 {len(result_df)} 条成交记录")
             return result_df
         else:
-            print("📝 无法从委托推断出成交信息")
+            logger.info("📝 无法从委托推断出成交信息")
             return pd.DataFrame()
     
     def disconnect(self):
@@ -725,6 +728,6 @@ class TradeAPI:
         if self.trader:
             try:
                 self.trader.stop()
-                print("交易服务已断开")
+                logger.info("交易服务已断开")
             except Exception as e:
                 ErrorHandler.log_error(f"断开交易服务失败: {str(e)}")

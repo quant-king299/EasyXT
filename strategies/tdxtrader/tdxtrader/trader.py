@@ -6,6 +6,8 @@ from tdxtrader.utils import timestamp_to_datetime_string, parse_order_type, conv
 from tdxtrader.anis import RED, GREEN, YELLOW, BLUE, RESET
 from tdxtrader.logger import logger
 
+logger = logging.getLogger(__name__)
+
 error_orders = []
 
 class MyXtQuantTraderCallback(XtQuantTraderCallback):
@@ -14,7 +16,7 @@ class MyXtQuantTraderCallback(XtQuantTraderCallback):
         连接状态回调
         :return:
         """
-        print("connection lost")
+        logger.info("connection lost")
     def on_stock_order(self, order):
         """
         委托信息推送
