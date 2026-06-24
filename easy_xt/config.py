@@ -7,8 +7,25 @@ EasyXT配置管理
 
 from typing import Dict, Any, Optional
 import os
+from pathlib import Path
 from .qmt_paths import QMT_POSSIBLE_PATHS, QMT_USERDATA_SUBPATH, QMT_SIMULATED_KEYWORDS
 from .load_config import update_config_with_unified_settings
+
+
+def _read_env(key: str, default: str = '') -> str:
+    """从项目根目录 .env 文件读取配置"""
+    try:
+        # easy_xt 在项目子目录中，往上找项目根
+        for parent in Path(__file__).parents:
+            env_file = parent / '.env'
+            if env_file.exists():
+                for line in env_file.read_text(encoding='utf-8').splitlines():
+                    line = line.strip()
+                    if line.startswith(f'{key}='):
+                        return line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    return default
 
 
 def deep_update(base_dict: Dict[str, Any], update_dict: Dict[str, Any]) -> None:
@@ -175,6 +192,18 @@ config = Config()
 
 # 尝试从统一配置文件加载配置
 update_config_with_unified_settings(config)
+
+# .env 文件优先级高于 unified_config.json（用户自定义覆盖）
+_env_qmt_path = _read_env('QMT_DATA_DIR') or _read_env('QMT_USERDATA_PATH')
+if _env_qmt_path and os.path.exists(_env_qmt_path):
+    config.settings['trade']['userdata_path'] = _env_qmt_path
+    config.settings['qmt']['detected_path'] = os.path.dirname(_env_qmt_path)
+    logger.info(f"[OK] 使用 .env QMT 路径: {_env_qmt_path}")
+
+_env_account = _read_env('QMT_ACCOUNT_ID')
+if _env_account:
+    config.set('settings.account.account_id', _env_account)
+    logger.info(f"[OK] 使用 .env 账户: {_env_account}")
 
 # 如果配置文件中的路径无效，回退到自动检测
 if not config.get_userdata_path() or not os.path.exists(config.get_userdata_path()):

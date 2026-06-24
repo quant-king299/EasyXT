@@ -125,18 +125,20 @@ class StrategyCoordinator:
             from easy_xt import get_api, get_extended_api
             self.api = get_api()
             self.api.init_data()
-            qmt_path = _read_env('QMT_USERDATA_PATH')
-            if not qmt_path:
-                qmt_path = _read_env('QMT_DATA_DIR')
-            if not qmt_path:
-                qmt_path = "D:\\国金QMT交易端模拟\\userdata_mini"
+            qmt_path = _read_env('QMT_USERDATA_PATH') or _read_env('QMT_DATA_DIR')
             import os as _os
-            if qmt_path and _os.path.exists(qmt_path):
-                self.api.init_trade(qmt_path)
-                self.account_id = _read_env('QMT_ACCOUNT_ID')
-                if self.account_id:
-                    self.api.trade.add_account(self.account_id)
-                return True
+            if not qmt_path:
+                logger.error("未配置 QMT 路径！请在 .env 中设置 QMT_DATA_DIR 或 QMT_USERDATA_PATH")
+                return False
+            if not _os.path.exists(qmt_path):
+                logger.error(f"QMT 路径不存在: {qmt_path}，请检查 .env 配置")
+                return False
+            self.api.init_trade(qmt_path)
+            self.account_id = _read_env('QMT_ACCOUNT_ID')
+            if self.account_id:
+                self.api.trade.add_account(self.account_id)
+            else:
+                logger.warning("未配置 QMT_ACCOUNT_ID，请在 .env 中设置")
             return True
         except Exception as e:
             logger.warning(f"连接失败: {e}")

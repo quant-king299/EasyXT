@@ -612,7 +612,7 @@ class ATR动态网格策略:
 if __name__ == '__main__':
     # 配置参数
     params = {
-        '账户ID': '39020958',
+        '账户ID': '',  # 请在 .env 中设置 QMT_ACCOUNT_ID
         '账户类型': 'STOCK',
         '股票池': ['511090.SH'],
         'ATR周期': 14,
