@@ -104,6 +104,7 @@ class StrategyCoordinator:
             import os as _os
             if qmt_path and _os.path.exists(qmt_path):
                 self.api.init_trade(qmt_path)
+                self.account_id = _read_env('QMT_ACCOUNT_ID')
                 return True
             return True
         except Exception as e:
@@ -131,6 +132,7 @@ class StrategyCoordinator:
             self._execute(sells, buys)
 
     def _execute(self, sells, buys):
+        acc = self.account_id
         for s in sells:
             code = s.get("code", "")
             price = s.get("price", 0)
@@ -138,7 +140,7 @@ class StrategyCoordinator:
                 continue
             self._sold.add(code)
             try:
-                self.api.trade.sell(account_id=None, code=code,
+                self.api.trade.sell(account_id=acc, code=code,
                     volume=100, price=price, price_type="limit")
                 logger.info(f"  [卖出] {code} @{price:.2f}")
             except Exception as e:
@@ -149,7 +151,7 @@ class StrategyCoordinator:
             if price <= 0:
                 continue
             try:
-                self.api.trade.buy(account_id=None, code=code,
+                self.api.trade.buy(account_id=acc, code=code,
                     volume=100, price=price, price_type="limit")
                 logger.info(f"  [买入] {code} @{price:.2f}")
             except Exception as e:
