@@ -117,6 +117,7 @@ class StrategyCoordinator:
         self._sold.clear()
         all_sells = []
         all_buys = []
+        any_failed = False
         for name in self.strategy_names:
             success = False
             for attempt in range(3):
@@ -137,6 +138,10 @@ class StrategyCoordinator:
                         time.sleep(3)
                     else:
                         logger.warning(f"[{name}] 信号生成失败: {e}")
+                        any_failed = True
+        if any_failed:
+            logger.warning(f"有策略失败，本轮跳过下单，等下一轮再试")
+            return
         sells, buys = consolidate_orders(all_sells, all_buys)
         logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（去重后）")
         if self.run_mode == "live" and self.api:
