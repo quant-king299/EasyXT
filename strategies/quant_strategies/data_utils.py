@@ -22,31 +22,56 @@ HEADERS = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0
 
 
 def _fetch_pages(url, params, rename_map, numeric_cols):
-    """分页抓取东方财富列表数据"""
+    """分页抓取东方财富列表数据（带重试和详细日志）"""
     all_items = []
     for page in range(1, 999):
         params['pn'] = str(page)
-        try:
-            resp = requests.get(url, params=params, timeout=15, headers=HEADERS)
-            data = resp.json()
-            if not data.get('data') or not data['data'].get('diff'):
+        # 每页最多重试 3 次（应对限流和网络抖动）
+        page_done = False
+        for retry in range(3):
+            try:
+                resp = requests.get(url, params=params, timeout=15, headers=HEADERS)
+                data = resp.json()
+                if not data.get('data'):
+                    logger.warning(f'    东方财富 API 返回无 data 字段 (page={page}): {str(data)[:200]}')
+                    break
+                # 部分 API 返回 data 直接是 list，部分包在 diff 里
+                if isinstance(data['data'], list):
+                    batch = data['data']
+                elif isinstance(data['data'], dict) and 'diff' in data['data']:
+                    batch = data['data']['diff']
+                else:
+                    logger.warning(f'    东方财富 API 返回未知格式 (page={page}): keys={list(data["data"].keys()) if isinstance(data["data"], dict) else type(data["data"])}')
+                    break
+                if not batch:
+                    page_done = True
+                    break
+                all_items.extend(batch)
+                total = data['data'].get('total', 0) if isinstance(data['data'], dict) else len(batch)
+                if len(all_items) >= total:
+                    logger.info(f'    已获取 {len(all_items)}/{total} 条')
+                    page_done = True
+                    break
+                time.sleep(0.5)  # 增加间隔，降低被限流概率
+                page_done = True
                 break
-            batch = data['data']['diff']
-            if not batch:
-                break
-            all_items.extend(batch)
-            total = data['data'].get('total', 0)
-            if len(all_items) >= total:
-                logger.info(f'    已获取 {len(all_items)}/{total} 条')
-                break
-            time.sleep(0.25)
-        except Exception:
+            except Exception as e:
+                if retry < 2:
+                    wait = (retry + 1) * 2
+                    logger.warning(f'    东方财富 API 异常 (page={page}, retry={retry+1}): {e}，{wait}s 后重试...')
+                    time.sleep(wait)
+                else:
+                    logger.error(f'    东方财富 API 最终失败 (page={page}): {e}')
+        if not page_done:
             if page == 1:
-                time.sleep(1)
-                continue
+                logger.error(f'    首页抓取失败，无法继续')
+                break
+            # 后续页失败，使用已获取的数据
+            logger.warning(f'    第 {page} 页失败，使用已获取的 {len(all_items)} 条数据')
             break
 
     if not all_items:
+        logger.warning(f'    东方财富 API 未获取到任何数据 (url={url[:60]})')
         return pd.DataFrame()
 
     df = pd.DataFrame(all_items)
@@ -81,7 +106,7 @@ def _duckdb_connect_with_retry(path: str, max_retries: int = 5) -> "duckdb.DuckD
     import duckdb, time
     for attempt in range(max_retries):
         try:
-            con = _duckdb_connect_with_retry(path)
+            con = duckdb.connect(path)
             return con
         except Exception as e:
             err = str(e).lower()
@@ -117,6 +142,30 @@ def get_cb_list() -> pd.DataFrame:
         df['premium_rt'] = np.where(cv.notna(), (df['price'] - cv) / cv * 100, np.nan)
 
     return df
+
+
+def get_cb_from_tushare(duckdb_path: str = None) -> pd.DataFrame:
+    """从 Tushare 获取可转债最新日行情（降级用，当 DuckDB 无数据时）"""
+    try:
+        import tushare as ts
+        token = _read_env('TUSHARE_TOKEN')
+        if not token:
+            return pd.DataFrame()
+        pro = ts.pro_api(token)
+        df = pro.cb_daily(trade_date=datetime.now().strftime('%Y%m%d'))
+        if df is not None and not df.empty:
+            # 取最新一行每只债
+            df = df.sort_values('trade_date').groupby('ts_code').last().reset_index()
+            cols = ['ts_code', 'close', 'cb_value', 'cb_over_rate']
+            cols = [c for c in cols if c in df.columns]
+            result = df[cols].copy()
+            result.columns = ['ts_code', 'close', 'convert_value', 'premium_rt']
+            result['premium_rt'] = result['premium_rt'].round(2)
+            result['convert_value'] = result['convert_value'].round(2)
+            return result
+    except Exception:
+        pass
+    return pd.DataFrame()
 
 
 def get_cb_from_duckdb(duckdb_path: str = None) -> pd.DataFrame:

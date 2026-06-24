@@ -40,31 +40,39 @@ def load_strategy_class(name: str):
             return obj
     raise ValueError(f"未找到策略类: {name}")
 
+def _extract_code(row: dict) -> str:
+    """从信号行提取代码并补齐交易所后缀（兼容 fund_code/bond_code/stock_code/code）"""
+    for key in ("code", "fund_code", "bond_code", "stock_code"):
+        if key in row and row[key]:
+            code = str(row[key])
+            if not code.endswith(('.SH', '.SZ')):
+                if code.startswith(('51', '56', '58', '588', '689')):
+                    code += '.SH'
+                elif code.startswith(('11', '12', '13')):
+                    code += '.SH' if code.startswith('11') else '.SZ'
+                elif code.startswith(('6',)):
+                    code += '.SH'
+                else:
+                    code += '.SZ'
+            return code
+    return ""
+
 def consolidate_orders(all_sells, all_buys):
-    """合并多个策略的买卖信号，去重卖单"""
+    """合并多个策略的买卖信号，买卖均按代码去重"""
     seen = set()
     unique_sells = []
     for s in all_sells:
-        code = s.get("code", "")
+        code = _extract_code(s)
         if code and code not in seen:
             unique_sells.append(s)
             seen.add(code)
-    return unique_sells, all_buys
-
-
-def _read_env(key: str, default: str = '') -> str:
-    """从 .env 文件读取配置（子进程无法继承内存中的 env）"""
-    try:
-        env_file = Path(__file__).parent.parent / '.env'
-        if env_file.exists():
-            for line in env_file.read_text(encoding='utf-8').splitlines():
-                line = line.strip()
-                if line.startswith(f'{key}='):
-                    return line.split('=', 1)[1].strip()
-    except Exception:
-        pass
-    return default
-
+    unique_buys = []
+    for b in all_buys:
+        code = _extract_code(b)
+        if code and code not in seen:
+            unique_buys.append(b)
+            seen.add(code)
+    return unique_sells, unique_buys
 
 
 def _read_env(key: str, default: str = '') -> str:
@@ -79,6 +87,27 @@ def _read_env(key: str, default: str = '') -> str:
     except Exception:
         pass
     return default
+
+
+def _wait_for_duckdb(max_retries: int = 10, delay: float = 2.0) -> bool:
+    """等待 DuckDB 可用，直到数据库被释放"""
+    import duckdb
+    path = _read_env('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+    for attempt in range(max_retries):
+        try:
+            con = duckdb.connect(path, read_only=True)
+            con.execute("SELECT 1")
+            con.close()
+            return True
+        except Exception as e:
+            if attempt < max_retries - 1:
+                import time
+                logger.info(f"  [DuckDB] 等待数据库释放... ({attempt + 1}/{max_retries})")
+                time.sleep(delay)
+                continue
+            logger.warning(f"[DuckDB] 等待超时: {e}")
+            return False
+    return False
 
 
 class StrategyCoordinator:
@@ -117,8 +146,11 @@ class StrategyCoordinator:
         self._sold.clear()
         all_sells = []
         all_buys = []
-        any_failed = False
-        for name in self.strategy_names:
+        failed_names = []
+        for i, name in enumerate(self.strategy_names, 1):
+            total = len(self.strategy_names)
+            logger.info(f"[{i}/{total}] {name} 开始生成信号...")
+            _wait_for_duckdb()
             success = False
             for attempt in range(3):
                 try:
@@ -130,6 +162,9 @@ class StrategyCoordinator:
                     for _, row in buy_list.iterrows():
                         all_buys.append(dict(row))
                     success = True
+                    buy_count = len(buy_list) if hasattr(buy_list, '__len__') else 0
+                    sell_count = len(sell_list) if hasattr(sell_list, '__len__') else 0
+                    logger.info(f"[{i}/{total}] {name} 完成 (买{buy_count} 卖{sell_count})")
                     break
                 except Exception as e:
                     if attempt < 2:
@@ -138,11 +173,13 @@ class StrategyCoordinator:
                         time.sleep(3)
                     else:
                         logger.warning(f"[{name}] 信号生成失败: {e}")
-                        any_failed = True
-        if any_failed:
-            logger.warning(f"有策略失败，本轮跳过下单，等下一轮再试")
+                        failed_names.append(name)
+        if not all_sells and not all_buys:
+            logger.warning("所有策略均无信号，本轮跳过")
             return
         sells, buys = consolidate_orders(all_sells, all_buys)
+        if failed_names:
+            logger.warning(f"以下策略失败: {', '.join(failed_names)}，使用其余策略信号继续")
         logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（去重后）")
         if self.run_mode == "live" and self.api:
             self._execute(sells, buys)
@@ -150,26 +187,30 @@ class StrategyCoordinator:
     def _execute(self, sells, buys):
         acc = self.account_id
         for s in sells:
-            code = s.get("code", "")
+            code = _extract_code(s)
             price = s.get("price", 0)
-            if price <= 0 or code in self._sold:
+            if not code or price <= 0 or code in self._sold:
                 continue
             self._sold.add(code)
+            volume = 200 if code.startswith('689') else 100
+            price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
                 self.api.trade.sell(account_id=acc, code=code,
-                    volume=100, price=price, price_type="limit")
-                logger.info(f"  [卖出] {code} @{price:.2f}")
+                    volume=volume, price=price, price_type="limit")
+                logger.info(f"  [卖出] {code} @{price} vol={volume}")
             except Exception as e:
                 logger.info(f"  [卖出失败] {code}: {e}")
         for b in buys:
-            code = b.get("code", "")
+            code = _extract_code(b)
             price = b.get("price", 0)
-            if price <= 0:
+            if not code or price <= 0:
                 continue
+            volume = 200 if code.startswith('689') else 100
+            price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
                 self.api.trade.buy(account_id=acc, code=code,
-                    volume=100, price=price, price_type="limit")
-                logger.info(f"  [买入] {code} @{price:.2f}")
+                    volume=volume, price=price, price_type="limit")
+                logger.info(f"  [买入] {code} @{price} vol={volume}")
             except Exception as e:
                 logger.info(f"  [买入失败] {code}: {e}")
 

@@ -639,9 +639,40 @@ class MultiStrategyWidget(QWidget):
 
         self.refresh_status()
 
+    def _select_strategies_dialog(self, all_names):
+        """弹出策略选择对话框，返回用户选中的策略名称列表"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox, QGroupBox
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("选择要启动的策略")
+        dialog.resize(320, 400)
+        
+        layout = QVBoxLayout(dialog)
+        group = QGroupBox("策略列表 (全选 = 全部启动)")
+        group_layout = QVBoxLayout(group)
+        
+        checkboxes = {}
+        for name in sorted(all_names):
+            cn_name = STRATEGY_INFO[name][0]
+            cb = QCheckBox(f"{cn_name} ({name})")
+            cb.setChecked(True)
+            group_layout.addWidget(cb)
+            checkboxes[name] = cb
+        
+        layout.addWidget(group)
+        
+        btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btn_box.accepted.connect(dialog.accept)
+        btn_box.rejected.connect(dialog.reject)
+        layout.addWidget(btn_box)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            return [name for name, cb in checkboxes.items() if cb.isChecked()]
+        return all_names  # 取消 = 全部
+    
     def start_all(self):
         """启动所有策略（单进程协调器，订单去重）"""
-        names = list(self._strategy_rows.keys())
+        names = self._select_strategies_dialog(list(self._strategy_rows.keys()))
         self._log(f"========== 协调启动 ({len(names)} 个策略) ==========")
 
         if len(names) <= 1:
