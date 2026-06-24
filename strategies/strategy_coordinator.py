@@ -81,7 +81,14 @@ class StrategyCoordinator:
             from easy_xt import get_api, get_extended_api
             self.api = get_api()
             self.api.init_data()
-            self.api.init_trade(os.environ.get("QMT_USERDATA_PATH", ""))
+            qmt_path = os.environ.get("QMT_DATA_DIR", "")
+            if not qmt_path:
+                qmt_path = os.environ.get("QMT_USERDATA_PATH", "")
+            if not qmt_path:
+                qmt_path = "D:\\国金QMT交易端模拟\\userdata_mini"
+            if qmt_path:
+                self.api.init_trade(qmt_path)
+                return True
             return True
         except Exception as e:
             logger.warning(f"连接失败: {e}")
