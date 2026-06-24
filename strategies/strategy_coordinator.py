@@ -66,6 +66,21 @@ def _read_env(key: str, default: str = '') -> str:
     return default
 
 
+
+def _read_env(key: str, default: str = '') -> str:
+    """从 .env 文件直接读取配置（子进程无法继承内存中的 env）"""
+    try:
+        env_file = Path(__file__).parent.parent / '.env'
+        if env_file.exists():
+            for line in env_file.read_text(encoding='utf-8').splitlines():
+                line = line.strip()
+                if line.startswith(f'{key}='):
+                    return line.split('=', 1)[1].strip()
+    except Exception:
+        pass
+    return default
+
+
 class StrategyCoordinator:
     """单进程策略协调器"""
     def __init__(self, strategy_names, run_mode="dry_run"):
@@ -81,12 +96,13 @@ class StrategyCoordinator:
             from easy_xt import get_api, get_extended_api
             self.api = get_api()
             self.api.init_data()
-            qmt_path = os.environ.get("QMT_DATA_DIR", "")
+            qmt_path = _read_env('QMT_USERDATA_PATH')
             if not qmt_path:
-                qmt_path = os.environ.get("QMT_USERDATA_PATH", "")
+                qmt_path = _read_env('QMT_DATA_DIR')
             if not qmt_path:
                 qmt_path = "D:\\国金QMT交易端模拟\\userdata_mini"
-            if qmt_path:
+            import os as _os
+            if qmt_path and _os.path.exists(qmt_path):
                 self.api.init_trade(qmt_path)
                 return True
             return True
