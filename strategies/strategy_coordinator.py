@@ -105,6 +105,8 @@ class StrategyCoordinator:
             if qmt_path and _os.path.exists(qmt_path):
                 self.api.init_trade(qmt_path)
                 self.account_id = _read_env('QMT_ACCOUNT_ID')
+                if self.account_id:
+                    self.api.trade.add_account(self.account_id)
                 return True
             return True
         except Exception as e:
