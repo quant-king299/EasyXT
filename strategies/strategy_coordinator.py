@@ -118,16 +118,25 @@ class StrategyCoordinator:
         all_sells = []
         all_buys = []
         for name in self.strategy_names:
-            try:
-                cls = load_strategy_class(name)
-                strategy = cls(api=self.api)
-                buy_list, sell_list = strategy.generate_signals()
-                for _, row in sell_list.iterrows():
-                    all_sells.append(dict(row))
-                for _, row in buy_list.iterrows():
-                    all_buys.append(dict(row))
-            except Exception as e:
-                logger.warning(f"[{name}] 信号生成失败: {e}")
+            success = False
+            for attempt in range(3):
+                try:
+                    cls = load_strategy_class(name)
+                    strategy = cls(api=self.api)
+                    buy_list, sell_list = strategy.generate_signals()
+                    for _, row in sell_list.iterrows():
+                        all_sells.append(dict(row))
+                    for _, row in buy_list.iterrows():
+                        all_buys.append(dict(row))
+                    success = True
+                    break
+                except Exception as e:
+                    if attempt < 2:
+                        logger.info(f"[{name}] 第{attempt+1}次失败，3s后重试...")
+                        import time
+                        time.sleep(3)
+                    else:
+                        logger.warning(f"[{name}] 信号生成失败: {e}")
         sells, buys = consolidate_orders(all_sells, all_buys)
         logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（去重后）")
         if self.run_mode == "live" and self.api:
