@@ -1,19 +1,31 @@
 """
-通达信数据提供者
+通达信数据提供者（兜底数据源）
 
 基于pytdx库实现的通达信数据接口，支持实时行情和历史数据获取。
-参考综合自定义交易系统v5.5.7.6.5项目的成熟实现。
+仅在 DuckDB / EastMoney 都不可用时才启用。
 """
 
 import time
 import random
 from typing import List, Dict, Any, Optional, Tuple
 import logging
-from pytdx.hq import TdxHq_API
-from pytdx.params import TDXParams
 from .base_provider import BaseDataProvider
 
 logger = logging.getLogger(__name__)
+
+# pytdx 是可选依赖，仅兜底时用到
+_PYTDX_AVAILABLE = False
+_PYTDX_IMPORT_ERROR = None
+try:
+    from pytdx.hq import TdxHq_API
+    from pytdx.params import TDXParams
+    _PYTDX_AVAILABLE = True
+except ImportError as e:
+    _PYTDX_IMPORT_ERROR = str(e)
+    logger.warning(
+        "通达信数据源(pytdx)未安装，TDX 兜底不可用。"
+        "如不需要可忽略；如需使用请执行: pip install pytdx"
+    )
 
 
 class TdxDataProvider(BaseDataProvider):
@@ -27,7 +39,17 @@ class TdxDataProvider(BaseDataProvider):
 
         Args:
             config: 配置字典，包含服务器列表、超时设置等
+
+        Raises:
+            ImportError: pytdx 未安装时给出明确的安装指引
         """
+        if not _PYTDX_AVAILABLE:
+            raise ImportError(
+                f"通达信数据源(pytdx)未安装: {_PYTDX_IMPORT_ERROR}\n"
+                "TDX 是兜底数据源，平时用不到。如需启用，请执行:\n"
+                "  pip install pytdx\n"
+                "然后验证: python -c \"from pytdx.hq import TdxHq_API; print('pytdx OK')\""
+            )
         super().__init__("tdx")
         self.config = config or {}
         self.api = TdxHq_API()

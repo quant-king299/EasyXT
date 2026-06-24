@@ -5,7 +5,13 @@
 """
 
 from .unified_api import UnifiedDataAPI
-from .providers import BaseDataProvider, TdxDataProvider, ThsDataProvider, EastmoneyDataProvider
+from .providers import BaseDataProvider, ThsDataProvider, EastmoneyDataProvider
+
+# TDX 是可选依赖(pytdx)，仅兜底时用到，导入失败不影响正常使用
+try:
+    from .providers import TdxDataProvider
+except ImportError:
+    TdxDataProvider = None
 from .config_manager import (
     ConfigManager, ConfigLevel, DataProviderConfig, CacheConfig as ConfigCacheConfig,
     WebSocketConfig, MonitorConfig, SchedulerConfig, 

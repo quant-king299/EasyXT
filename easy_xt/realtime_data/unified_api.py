@@ -11,9 +11,12 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 
 from .providers.base_provider import BaseDataProvider
-from .providers.tdx_provider import TdxDataProvider
 from .providers.ths_provider import ThsDataProvider
 from .providers.eastmoney_provider import EastmoneyDataProvider
+try:
+    from .providers.tdx_provider import TdxDataProvider
+except ImportError:
+    TdxDataProvider = None
 from .config import RealtimeDataConfig
 from .cache import CacheManager
 
@@ -69,11 +72,17 @@ class UnifiedDataAPI:
     def _init_providers(self):
         """初始化数据源提供者"""
         try:
-            # 通达信数据源
+            # 通达信数据源（可选，需要 pip install pytdx）
             if self.config.is_provider_enabled('tdx'):
-                tdx_config = self.config.get_provider_config('tdx')
-                self.providers['tdx'] = TdxDataProvider(tdx_config)
-                self.logger.info("通达信数据源初始化成功")
+                if TdxDataProvider is None:
+                    self.logger.warning(
+                        "通达信数据源未启用: pytdx 未安装。"
+                        "TDX 是兜底数据源，平时用不到。如需启用: pip install pytdx"
+                    )
+                else:
+                    tdx_config = self.config.get_provider_config('tdx')
+                    self.providers['tdx'] = TdxDataProvider(tdx_config)
+                    self.logger.info("通达信数据源初始化成功")
             
             # 同花顺数据源
             if self.config.is_provider_enabled('ths'):
