@@ -214,11 +214,18 @@ class ProcessManager:
 
     def _start_one_shot(self, name: str, run_mode: str) -> Optional[subprocess.Popen]:
         """启动一次性执行，返回进程对象"""
-        strategy_dir = PROJECT_ROOT / "strategies" / "quant_strategies"
-        script = strategy_dir / f"run_{name}.py"
+        # 搜索策略脚本：先 quant_strategies/ 再 strategies/
+        script = PROJECT_ROOT / "strategies" / "quant_strategies" / f"run_{name}.py"
+        if not script.exists():
+            script = PROJECT_ROOT / "strategies" / f"run_{name}.py"
+        if not script.exists():
+            # 递归搜索
+            for found in (PROJECT_ROOT / "strategies").rglob(f"run_{name}.py"):
+                script = found
+                break
 
         if not script.exists():
-            logger.info(f"策略脚本不存在: {script}")
+            logger.info(f"策略脚本不存在: {name}")
             return None
 
         cmd = [sys.executable, str(script)]
@@ -300,14 +307,52 @@ STRATEGY_INFO = {
 # 用户自定义覆盖（来自表格编辑），name → {"schedule_type": ..., "schedule_value": ...}
 _strategy_overrides: Dict[str, dict] = {}
 
+def get_strategy_info(name: str):
+    """获取策略元信息 (display_name, priority, sched_type, sched_val)"""
+    if name in STRATEGY_INFO:
+        return get_strategy_info(name)
+    # 用户自定义策略：保守默认值
+    return (name, 1, "daily", "09:30")
+
+
 def get_strategy_schedule(name: str):
     """获取策略的调度配置（默认+用户覆盖）"""
     override = _strategy_overrides.get(name, {})
-    default = STRATEGY_INFO[name]
+    default = get_strategy_info(name)
     return (
         override.get("schedule_type", default[2]),
         override.get("schedule_value", default[3]),
     )
+
+
+def _read_strategy_meta(script_path: Path, name: str):
+    """从策略脚本读取元信息，fallback 用默认值"""
+    display = name
+    priority = 1
+    sched_type = "daily"
+    sched_val = "09:30"
+    try:
+        text = script_path.read_text(encoding="utf-8")
+        for line in text.splitlines()[:20]:
+            line_stripped = line.strip()
+            if line_stripped.startswith("#"):
+                import re
+                m = re.search(r'名称[:：]\s*(.+)', line_stripped)
+                if m:
+                    display = m.group(1).strip()
+                    continue
+                m = re.search(r'优先级[:：]\s*(\d+)', line_stripped)
+                if m:
+                    priority = int(m.group(1))
+                    continue
+                m = re.search(r'调度[:：]\s*(daily|interval)\s*(.+)', line_stripped)
+                if m:
+                    sched_type = m.group(1)
+                    sched_val = m.group(2).strip()
+                    continue
+    except Exception:
+        pass
+    return display, priority, sched_type, sched_val
 
 
 # ---------------------------------------------------------------------------
@@ -395,19 +440,37 @@ class MultiStrategyWidget(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
 
-        # 填充策略行（仅显示本地已安装的策略）
-        available = []
-        for name in STRATEGY_INFO:
+        # 填充策略行 —— 自动发现所有本地策略
+        # 1. 扫描 strategies/ 下所有 run_*.py
+        discovered = {}  # name → (display_name, priority, schedule_type, schedule_value)
+        strategies_dir = PROJECT_ROOT / "strategies"
+        if strategies_dir.exists():
+            for script in sorted(strategies_dir.rglob("run_*.py")):
+                name = script.stem[4:]  # run_xxx.py → xxx
+                if name not in discovered:
+                    display, priority, sched_type, sched_val = _read_strategy_meta(script, name)
+                    discovered[name] = (display, priority, sched_type, sched_val)
+
+        # 2. 合并 STRATEGY_INFO 中的元信息（优先级更高）
+        for name, (display, priority, sched_type, sched_val) in STRATEGY_INFO.items():
             script = PROJECT_ROOT / "strategies" / "quant_strategies" / f"run_{name}.py"
             if script.exists():
-                available.append(name)
-        sorted_names = sorted(available,
-                              key=lambda n: STRATEGY_INFO[n][1], reverse=True)
+                # 已安装的星球策略，使用 STRATEGY_INFO 的元数据
+                user_override = _strategy_overrides.get(name, {})
+                discovered[name] = (
+                    display,
+                    priority,
+                    user_override.get("schedule_type", sched_type),
+                    user_override.get("schedule_value", sched_val),
+                )
+
+        sorted_names = sorted(discovered.keys(),
+                              key=lambda n: discovered[n][1], reverse=True)
         self.table.setRowCount(len(sorted_names))
         self._strategy_rows = {}  # name → row index
         for i, name in enumerate(sorted_names):
             self._strategy_rows[name] = i
-            info = STRATEGY_INFO[name]
+            info = discovered[name]  # (display_name, priority, sched_type, sched_val)
             sched_type, sched_val = get_strategy_schedule(name)
 
             self.table.setItem(i, 0, QTableWidgetItem(name))
@@ -446,6 +509,10 @@ class MultiStrategyWidget(QWidget):
 
         table_layout.addWidget(self.table)
 
+        # 无策略时显示提示
+        self.empty_hint.setVisible(len(sorted_names) == 0)
+        self.table.setVisible(len(sorted_names) > 0)
+
         # 批量操作按钮
         batch_layout = QHBoxLayout()
         self.btn_start_all = QPushButton("▶ 全部启动")
@@ -461,8 +528,27 @@ class MultiStrategyWidget(QWidget):
         batch_layout.addWidget(self.btn_stop_all)
         batch_layout.addWidget(self.btn_refresh)
         batch_layout.addWidget(self.btn_report)
+
+        self.btn_new_strategy = QPushButton("📝 新建策略")
+        self.btn_new_strategy.setToolTip(
+            "在 strategies/ 目录下创建策略模板\n"
+            "自动发现并显示在列表中"
+        )
+        self.btn_new_strategy.clicked.connect(self._create_strategy_template)
+        batch_layout.addWidget(self.btn_new_strategy)
         batch_layout.addStretch()
         table_layout.addLayout(batch_layout)
+
+        # 空状态提示
+        self.empty_hint = QLabel(
+            "📭 暂无策略\n\n"
+            "点击 「📝 新建策略」 创建你的第一个策略\n"
+            "或导入知识星球专属策略包"
+        )
+        self.empty_hint.setAlignment(Qt.AlignCenter)
+        self.empty_hint.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+        self.empty_hint.setVisible(False)
+        table_layout.addWidget(self.empty_hint)
 
         layout.addWidget(table_group)
 
@@ -605,7 +691,7 @@ class MultiStrategyWidget(QWidget):
         # 检查是否已在运行
         existing = self.pm.is_running(name)
         if existing:
-            info = STRATEGY_INFO[name]
+            info = get_strategy_info(name)
             self._log(f"⚠️ {info[0]} 已在运行 (PID={existing['pid']})，跳过")
             self.refresh_status()
             return
@@ -618,7 +704,7 @@ class MultiStrategyWidget(QWidget):
         )
 
         if proc:
-            info = STRATEGY_INFO[name]
+            info = get_strategy_info(name)
             mode_text = "实盘" if run_mode == "live" else "模拟"
             cont_text = "持续运行" if continuous else "一次性"
             self._log(f"✅ {info[0]} 已启动 (PID={proc.pid}, {mode_text}, {cont_text})")
@@ -634,7 +720,7 @@ class MultiStrategyWidget(QWidget):
 
     def stop_strategy(self, name: str):
         """停止单个策略"""
-        info = STRATEGY_INFO[name]
+        info = get_strategy_info(name)
         self._log(f"停止 {name}...")
 
         if self.pm.stop(name):
@@ -658,7 +744,7 @@ class MultiStrategyWidget(QWidget):
         
         checkboxes = {}
         for name in sorted(all_names):
-            cn_name = STRATEGY_INFO[name][0]
+            cn_name = get_strategy_info(name)[0]
             cb = QCheckBox(f"{cn_name} ({name})")
             cb.setChecked(True)
             group_layout.addWidget(cb)
@@ -713,7 +799,7 @@ class MultiStrategyWidget(QWidget):
         for name in self._strategy_rows:
             data = self.pm.is_running(name)
             if data:
-                info = STRATEGY_INFO[name]
+                info = get_strategy_info(name)
                 running.append(
                     f"  ● {name} ({info[0]})  PID={data['pid']}  "
                     f"模式={data['run_mode']}  "
@@ -726,6 +812,82 @@ class MultiStrategyWidget(QWidget):
             msg = "当前无运行中的策略"
 
         QMessageBox.information(self, "运行报告", msg)
+
+    def _create_strategy_template(self):
+        """引导用户创建新策略模板"""
+        from PyQt5.QtWidgets import QInputDialog, QFileDialog
+        name, ok = QInputDialog.getText(
+            self, "新建策略", "策略名称（英文，如 my_strategy）:"
+        )
+        if not ok or not name.strip():
+            return
+        name = name.strip().replace(" ", "_")
+
+        strategy_dir = PROJECT_ROOT / "strategies"
+        strategy_dir.mkdir(exist_ok=True)
+
+        # 创建 run_{name}.py
+        script = strategy_dir / f"run_{name}.py"
+        if script.exists():
+            QMessageBox.warning(self, "提示", f"策略 {name} 已存在")
+            return
+
+        template = f'''#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# 名称: {name}
+# 优先级: 1
+# 调度: daily 09:30
+"""
+自定义策略: {name}
+
+调度说明:
+  - daily HH:MM  — 每日定时执行
+  - interval N    — 每 N 分钟执行一次
+
+可用数据:
+  - DuckDB: stock_daily / stock_market_cap / financial_data
+  - Tushare: 通过 tushare_manager 获取
+  - 通达信: 通过 easy_xt.tdx_client 获取
+  - QMT: 通过 xtdata 获取
+"""
+
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from easy_xt.api import EasyXT
+from easy_xt.config import config
+
+
+def main():
+    print(f"[{name}] 策略开始执行...")
+
+    # TODO: 在这里编写你的策略逻辑
+    # 示例：获取行情数据
+    # from easy_xt.tdx_client import TdxClient
+    # with TdxClient() as client:
+    #     df = client.get_market_data(
+    #         stock_list=['688318.SH'],
+    #         start_time='20250601', period='1d', count=20
+    #     )
+    #     print(df)
+
+    print(f"[{name}] 策略执行完成")
+
+
+if __name__ == "__main__":
+    main()
+'''
+        script.write_text(template, encoding="utf-8")
+        QMessageBox.information(
+            self, "创建成功",
+            f"策略模板已创建:\n{script}\n\n"
+            "请在编辑器中打开它，编写你的策略逻辑。\n"
+            "完成后点击「🔄 刷新状态」即可看到新策略。"
+        )
+
+        # 立即刷新
+        self.refresh_status()
 
     def closeEvent(self, event):
         """关闭时的处理"""
