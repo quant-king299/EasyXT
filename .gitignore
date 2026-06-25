@@ -176,6 +176,10 @@ desktop.ini
 xtquant/
 
 # 开发和调试文件
+
+# Tushare基础数据下载模块（重要，GUI依赖）
+!tushare_manager/download_basic_data.py
+
 *test*.py
 *debug*.py
 *fix*.py

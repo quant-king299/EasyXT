@@ -837,9 +837,35 @@ class TushareDownloadThread(QThread):
                     holder_name VARCHAR,
                     holder_amount DECIMAL(18,2),
                     holder_rank INTEGER,
-                    PRIMARY KEY (ts_code, end_date, holder_rank)
+                    PRIMARY KEY (ts_code, end_date, holder_name)
                 )
             """)
+
+            # 兼容旧表结构：如果旧表主键包含 holder_rank，重建
+            try:
+                pk_info = conn.execute("""
+                    SELECT column_name FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage cu ON tc.constraint_name = cu.constraint_name
+                    WHERE tc.table_name = 'holders_data' AND tc.constraint_type = 'PRIMARY KEY'
+                """).fetchall()
+                pk_cols = [row[0].lower() for row in pk_info]
+                if 'holder_rank' in pk_cols:
+                    self.log_signal.emit("🔄 检测到旧版本股东表结构，正在迁移...")
+                    conn.execute("DROP TABLE IF EXISTS holders_data_old")
+                    conn.execute("ALTER TABLE holders_data RENAME TO holders_data_old")
+                    conn.execute("""
+                        CREATE TABLE holders_data (
+                            ts_code VARCHAR, ann_date DATE, end_date DATE,
+                            holder_name VARCHAR, holder_amount DECIMAL(18,2),
+                            holder_rank INTEGER,
+                            PRIMARY KEY (ts_code, end_date, holder_name)
+                        )
+                    """)
+                    conn.execute("INSERT INTO holders_data SELECT * FROM holders_data_old")
+                    conn.execute("DROP TABLE holders_data_old")
+                    self.log_signal.emit("✅ 股东表结构迁移完成")
+            except Exception:
+                pass  # 新表无需迁移
 
             success_count = 0
             for i, symbol in enumerate(symbols):
@@ -1000,9 +1026,10 @@ class TushareDownloadThread(QThread):
                 stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
                 symbols = stock_list['ts_code'].tolist()
 
-            # 限制下载数量
-            max_count = self.kwargs.get('max_count', 500)
-            symbols = symbols[:max_count]
+            # 0=全部A股，不截断；>0=限制数量
+            max_count = self.kwargs.get('max_count', 0)
+            if max_count > 0:
+                symbols = symbols[:max_count]
 
             self.log_signal.emit(f"股票数量: {len(symbols)}")
             self.log_signal.emit(f"日期范围: {start_date} ~ {end_date}")
@@ -2549,8 +2576,10 @@ class TushareDataWidget(QWidget):
         param_layout.addRow("数据年份:", self.quick_years_spin)
 
         self.quick_stock_spin = QSpinBox()
-        self.quick_stock_spin.setRange(10, 5000)
-        self.quick_stock_spin.setValue(500)
+        self.quick_stock_spin.setRange(0, 10000)
+        self.quick_stock_spin.setValue(0)
+        self.quick_stock_spin.setSpecialValueText("全部A股")
+        self.quick_stock_spin.setToolTip("0=全部A股，或手动指定数量")
         self.quick_stock_spin.setSuffix(" 只")
         param_layout.addRow("股票数量:", self.quick_stock_spin)
 

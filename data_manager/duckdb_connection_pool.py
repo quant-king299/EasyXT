@@ -50,6 +50,11 @@ class DuckDBConnectionManager:
         self.duckdb_path = duckdb_path
         self._write_lock = threading.Lock()
         self._connection_count = 0
+
+        # 确保数据库文件所在目录存在（首次使用时自动创建）
+        db_dir = Path(self.duckdb_path).parent
+        db_dir.mkdir(parents=True, exist_ok=True)
+
         self._initialized = True
 
     @contextmanager
