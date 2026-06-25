@@ -7,7 +7,7 @@ logger = logging.getLogger(__name__)
 雪球跟单策略启动脚本 - 使用 easy_xt 模块
 配置信息：
 - 使用 easy_xt 自动检测 QMT 路径
-- 账号: 39020958
+- 账号: 
 - 跟单组合: https://xueqiu.com/P/ZHXXXXXX
 """
 
@@ -268,7 +268,7 @@ def test_qmt_connection() -> bool:
             logger.info("✅ 交易服务连接成功")
             
             # 测试账户
-            account_id = "39020958"
+            account_id = ""
             logger.info(f"👤 测试账户: {account_id}")
             
             account_success = api.add_account(account_id, "STOCK")

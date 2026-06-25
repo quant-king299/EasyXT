@@ -63,7 +63,7 @@ TRADING_CONFIG = {
 
     'userdata_path': r'D:\国金QMT交易端模拟\userdata_mini',
 
-    'account_id': '39020958',
+    'account_id': '',
 
     'single_stock_amount': 5000,  # 每只股票买入金额
 

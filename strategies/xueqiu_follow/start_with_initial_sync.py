@@ -88,7 +88,7 @@ def print_banner():
     except Exception as e:
         logger.info(f"⏰ 启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         logger.info(f"📊 跟单组合: ZH3368671")
-        logger.info(f"🏦 交易账号: 39020958")
+        logger.info(f"🏦 交易账号: ")
         logger.info(f"⚠️ 配置加载警告: {e}")
     
     logger.info(f"💰 交易模式: 真实交易模式")

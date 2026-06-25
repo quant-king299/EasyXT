@@ -277,7 +277,7 @@ def lesson_04_query_account_assets():
 
     # 配置信息（请根据实际情况修改）
     QMT_PATH = os.environ.get('QMT_PATH', r'D:\国金QMT交易端模拟\userdata_mini')
-    ACCOUNT_ID = os.environ.get('QMT_ACCOUNT_ID', '39020958')
+    ACCOUNT_ID = os.environ.get('QMT_ACCOUNT_ID', '')
 
     print(f"QMT 路径: {QMT_PATH}")
     print(f"账户 ID: {ACCOUNT_ID}")
@@ -389,7 +389,7 @@ def lesson_05_query_positions():
     print("=" * 80)
 
     api = easy_xt.get_api()
-    ACCOUNT_ID = os.environ.get('QMT_ACCOUNT_ID', '39020958')
+    ACCOUNT_ID = os.environ.get('QMT_ACCOUNT_ID', '')
 
     try:
         positions = api.trade.get_positions(ACCOUNT_ID)

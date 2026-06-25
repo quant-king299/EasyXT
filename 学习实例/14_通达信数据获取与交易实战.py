@@ -37,7 +37,7 @@ try:
     QMT_PATH = config.get_userdata_path()
 
     # 获取账户ID（从配置文件）
-    ACCOUNT_ID = config.get('settings.account.account_id', default='39020958')
+    ACCOUNT_ID = config.get('settings.account.account_id', default='')
 
     # 获取风控参数
     MAX_POSITION_RATIO = config.get('settings.risk.max_total_exposure', default=0.8)
@@ -62,7 +62,7 @@ except Exception as e:
     print(f"[WARN] 配置文件加载失败，使用默认配置: {e}")
 
     QMT_PATH = r'D:\国金QMT交易端模拟\userdata_mini'
-    ACCOUNT_ID = '39020958'
+    ACCOUNT_ID = ''
     MAX_POSITION_RATIO = 0.8
     STOP_LOSS_RATIO = 0.05
 
@@ -1146,7 +1146,7 @@ def main():
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 修改交易参数（在本文件中）:
-   ACCOUNT_ID = '39020958'           # 账户ID
+   ACCOUNT_ID = ''           # 账户ID
    single_stock_amount = 5000       # 每只股票买入金额
    max_stocks = 3                   # 最多买入几只
 

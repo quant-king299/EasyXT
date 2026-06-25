@@ -78,7 +78,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 # 配置信息 - 请根据实际情况修改
 USERDATA_PATH = r'D:\国金QMT交易端模拟\userdata_mini'  # 修改为实际的迅投客户端路径
-DEFAULT_ACCOUNT_ID = "39020958"  # 修改为实际账号
+DEFAULT_ACCOUNT_ID = ""  # 修改为实际账号
 
 class FixedRealTradingQStockStrategy:
     """基于真实qstock数据和easy_xt交易的策略类 (修复交易服务版)"""

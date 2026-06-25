@@ -94,7 +94,7 @@ print("=" * 60)
 # 交易配置
 TRADING_CONFIG = {
     'userdata_path': r'D:\国金QMT交易端模拟\userdata_mini',  # 修改为实际路径
-    'account_id': '39020958',  # 修改为实际账号
+    'account_id': '',  # 修改为实际账号
     'session_id': 'qstock_easyxt_session',
     'max_position_ratio': 0.8,  # 最大仓位比例
     'single_stock_ratio': 0.2,  # 单股最大仓位

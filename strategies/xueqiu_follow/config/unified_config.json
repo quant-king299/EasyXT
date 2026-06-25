@@ -52,7 +52,7 @@
       "account_comment": "交易账户配置",
       "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini",
       "qmt_path_comment": "QMT交易端的安装/数据路径（用于连接本地交易端）",
-      "account_id": "39020958",
+      "account_id": "",
       "account_id_comment": "交易账户ID（模拟或实盘账户）",
       "password": "",
       "password_comment": "账户密码（如无需则留空，注意安全）",
@@ -211,7 +211,7 @@
       "settings_comment": "旧版 settings 节点映射（建议逐步合并到新的 settings）",
       "account": {
         "account_comment": "旧版账户字段映射",
-        "account_id": "39020958",
+        "account_id": "",
         "account_id_comment": "交易账户ID（旧版映射）",
         "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini",
         "qmt_path_comment": "QMT路径（旧版映射）"

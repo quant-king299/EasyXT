@@ -102,7 +102,7 @@ class 简单小市值策略StrategyLive:
 
         # 直接配置（不依赖JSON文件）
 
-        self.account_id = "39020958"
+        self.account_id = ""
 
         self.qmt_path = r"D:\国金QMT交易端模拟\userdata_mini"
 

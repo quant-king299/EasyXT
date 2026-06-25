@@ -28,7 +28,7 @@ except (ValueError, TypeError):
 
 # 配置信息（请根据实际情况修改）
 USERDATA_PATH = r'D:\国金QMT交易端模拟\userdata_mini' #修改为实际的路径
-ACCOUNT_ID = "39020958"  # 修改为实际账号
+ACCOUNT_ID = ""  # 修改为实际账号
 TEST_CODE = "000001.SZ"  # 测试用股票代码
 
 def lesson_01_trade_setup():
