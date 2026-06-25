@@ -71,11 +71,32 @@ def main():
             print(f"  [FAIL] {file_path} (不存在)")
             return False
 
+    # 自动检测并启动 miniQMT
+    print("\n[*] 检测 miniQMT...")
+    try:
+        from core.auto_login.qmt_login import QMTAutoLogin
+        auto_login = QMTAutoLogin()
+        if auto_login._is_running():
+            print("  [OK] miniQMT 已在运行中")
+        else:
+            print("  [!] miniQMT 未启动，自动登录中...")
+            success = auto_login.login(timeout=60)
+            if success:
+                print("  [OK] miniQMT 登录成功")
+            else:
+                print("  [WARN] miniQMT 自动登录失败，请手动启动")
+    except ValueError as e:
+        print(f"  [SKIP] 未配置 QMT_EXE_PATH/QMT_PASSWORD，跳过自动登录")
+    except ImportError:
+        print("  [SKIP] pywinauto 未安装，跳过自动登录")
+    except Exception as e:
+        print(f"  [WARN] miniQMT 检测异常: {e}")
+
     # 所有检查通过，启动应用
     print("\n[OK] 所有检查通过，正在启动应用...\n")
     print("=" * 70)
     print()
-    
+
     # 动态导入并启动应用
     try:
         from gui_app.main_window import main as gui_main
@@ -85,7 +106,7 @@ def main():
         import traceback
         traceback.print_exc()
         return False
-    
+
     return True
 
 if __name__ == "__main__":
