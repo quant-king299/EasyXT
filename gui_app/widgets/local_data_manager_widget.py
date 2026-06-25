@@ -82,7 +82,7 @@ class DataDownloadThread(QThread):
 
     def __init__(self, task_type, symbols, start_date, end_date, data_type='daily'):
         super().__init__()
-        self.task_type = task_type  # 'download_stocks', 'update_data', 'backfill_history'
+        self.task_type = task_type  # 'download_stocks', 'update_data'
         self.symbols = symbols
         self.start_date = start_date
         self.end_date = end_date
@@ -95,10 +95,6 @@ class DataDownloadThread(QThread):
             if self.task_type == 'download_stocks':
                 self._download_stocks()
             # download_bonds 已移除 - QMT 不提供溢价率数据
-            elif self.task_type == 'update_data':
-                self._update_data()
-            elif self.task_type == 'backfill_history':
-                self._backfill_history()
         except Exception as e:
             import traceback
             error_msg = f"下载失败: {str(e)}\n{traceback.format_exc()}"
@@ -720,318 +716,6 @@ class DataDownloadThread(QThread):
         except Exception as e:
             import traceback
             error_msg = f"更新数据失败: {str(e)}\n{traceback.format_exc()}"
-            self.log_signal.emit(error_msg)
-            self.error_signal.emit(error_msg)
-
-    def _backfill_history(self):
-        """补充历史数据（根据用户填写的日期范围）"""
-        try:
-            from data_manager.duckdb_connection_pool import get_db_manager
-            from xtquant import xtdata
-            import pandas as pd
-
-            self.log_signal.emit("✅ 数据管理器初始化成功")
-
-            # 获取用户填写的日期参数
-            start_date = self.start_date if self.start_date else '20180101'
-            end_date = self.end_date if self.end_date else datetime.now().strftime('%Y%m%d')
-
-            self.log_signal.emit(f"📅 补充日期范围: {start_date} ~ {end_date}")
-
-            # 转换日期格式
-            start_dt = pd.to_datetime(start_date, format='%Y%m%d')
-            end_dt = pd.to_datetime(end_date, format='%Y%m%d')
-
-            # 获取DuckDB管理器
-            manager = get_db_manager(get_default_db_path())
-
-            # 查询所有股票及其最早日期（排除ETF和基金）
-            query = """
-                SELECT
-                    stock_code,
-                    MIN(date) as earliest_date,
-                    MAX(date) as latest_date
-                FROM stock_daily
-                WHERE symbol_type = 'stock'
-                  AND stock_code NOT LIKE '51%.SH'  -- 排除上海ETF
-                  AND stock_code NOT LIKE '159%.SZ'  -- 排除深圳ETF
-                  AND stock_code NOT LIKE '150%.SZ'  -- 排除深圳ETF
-                  AND stock_code NOT LIKE '588%.SH'  -- 排除上海ETF
-                  AND stock_code NOT LIKE '50%.SH'   -- 排除上海50开头基金
-                  AND stock_code NOT LIKE '56%.SH'   -- 排除上海56开头基金
-                  AND stock_code NOT LIKE '58%.SH'   -- 排除上海58开头基金
-                GROUP BY stock_code
-                ORDER BY stock_code
-            """
-
-            df_stocks = manager.execute_read_query(query)
-
-            if df_stocks.empty:
-                self.log_signal.emit("⚠️ 数据库中没有数据，请先下载A股数据")
-                self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
-                return
-
-            # 筛选需要补充数据的股票
-            # 逻辑：数据库中的最新数据早于今天，说明需要更新
-            today = datetime.now().date()
-            needs_update = df_stocks[df_stocks['latest_date'] < pd.Timestamp(today)].copy()
-
-            if needs_update.empty:
-                self.log_signal.emit(f"✅ 所有股票数据都是最新的（截至{today}）")
-                self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
-                return
-
-            # 为每只股票计算需要补充的日期范围
-            # 补充范围：从数据库中最新数据的第二天 到 今天
-            needs_update['need_start'] = (needs_update['latest_date'] + timedelta(days=1)).dt.strftime('%Y%m%d')
-            needs_update['need_end'] = today.strftime('%Y%m%d')
-
-            # 过滤掉不合理的日期范围（need_start > need_end）
-            needs_update = needs_update[needs_update['need_start'] <= needs_update['need_end']]
-
-            if needs_update.empty:
-                self.log_signal.emit(f"✅ 所有股票数据都是最新的")
-                self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
-                return
-
-            stock_codes = needs_update['stock_code'].tolist()
-            self.log_signal.emit(f"📊 发现 {len(stock_codes)} 只股票需要更新数据（已排除ETF和基金）")
-            self.log_signal.emit(f"📅 更新范围: 各股票最新数据日期的第二天 ~ 今天")
-
-            total = len(stock_codes)
-            success_count = 0
-            failed_count = 0
-            failed_list = []
-            backfill_data = []
-
-            # ===== 批量下载优化 =====
-            BATCH_SIZE = 100  # 每批处理100只股票
-            self.log_signal.emit(f"🚀 使用批量下载模式，每批{BATCH_SIZE}只股票")
-
-            for batch_start in range(0, total, BATCH_SIZE):
-                batch_end = min(batch_start + BATCH_SIZE, total)
-                batch_codes = stock_codes[batch_start:batch_end]
-
-                self.log_signal.emit(f"📊 批次 {batch_start//BATCH_SIZE + 1}/{(total-1)//BATCH_SIZE + 1}: 处理股票 {batch_start+1}-{batch_end}...")
-
-                # 批量读取数据（先让QMT批量下载到本地）
-                try:
-                    # 批量触发下载（逐个触发但批量处理）
-                    for stock_code in batch_codes:
-                        try:
-                            stock_info = needs_update[needs_update['stock_code'] == stock_code].iloc[0]
-                            need_start = stock_info['need_start']
-                            need_end = stock_info['need_end']
-
-                            xtdata.download_history_data(
-                                stock_code=stock_code,
-                                period='1d',
-                                start_time=need_start,
-                                end_time=need_end
-                            )
-                        except Exception:                            pass  # 忽略单个股票下载失败
-
-                    # 批量读取数据
-                    batch_data = xtdata.get_market_data_ex(
-                        stock_list=batch_codes,
-                        period='1d',
-                        start_time=start_date,
-                        end_time=end_date
-                    )
-
-                    # 处理每只股票的数据
-                    for stock_code in batch_codes:
-                        try:
-                            # 获取该股票需要补充的日期范围
-                            stock_info = needs_update[needs_update['stock_code'] == stock_code].iloc[0]
-                            need_start = stock_info['need_start']
-                            need_end = stock_info['need_end']
-
-                            # 检查数据是否存在
-                            if isinstance(batch_data, dict) and stock_code in batch_data:
-                                df = batch_data[stock_code]
-                                if not df.empty:
-                                    # 转换数据格式
-                                    time_series = _extract_time_series(df)
-                                    df_processed = pd.DataFrame({
-                                        'stock_code': stock_code,
-                                        'symbol_type': 'stock',
-                                        'date': time_series.dt.strftime('%Y-%m-%d'),
-                                        'period': '1d',
-                                        'open': df['open'],
-                                        'high': df['high'],
-                                        'low': df['low'],
-                                        'close': df['close'],
-                                        'volume': df['volume'].astype('int64'),
-                                        'amount': df['amount'],
-                                        'created_at': datetime.now(),
-                                        'updated_at': datetime.now()
-                                    })
-
-                                    # 过滤：确保日期在补充范围内
-                                    df_processed['date_dt'] = pd.to_datetime(df_processed['date'])
-                                    need_start_dt = pd.to_datetime(need_start, format='%Y%m%d')
-                                    need_end_dt = pd.to_datetime(need_end, format='%Y%m%d')
-                                    df_processed = df_processed[
-                                        (df_processed['date_dt'] >= need_start_dt) &
-                                        (df_processed['date_dt'] <= need_end_dt)
-                                    ]
-                                    df_processed = df_processed.drop(columns=['date_dt'])
-
-                                    if not df_processed.empty:
-                                        # 不添加复权列，只保存不复权数据
-                                        backfill_data.append(df_processed)
-                                        success_count += 1
-                                    else:
-                                        failed_count += 1
-                                        failed_list.append(f"{stock_code} - 过滤后无数据（{need_start}~{need_end}）")
-                                else:
-                                    failed_count += 1
-                                    failed_list.append(f"{stock_code} - 返回空数据（{need_start}~{need_end}）")
-                            else:
-                                failed_count += 1
-                                failed_list.append(f"{stock_code} - QMT下载失败（{need_start}~{need_end}）")
-
-                        except Exception as e:
-                            failed_count += 1
-                            failed_list.append(f"{stock_code} - {str(e)[:30]}")
-
-                except Exception as batch_error:
-                    self.log_signal.emit(f"  ⚠️ 批次处理失败: {str(batch_error)[:50]}")
-                    # 批次失败，逐个处理
-                    for stock_code in batch_codes:
-                        failed_count += 1
-                        failed_list.append(f"{stock_code} - 批次失败: {str(batch_error)[:20]}")
-
-                # 每批次进度更新
-                if (batch_end) % 500 == 0 or batch_end == total:
-                    self.log_signal.emit(f"📊 进度: {batch_end}/{total} ({batch_end/total*100:.1f}%) - 成功:{success_count}, 失败:{failed_count}")
-
-            self.log_signal.emit(f"📥 历史数据收集完成: {success_count} 只股票成功")
-
-            # 统计失败原因
-            new_stock_count = sum(1 for item in failed_list if '新股' in item)
-            no_data_count = sum(1 for item in failed_list if '无数据' in item or '空数据' in item)
-            error_count = sum(1 for item in failed_list if '获取失败' in item or '错误' in item)
-
-            self.log_signal.emit(f"📊 失败统计: 总数{failed_count}, 新股{new_stock_count}, 无数据{no_data_count}, 错误{error_count}")
-
-            # 批量写入DuckDB（只插入缺失数据，不删除已有数据）
-            if backfill_data:
-                self.log_signal.emit("💾 正在写入数据库（只插入缺失部分）...")
-                import time
-                time.sleep(2)
-
-                try:
-                    # 合并所有数据
-                    df_all = pd.concat(backfill_data, ignore_index=True)
-
-                    with manager.get_write_connection() as con:
-                        con.register('temp_backfill', df_all)
-                        table_info = con.execute("SELECT table_name, table_type FROM information_schema.tables WHERE table_name IN ('stock_daily', 'stock_data')").fetchall()
-                        daily_is_table = any(name == 'stock_daily' and ttype == 'BASE TABLE' for name, ttype in table_info)
-
-                        if daily_is_table:
-                            con.execute("""
-                                INSERT OR REPLACE INTO stock_daily (
-                                    stock_code, symbol_type, date, period,
-                                    open, high, low, close, volume, amount,
-                                    created_at, updated_at
-                                )
-                                SELECT
-                                    stock_code, symbol_type, CAST(date AS DATE), period,
-                                    open, high, low, close, volume, amount,
-                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                                FROM temp_backfill
-                            """)
-                        else:
-                            con.execute("""
-                                INSERT OR IGNORE INTO stock_data (
-                                    symbol, date, period,
-                                    open, high, low, close, volume, amount,
-                                    created_at, updated_at
-                                )
-                                SELECT
-                                    stock_code, CAST(date AS DATE), period,
-                                    open, high, low, close, volume, amount,
-                                    CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-                                FROM temp_backfill
-                            """)
-                        con.unregister('temp_backfill')
-
-                    inserted_count = len(df_all)
-                    self.log_signal.emit(f"✅ 成功插入 {inserted_count} 条新记录（已有数据保留）")
-                except Exception as e:
-                    self.log_signal.emit(f"❌ 写入失败: {str(e)}")
-
-            result = {
-                'total': total,
-                'success': success_count,
-                'failed': failed_count,
-                'failed_list': failed_list,
-                'task_type': 'backfill_history'
-            }
-
-            self.finished_signal.emit(result)
-            self.log_signal.emit(f"✅ 历史数据补充完成! 总数: {total}, 成功: {success_count}, 失败: {failed_count}")
-
-            # 输出失败清单（分类显示）
-            if failed_list:
-                self.log_signal.emit("")
-                self.log_signal.emit("=" * 70)
-                self.log_signal.emit("  失败分类:")
-
-                # 新股
-                new_stocks = [item for item in failed_list if '新股' in item]
-                if new_stocks:
-                    self.log_signal.emit(f"\n  [INFO] 新股（上市时间晚于开始日期）: {len(new_stocks)} 只")
-                    for item in new_stocks[:10]:  # 只显示前10个
-                        self.log_signal.emit(f"    - {item}")
-                    if len(new_stocks) > 10:
-                        self.log_signal.emit(f"    ... 省略 {len(new_stocks)-10} 只")
-
-                # 过滤后无数据
-                no_data_after_filter = [item for item in failed_list if '过滤后无数据' in item]
-                if no_data_after_filter:
-                    self.log_signal.emit(f"\n  [WARNING] 过滤后无数据: {len(no_data_after_filter)} 只")
-                    for item in no_data_after_filter[:5]:
-                        self.log_signal.emit(f"    - {item}")
-                    if len(no_data_after_filter) > 5:
-                        self.log_signal.emit(f"    ... 省略 {len(no_data_after_filter)-5} 只")
-
-                # 返回空数据（QMT/Tushare都获取到了但为空）
-                empty_data = [item for item in failed_list if '返回空数据' in item]
-                if empty_data:
-                    self.log_signal.emit(f"\n  [WARNING] 数据源返回空: {len(empty_data)} 只")
-                    for item in empty_data[:5]:
-                        self.log_signal.emit(f"    - {item}")
-                    if len(empty_data) > 5:
-                        self.log_signal.emit(f"    ... 省略 {len(empty_data)-5} 只")
-
-                # 所有数据源均失败
-                all_failed = [item for item in failed_list if '所有数据源均失败' in item]
-                if all_failed:
-                    self.log_signal.emit(f"\n  [ERROR] QMT和Tushare都失败: {len(all_failed)} 只")
-                    for item in all_failed[:5]:
-                        self.log_signal.emit(f"    - {item}")
-                    if len(all_failed) > 5:
-                        self.log_signal.emit(f"    ... 省略 {len(all_failed)-5} 只")
-
-                # 其他异常
-                others = [item for item in failed_list if item not in new_stocks + no_data_after_filter + empty_data + all_failed]
-                if others:
-                    self.log_signal.emit(f"\n  [ERROR] 其他异常: {len(others)} 只")
-                    for item in others[:5]:
-                        self.log_signal.emit(f"    - {item}")
-                    if len(others) > 5:
-                        self.log_signal.emit(f"    ... 省略 {len(others)-5} 只")
-
-                self.log_signal.emit(f"\n  总计: {len(failed_list)} 只失败")
-                self.log_signal.emit("=" * 70)
-
-        except Exception as e:
-            import traceback
-            error_msg = f"补充历史数据失败: {str(e)}\n{traceback.format_exc()}"
             self.log_signal.emit(error_msg)
             self.error_signal.emit(error_msg)
 
@@ -1819,8 +1503,8 @@ class LocalDataManagerWidget(QWidget):
         # 可转债数据下载已移除 - QMT 不提供溢价率数据，策略必须使用 Tushare
         # 请使用 "Tushare数据下载" 标签页中的可转债下载功能
 
-        self.update_data_btn = QPushButton("🔄 更新缺失数据")
-        self.update_data_btn.setToolTip("智能补全所有缺失的历史数据\n自动检测每只股票的最新日期，补充缺失的部分")
+        self.update_data_btn = QPushButton("🔄 一键补全数据")
+        self.update_data_btn.setToolTip("智能检测并补全所有缺失数据\n自动分析每只股票缺几天，一键全部补齐")
         self.update_data_btn.clicked.connect(self.update_data)
         self.update_data_btn.setStyleSheet("""
             QPushButton {
@@ -1839,28 +1523,6 @@ class LocalDataManagerWidget(QWidget):
             }
         """)
         btn_layout.addWidget(self.update_data_btn)
-
-        # 补充历史数据按钮
-        self.backfill_data_btn = QPushButton("📜 补全历史数据")
-        self.backfill_data_btn.setToolTip("补充指定日期之前的历史空白\n用于首次使用或发现历史数据缺失时")
-        self.backfill_data_btn.clicked.connect(self.backfill_historical_data)
-        self.backfill_data_btn.setStyleSheet("""
-            QPushButton {
-                background-color: #9C27B0;
-                color: white;
-                border: none;
-                padding: 8px 16px;
-                border-radius: 4px;
-                font-weight: bold;
-            }
-            QPushButton:hover {
-                background-color: #7B1FA2;
-            }
-            QPushButton:disabled {
-                background-color: #cccccc;
-            }
-        """)
-        btn_layout.addWidget(self.backfill_data_btn)
 
         action_layout.addLayout(btn_layout, 2, 0, 1, 4)
 
@@ -2812,48 +2474,6 @@ class LocalDataManagerWidget(QWidget):
 
         self._set_download_state(True)
 
-    def backfill_historical_data(self):
-        """补充历史数据（获取指定日期范围的完整数据）"""
-        # 获取用户选择的日期
-        start_date = self.start_date_edit.date().toString('yyyy-MM-dd')
-        end_date = self.end_date_edit.date().toString('yyyy-MM-dd')
-
-        reply = QMessageBox.question(
-            self, "确认操作",
-            f"此操作将为缺失历史数据的股票补充 {start_date} 起至 {end_date} 的数据。\n\n"
-            f"只会补充数据库中缺失的部分，已有数据不会被删除。\n\n"
-            "可能需要较长时间，确定要继续吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
-        )
-
-        if reply == QMessageBox.No:
-            return
-
-        if self.download_thread and self.download_thread.isRunning():
-            QMessageBox.warning(self, "提示", "已有下载任务正在运行")
-            return
-
-        # 获取用户输入的日期
-        start_date = self.start_date_edit.date().toString('yyyyMMdd')
-        end_date = self.end_date_edit.date().toString('yyyyMMdd')
-
-        self.log(f"📜 开始补充历史数据（{start_date} ~ {end_date}）...")
-
-        self.download_thread = DataDownloadThread(
-            task_type='backfill_history',
-            symbols=None,
-            start_date=start_date,
-            end_date=end_date
-        )
-        self.download_thread.log_signal.connect(self.log)
-        self.download_thread.progress_signal.connect(self.update_progress)
-        self.download_thread.finished_signal.connect(self.on_download_finished)
-        self.download_thread.error_signal.connect(self.on_download_error)
-        self.download_thread.start()
-
-        self._set_download_state(True)
-
     def update_progress(self, current, total):
         """更新进度"""
         self.progress_bar.setMaximum(total)
@@ -2901,7 +2521,6 @@ class LocalDataManagerWidget(QWidget):
         self.download_stocks_btn.setEnabled(not is_downloading)
         # download_bonds_btn 已移除 - QMT 不提供溢价率数据
         self.update_data_btn.setEnabled(not is_downloading)
-        self.backfill_data_btn.setEnabled(not is_downloading)
         self.manual_download_btn.setEnabled(not is_downloading)
         self.verify_data_btn.setEnabled(not is_downloading)
         self.financial_download_btn.setEnabled(not is_downloading)
