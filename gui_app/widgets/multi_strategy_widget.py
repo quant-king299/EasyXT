@@ -509,6 +509,16 @@ class MultiStrategyWidget(QWidget):
 
         table_layout.addWidget(self.table)
 
+        # 空状态提示（先创建再使用）
+        self.empty_hint = QLabel(
+            "📭 暂无策略\n\n"
+            "点击 「📝 新建策略」 创建你的第一个策略\n"
+            "或导入知识星球专属策略包"
+        )
+        self.empty_hint.setAlignment(Qt.AlignCenter)
+        self.empty_hint.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
+        table_layout.addWidget(self.empty_hint)
+
         # 无策略时显示提示
         self.empty_hint.setVisible(len(sorted_names) == 0)
         self.table.setVisible(len(sorted_names) > 0)
@@ -538,17 +548,6 @@ class MultiStrategyWidget(QWidget):
         batch_layout.addWidget(self.btn_new_strategy)
         batch_layout.addStretch()
         table_layout.addLayout(batch_layout)
-
-        # 空状态提示
-        self.empty_hint = QLabel(
-            "📭 暂无策略\n\n"
-            "点击 「📝 新建策略」 创建你的第一个策略\n"
-            "或导入知识星球专属策略包"
-        )
-        self.empty_hint.setAlignment(Qt.AlignCenter)
-        self.empty_hint.setStyleSheet("color: #999; font-size: 14px; padding: 40px;")
-        self.empty_hint.setVisible(False)
-        table_layout.addWidget(self.empty_hint)
 
         layout.addWidget(table_group)
 
