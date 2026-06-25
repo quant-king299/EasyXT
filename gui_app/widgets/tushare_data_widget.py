@@ -1072,9 +1072,12 @@ class TushareDownloadThread(QThread):
             failed_count = 0
             need_download = incremental_list + new_list
 
-            # 批量预取：一次 API 调用取尽量多只股票（避免逐只调用被限流）
+            # 自适应限流：从快开始，遇到限制自动降速
             last_request_time = 0
-            request_interval = 0.35  # Tushare 免费版 ~200次/分钟 = 0.3s/次，留余量
+            request_interval = 0.06   # 初始 ~1000次/分钟，适配 5000 积分及以上
+            min_interval = 0.03       # 最快 ~2000次/分钟
+            max_interval = 0.6        # 最慢 ~100次/分钟（免费版兜底）
+            rate_limit_hits = 0
 
             for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
@@ -1123,14 +1126,20 @@ class TushareDownloadThread(QThread):
                     failed_count += 1
                     if failed_count <= 3:
                         self.log_signal.emit(f"  ❌ {ts_code}: {str(e)[:80]}")
-                    # 遇到限流错误时等待更久
+                    # 自适应降速：遇到限流逐步放慢
                     err_str = str(e).lower()
-                    if 'limit' in err_str or '频' in str(e) or '429' in str(e):
-                        self.log_signal.emit(f"  🔄 触发限流，等待 30 秒...")
-                        time.sleep(30)
+                    if any(kw in err_str for kw in ('limit', '频', '429', 'too many', 'throttle')):
+                        rate_limit_hits += 1
+                        request_interval = min(max_interval, request_interval * 1.5)
+                        self.log_signal.emit(f"  🔄 触发限流，降速至 {request_interval:.2f}s/次 (第{rate_limit_hits}次)")
+                        time.sleep(5)
                         last_request_time = time.time()
-                    if failed_count <= 5:
+                    elif failed_count <= 5:
                         self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:40]}")
+
+                # 连续成功可逐步提速
+                if success_count > 0 and success_count % 200 == 0 and request_interval > min_interval * 2:
+                    request_interval = max(min_interval, request_interval * 0.8)
 
                 # 进度
                 if i % 50 == 0 or i == len(need_download):
