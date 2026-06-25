@@ -204,14 +204,18 @@ class TushareDownloadThread(QThread):
             pro = self._get_tushare_pro()
             self.log_signal.emit("正在测试连接...")
 
-            # 测试接口
-            df = pro.daily(ts_code='000001.SZ', trade_date='20240101', fields='ts_code,close')
+            # 测试接口：查最近一个交易日（避免假日空数据）
+            today = datetime.now().strftime('%Y%m%d')
+            df = pro.daily(ts_code='000001.SZ', trade_date='', fields='ts_code,close')
+            # fallback: 直接测 token 是否有效
+            if df is None or df.empty:
+                df = pro.trade_cal(exchange='SSE', start_date='20240102', end_date='20240105', is_open=1)
 
             if df is not None and not df.empty:
-                self.log_signal.emit("✅ 连接测试成功！")
+                self.log_signal.emit("✅ 连接测试成功！Token 有效")
                 self.finished_signal.emit({'success': True, 'message': '连接成功'})
             else:
-                self.error_signal.emit("连接测试失败：返回空数据")
+                self.error_signal.emit("连接测试失败：Token 无效或网络异常")
         except Exception as e:
             error_msg = f"连接测试失败: {str(e)}"
             self.log_signal.emit(f"❌ {error_msg}")
