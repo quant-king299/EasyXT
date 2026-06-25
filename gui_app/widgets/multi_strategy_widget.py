@@ -395,8 +395,13 @@ class MultiStrategyWidget(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
 
-        # 填充策略行
-        sorted_names = sorted(STRATEGY_INFO.keys(),
+        # 填充策略行（仅显示本地已安装的策略）
+        available = []
+        for name in STRATEGY_INFO:
+            script = PROJECT_ROOT / "strategies" / "quant_strategies" / f"run_{name}.py"
+            if script.exists():
+                available.append(name)
+        sorted_names = sorted(available,
                               key=lambda n: STRATEGY_INFO[n][1], reverse=True)
         self.table.setRowCount(len(sorted_names))
         self._strategy_rows = {}  # name → row index
