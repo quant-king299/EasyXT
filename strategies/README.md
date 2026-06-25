@@ -92,3 +92,49 @@ class MyStrategy(BaseStrategy):
 ```
 
 详见 [策略基类模板](./base/strategy_template.py)。
+
+---
+
+## 多策略管理（GUI）
+
+GUI 的「多策略管理」标签页会自动扫描 `strategies/` 目录下的策略。
+
+### 如何让你的策略出现在界面中
+
+1. 在 `strategies/` 下创建 `run_xxx.py`
+2. 文件顶部写元信息注释：
+
+```python
+#!/usr/bin/env python3
+# 名称: 双均线交叉
+# 优先级: 5
+# 调度: daily 09:35
+```
+
+| 字段 | 说明 | 示例 |
+|------|------|------|
+| `名称` | 界面中文名 | `双均线交叉` |
+| `优先级` | 1-10，越大越靠前 | `5` |
+| `调度` | `daily HH:MM` 或 `interval N` | `daily 09:35` |
+
+3. 实现 `main()` 函数：
+
+```python
+def main():
+    print("策略开始执行...")
+    # 你的逻辑
+    print("策略执行完成")
+
+if __name__ == "__main__":
+    main()
+```
+
+4. 打开 GUI → 多策略管理 → 策略自动出现 ✅
+
+### 便捷创建
+
+点击界面中的「📝 新建策略」按钮，输入名称即可自动生成模板。
+
+### 示例
+
+见 `strategies/run_demo_ma_cross.py`
