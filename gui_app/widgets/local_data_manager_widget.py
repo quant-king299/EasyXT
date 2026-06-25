@@ -778,7 +778,7 @@ class DataDownloadThread(QThread):
 
             if needs_update.empty:
                 self.log_signal.emit(f"✅ 所有股票数据都是最新的（截至{today}）")
-                self.finished_signal({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
+                self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
                 return
 
             # 为每只股票计算需要补充的日期范围
@@ -791,7 +791,7 @@ class DataDownloadThread(QThread):
 
             if needs_update.empty:
                 self.log_signal.emit(f"✅ 所有股票数据都是最新的")
-                self.finished_signal({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
+                self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'task_type': 'backfill_history'})
                 return
 
             stock_codes = needs_update['stock_code'].tolist()
