@@ -310,7 +310,7 @@ _strategy_overrides: Dict[str, dict] = {}
 def get_strategy_info(name: str):
     """获取策略元信息 (display_name, priority, sched_type, sched_val)"""
     if name in STRATEGY_INFO:
-        return get_strategy_info(name)
+        return STRATEGY_INFO[name]
     # 用户自定义策略：保守默认值
     return (name, 1, "daily", "09:30")
 
