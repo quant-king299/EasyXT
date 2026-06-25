@@ -399,18 +399,17 @@ class TushareDownloadThread(QThread):
                         df_insert = df[['stock_code', 'date', 'circ_mv', 'total_mv', 'close', 'pe', 'pb', 'turnover_rate']].copy()
                         df_insert = df_insert.fillna(0)
 
-                        # ✨ 使用to_sql的APPEND模式（最快的方法！）
+                        # DuckDB 原生写入（避免 pandas to_sql 兼容性问题）
                         try:
-                            df_insert.to_sql(
-                                'stock_market_cap',
-                                conn,
-                                if_exists='append',
-                                index=False,
-                                method='multi'  # 多行插入，速度最快
-                            )
+                            conn.register('_tmp_insert', df_insert)
+                            conn.execute("""
+                                INSERT OR REPLACE INTO stock_market_cap
+                                SELECT * FROM _tmp_insert
+                            """)
+                            conn.unregister('_tmp_insert')
                             insert_count = len(df_insert)
-                        except Exception as sql_error:
-                            # to_sql失败，回退到executemany
+                        except Exception:
+                            conn.unregister('_tmp_insert')
                             insert_data = [tuple(row) for row in df_insert.itertuples(index=False, name=None)]
                             conn.executemany("""
                                 INSERT OR REPLACE INTO stock_market_cap
@@ -1113,7 +1112,9 @@ class TushareDownloadThread(QThread):
                                 'created_at', 'updated_at']
                         df = df[cols]
 
-                        df.to_sql('stock_daily', conn, if_exists='append', index=False, method='multi')
+                        conn.register('_tmp_daily', df)
+                        conn.execute("INSERT OR REPLACE INTO stock_daily SELECT * FROM _tmp_daily")
+                        conn.unregister('_tmp_daily')
 
                         total_inserted += len(df)
                         success_count += 1
