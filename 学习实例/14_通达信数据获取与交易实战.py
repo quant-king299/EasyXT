@@ -1097,7 +1097,7 @@ def main():
      [保存] 已保存到: my_favorites.txt
 
 3. 运行自动下单:
-   python 学习实例/11_通达信数据获取与交易实战.py
+   python 学习实例/14_通达信数据获取与交易实战.py
 
    脚本会自动:
    - 读取 my_favorites.txt
@@ -1126,7 +1126,7 @@ def main():
    - 确定保存
 
 3. 运行自动下单脚本:
-   python 学习实例/11_通达信数据获取与交易实战.py
+   python 学习实例/14_通达信数据获取与交易实战.py
 
 
 方式三: 手动维护股票列表（简单灵活）
@@ -1139,7 +1139,7 @@ def main():
    ...
 
 2. 运行自动下单:
-   python 学习实例/11_通达信数据获取与交易实战.py
+   python 学习实例/14_通达信数据获取与交易实战.py
 
 
 交易配置说明:
@@ -1175,7 +1175,7 @@ def main():
         print("  1. 在通达信中添加自选股（F6）")
         print("  2. 运行: python tools/parse_tdx_zixg.py")
         print("  3. 检查: my_favorites.txt 文件")
-        print("  4. 运行: python 学习实例/11_通达信数据获取与交易实战.py")
+        print("  4. 运行: python 学习实例/14_通达信数据获取与交易实战.py")
         print("  5. 确认后自动批量下单")
 
         print("\n[TIP] 通达信量化 + EasyXT = 个人量化最优解!")
@@ -1512,7 +1512,7 @@ services:
 
 第二步: 启动自动交易脚本（每天一次）
 ─────────────────────────────────────────
-python 学习实例/11_通达信数据获取与交易实战.py
+python 学习实例/14_通达信数据获取与交易实战.py
 
 第三步: 享受全自动（完全解放双手）
 ─────────────────────────────────────────
@@ -1573,6 +1573,286 @@ python 学习实例/11_通达信数据获取与交易实战.py
 5. 使用多种预警条件（分散风险）
     """)
 
+
+    # ================================================================
+    # 示例6: 市场快照、股票信息、交易数据（新版API v1.0.12）
+    # ================================================================
+    print("\n" + "="*70)
+    print("  【示例6】新版API：市场快照、基础信息、交易数据")
+    print("="*70)
+
+    from easy_xt.tdx_client import TdxClient
+
+    with TdxClient() as client:
+        # ---- 6.1 市场快照（实时行情） ----
+        print("\n[6.1] 市场快照（get_market_snapshot）")
+        print("-"*70)
+        try:
+            snapshot = client.tq.get_market_snapshot(stock_code='688318.SH', field_list=[])
+            if snapshot:
+                print(f"  [OK] 快照获取成功，字段数: {len(snapshot)}")
+                for key, value in list(snapshot.items())[:8]:
+                    print(f"    {key}: {value}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 6.2 股票基础信息（免费财务概要） ----
+        print("\n[6.2] 基础财务信息（get_stock_info）")
+        print("-"*70)
+        print("  免费！不需要购买专业财务数据权限")
+        try:
+            stock_info = client.tq.get_stock_info(stock_code='688318.SH', field_list=[])
+            if isinstance(stock_info, dict):
+                for i, (k, v) in enumerate(stock_info.items()):
+                    if i < 6:
+                        print(f"    {k}: {v}")
+                    else:
+                        print(f"    ... 还有 {len(stock_info) - 6} 个字段")
+                        break
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 6.3 交易日历 ----
+        print("\n[6.3] 交易日历（get_trading_dates）")
+        print("-"*70)
+        try:
+            dates = client.tq.get_trading_dates(market='SH', start_time='20250601', count=10)
+            print(f"  [OK] 交易日: {dates}")
+        except Exception as e:
+            print(f"  [INFO] {e}（需先下载上证指数盘后数据）")
+
+        # ---- 6.4 分红送配 ----
+        print("\n[6.4] 分红送配（get_divid_factors）")
+        print("-"*70)
+        try:
+            divid = client.tq.get_divid_factors(stock_code='688318.SH', start_time='20240101')
+            print(f"  [OK] {divid}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 6.5 股本变动 ----
+        print("\n[6.5] 股本变动（get_gb_info）")
+        print("-"*70)
+        try:
+            gb = client.tq.get_gb_info(stock_code='688318.SH', date_list=['20240101','20250601'], count=2)
+            print(f"  [OK] {gb}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 6.6 批量获取价格成交量 ----
+        print("\n[6.6] 批量获取价格成交量（get_pricevol）")
+        print("-"*70)
+        try:
+            stocks = client.tq.get_stock_list('23')
+            pv = client.tq.get_pricevol(stock_list=stocks[:3])
+            print(f"  [OK] 沪深300前3只: {pv}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 6.7 检索证券信息 ----
+        print("\n[6.7] 检索证券信息（get_match_stkinfo）")
+        print("-"*70)
+        try:
+            match = client.tq.get_match_stkinfo(key_word='茅台')
+            print(f"  [OK] 匹配结果: {match}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+    # ================================================================
+    # 示例7: 通达信公式调用（核心高级功能）
+    # ================================================================
+    print("\n" + "="*70)
+    print("  【示例7】通达信公式调用")
+    print("="*70)
+    print("""
+  [核心优势] 无需Python重写指标，直接调用通达信内置公式！
+
+  公式类型:
+    formula_zb()    — 技术指标公式（MACD、KDJ、RSI等）
+    formula_xg()    — 条件选股公式（UPN连涨数等）
+    formula_exp()   — 专家系统公式
+    formula_process_mul_zb() — 批量调用指标公式
+    formula_process_mul_xg() — 批量调用选股公式
+
+  可用公式列表查询:
+    formula_get_all(formula_type=0) — 0=指标 1=选股 2=专家 3=财务 4=行情 5=逻辑
+    """)
+
+    with TdxClient() as client:
+        # ---- 7.1 获取可用公式列表 ----
+        print("\n[7.1] 获取客户端可用技术指标公式")
+        print("-"*70)
+        try:
+            formulas = client.tq.formula_get_all(formula_type=0)
+            if formulas:
+                print(f"  [OK] 可用技术指标公式: {len(formulas)} 个")
+                print(f"  前10个: {formulas[:10]}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 7.2 预置数据并调用公式 ----
+        print("\n[7.2] 设置数据并调用MACD公式")
+        print("-"*70)
+        try:
+            # Step 1: 获取K线数据
+            raw = client.tq.get_market_data(
+                stock_list=['688318.SH'], start_time='20250601', period='1d', count=20
+            )
+            # Step 2: 格式化数据
+            fmt = client.tq.formula_format_data(raw)
+            if fmt and '688318.SH' in fmt:
+                # Step 3: 设置公式数据源
+                client.tq.formula_set_data(
+                    stock_code='688318.SH', stock_period='1d',
+                    stock_data=fmt['688318.SH'], count=len(fmt['688318.SH'])
+                )
+                # Step 4: 调用MACD公式
+                macd = client.tq.formula_zb(formula_name='MACD', formula_arg='12,26,9', xsflag=6)
+                print(f"  [OK] MACD结果: {macd}")
+                # Step 5: 调用选股公式
+                xg = client.tq.formula_xg(formula_name='UPN', formula_arg='3')
+                print(f"  [OK] 选股结果(连涨3天): {xg}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+    # ================================================================
+    # 示例8: 板块管理 + 消息预警交互
+    # ================================================================
+    print("\n" + "="*70)
+    print("  【示例8】板块管理 + 消息预警交互")
+    print("="*70)
+
+    with TdxClient() as client:
+        # ---- 8.1 获取股票所属板块 ----
+        print("\n[8.1] 查询股票所属板块（get_relation）")
+        print("-"*70)
+        try:
+            rel = client.tq.get_relation(stock_code='688318.SH')
+            print(f"  [OK] 688318.SH 所属板块: {rel}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 8.2 获取用户自定义板块 ----
+        print("\n[8.2] 用户自定义板块（get_user_sector）")
+        print("-"*70)
+        try:
+            user_sec = client.tq.get_user_sector()
+            print(f"  [OK] 自定义板块: {user_sec}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 8.3 发送消息到客户端 ----
+        print("\n[8.3] 发送消息到TQ策略界面（send_message）")
+        print("-"*70)
+        try:
+            msg = f"EasyXT运行中 | {datetime.now().strftime('%H:%M:%S')} | 股票:688318.SH"
+            client.tq.send_message(msg)
+            print(f"  [OK] 消息已发送到客户端TQ策略界面")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        # ---- 8.4 发送预警信号 ----
+        print("\n[8.4] 发送预警信号（send_warn）")
+        print("-"*70)
+        print("  参数说明: bs_flag_list: 0=买 1=卖 2=未知 | warn_type: 0=常规预警")
+        try:
+            client.tq.send_warn(
+                stock_list=['688318.SH'], time_list=['20250625150000'],
+                price_list=['65.50'], close_list=['65.00'], volum_list=['50000'],
+                bs_flag_list=['0'], warn_type_list=['0'],
+                reason_list=['MACD金叉买入信号'], count=1
+            )
+            print(f"  [OK] 预警信号已发送")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+    # ================================================================
+    # 示例9: TdxQuant内置交易接口
+    # ================================================================
+    print("\n" + "="*70)
+    print("  【示例9】TdxQuant内置交易接口（v1.0.12新增）")
+    print("="*70)
+    print("""
+  [说明] 新版TdxQuant支持内置交易，可替代EasyXT交易模块
+
+  交易函数:
+    stock_account()         — 获取资金账户句柄
+    query_stock_asset()     — 查询账户资产
+    query_stock_positions() — 查询持仓
+    query_stock_orders()    — 查询今日委托
+    order_stock()           — 下单（买入/卖出）
+    cancel_order_stock()    — 撤单
+
+  [前提] 需在通达信客户端登录交易账户
+    """)
+
+    with TdxClient() as client:
+        print("\n[9.1] 获取资金账户")
+        print("-"*70)
+        try:
+            account = client.tq.stock_account(account="", account_type="STOCK")
+            print(f"  [OK] 账户句柄: {account}")
+
+            print("\n[9.2] 查询账户资产")
+            asset_info = client.tq.query_stock_asset(account_id=account)
+            print(f"  [OK] 资产: {asset_info}")
+
+            print("\n[9.3] 查询持仓")
+            pos = client.tq.query_stock_positions(account_id=account)
+            if pos:
+                print(f"  [OK] 持仓 {len(pos)} 只:")
+                for p in pos[:5]:
+                    print(f"    {p.get('Code','N/A')}: {p.get('Amount',0)}股")
+            else:
+                print(f"  当前无持仓")
+
+            print("\n[9.4] 查询今日委托")
+            orders = client.tq.query_stock_orders(account_id=account, stock_code="")
+            if orders:
+                print(f"  [OK] 委托 {len(orders)} 笔")
+            else:
+                print(f"  今日无委托")
+
+        except Exception as e:
+            print(f"  [INFO] 需在通达信客户端登录交易账户: {e}")
+
+    # ================================================================
+    # 示例10: 数据刷新 + 可转债/新股/IPO
+    # ================================================================
+    print("\n" + "="*70)
+    print("  【示例10】数据刷新缓存 + 可转债/新股数据")
+    print("="*70)
+
+    with TdxClient() as client:
+        print("\n[10.1] 可转债基础信息（get_kzz_info）")
+        print("-"*70)
+        try:
+            kzz = client.tq.get_kzz_info(stock_code='123054.SZ', field_list=[])
+            print(f"  [OK] {kzz}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        print("\n[10.2] 新股申购信息（get_ipo_info）")
+        print("-"*70)
+        try:
+            ipo = client.tq.get_ipo_info(ipo_type=2, ipo_date=1)
+            print(f"  [OK] {ipo}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        print("\n[10.3] 跟踪指数ETF（get_trackzs_etf_info）")
+        print("-"*70)
+        try:
+            etf = client.tq.get_trackzs_etf_info(zs_code='950162.CSI')
+            print(f"  [OK] {etf}")
+        except Exception as e:
+            print(f"  [INFO] {e}")
+
+        print("\n[10.4] 在客户端中打开功能/URL（exec_to_tdx）")
+        print("-"*70)
+        print(f"  [跳过] 示例: exec_to_tdx(url='...')")
+
+    # 总结
     # 总结
     print("\n" + "="*70)
     print("  总结")
@@ -1623,6 +1903,34 @@ python 学习实例/11_通达信数据获取与交易实战.py
    - 无需每天手动更新
    - 盘中实时响应，立即交易
    - 完全解放双手
+
+8. 【示例6】新版API数据接口 ⭐新增
+   - 市场快照（实时行情）
+   - 基础财务信息（免费，无需购买专业财务数据）
+   - 交易日历、分红送配、股本变动
+   - 批量获取价格成交量
+
+9. 【示例7】通达信公式调用 ⭐新增
+   - 直接复用客户端内置技术指标（MACD/KDJ/RSI等）
+   - 调用条件选股公式
+   - 批量调用指标和选股公式
+   - 无需Python重写公式逻辑
+
+10. 【示例8】板块管理+消息预警 ⭐新增
+    - 查询股票所属板块关系
+    - 发送消息到TQ策略界面
+    - 发送预警信号到客户端
+
+11. 【示例9】TdxQuant内置交易接口 ⭐新增
+    - 获取账户、查询资产持仓
+    - 下单/撤单操作
+    - 替代EasyXT交易模块的备选方案
+
+12. 【示例10】可转债/新股/ETF数据 ⭐新增
+    - 可转债基础信息
+    - 新股申购信息
+    - 跟踪指数ETF
+    - 证券信息检索
 
 
 [TIP] 使用建议:

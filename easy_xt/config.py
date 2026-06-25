@@ -59,6 +59,9 @@ class Config:
                 'possible_paths': QMT_POSSIBLE_PATHS,
                 'userdata_subpath': QMT_USERDATA_SUBPATH,
                 'detected_path': None
+            },
+            'tdx': {
+                'path': _read_env('TDX_PATH', default='')
             }
         }
     

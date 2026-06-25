@@ -1,0 +1,8 @@
+# 忽略 user 目录（使用通达信安装目录的插件）
+user/
+
+# 保留 data 和 file 目录（本地数据存储）
+!data/
+!file/
+!data/*
+!file/*

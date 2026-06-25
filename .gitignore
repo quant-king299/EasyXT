@@ -145,6 +145,14 @@ my_favorites.txt
 *_favorites.txt
 selected_stocks.txt
 
+# 通达信插件（使用通达信安装目录的插件，本地不放代码）
+PYPlugins/user/
+# 但保留本地数据目录
+!PYPlugins/data/
+!PYPlugins/file/
+!PYPlugins/py_strategy.cfg
+!PYPlugins/.gitignore
+
 # 临时文件
 temp/
 tmp/
@@ -457,3 +465,5 @@ tools/qmt_bond_list.txt
 101因子/101因子分析平台/src/cb_backtest/cb_backtest_engine.py.tmp.23928.1777516463913
 tools/duckdb_to_qlib.py
 优化分析报告.md
+down_queue_*
+PYPlugins/TdxQuant_量化平台文档.md

@@ -142,111 +142,46 @@ class TdxClient:
 
 
     def _find_tdx_user_path(self, custom_path: Optional[str] = None) -> Path:
-
         """
-
         查找通达信user插件目录
 
-
-
-        优先级：
-
-        1. 用户指定的路径
-
-        2. 项目根目录下的PYPlugins/user（项目本地插件，推荐）
-
-        3. 通达信安装目录（仅作备用）
-
-
+        路径来源（按优先级）：
+        1. 用户指定的路径（custom_path 参数）
+        2. 环境变量 TDX_PATH
+        3. 抛出异常，提示用户配置
 
         Returns:
-
             Path: user目录的路径
-
         """
-
         if custom_path:
-
             return Path(custom_path)
 
+        # 从环境变量读取通达信路径
+        from easy_xt.config import config
+        tdx_path = config.get('tdx.path', default=None)
 
+        if not tdx_path:
+            raise FileNotFoundError(
+                "未配置通达信路径！\n\n"
+                "请在 .env 文件中添加以下配置：\n"
+                "TDX_PATH=C:\\new_tdx64\n\n"
+                "或通过代码指定：TdxClient(tdx_user_path='你的通达信路径/PYPlugins/user')"
+            )
 
-        # 当前项目根目录的PYPlugins/user（优先使用项目本地插件）
+        # 拼接 PYPlugins/user 路径
+        tdx_user_path = Path(tdx_path) / 'PYPlugins' / 'user'
 
-        # tdx_client.py 位于 easy_xt/tdx_client.py
+        if not tdx_user_path.exists():
+            raise FileNotFoundError(
+                f"通达信插件目录不存在：{tdx_user_path}\n\n"
+                f"请检查：\n"
+                f"  1. TDX_PATH 配置是否正确：{tdx_path}\n"
+                f"  2. 通达信是否已安装在该路径\n"
+                f"  3. PYPlugins/user 目录是否存在"
+            )
 
-        # parents[0] = easy_xt
-
-        # parents[1] = 项目根目录
-
-        project_root = Path(__file__).resolve().parents[1]
-
-        project_user_path = project_root / "PYPlugins" / "user"
-
-
-
-        logger.debug(f"[DEBUG] 项目根目录: {project_root}")
-        logger.debug(f"[DEBUG] 查找项目插件: {project_user_path}")
-
-
-        if project_user_path.exists():
-
-            logger.info(f"[OK] 使用项目本地通达信插件: {project_user_path}")
-            return project_user_path
-
-
-
-        # 常见安装位置（优先使用通达信安装目录）
-
-        logger.info("[INFO] 查找通达信安装目录...")
-        common_paths = [
-
-            Path("D:/new_tdx64.2/PYPlugins"),      # 用户当前使用的通达信
-
-            Path("D:/new_tdx64/PYPlugins"),        # 备选通达信路径
-
-            Path("H:/new_tdx64/PYPlugins/user"),
-
-            Path("C:/new_tdx64/PYPlugins/user"),
-
-            Path("E:/new_tdx64/PYPlugins/user"),
-
-        ]
-
-
-
-        for path in common_paths:
-
-            if path.exists():
-
-                logger.info(f"[OK] 使用通达信安装目录: {path}")
-                return path
-
-
-
-        # 如果通达信安装目录不存在，尝试项目本地插件
-
-        logger.info("[INFO] 通达信安装目录不存在，尝试项目本地插件...")
-        project_user_path = project_root / "PYPlugins" / "user"
-
-
-
-        if project_user_path.exists():
-
-            logger.info(f"[OK] 使用项目本地插件: {project_user_path}")
-            return project_user_path
-
-
-
-        raise FileNotFoundError(
-
-            "找不到通达信user插件目录！\n"
-
-            f"请确认项目目录 {project_user_path} 存在\n"
-
-            "或者手动指定路径：TdxClient(tdx_user_path='你的路径/PYPlugins/user')"
-
-        )
+        logger.info(f"[OK] 使用通达信插件目录: {tdx_user_path}")
+        return tdx_user_path
 
 
 
