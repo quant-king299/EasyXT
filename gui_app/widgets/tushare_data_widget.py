@@ -1072,12 +1072,22 @@ class TushareDownloadThread(QThread):
             failed_count = 0
             need_download = incremental_list + new_list
 
+            # 批量预取：一次 API 调用取尽量多只股票（避免逐只调用被限流）
+            last_request_time = 0
+            request_interval = 0.35  # Tushare 免费版 ~200次/分钟 = 0.3s/次，留余量
+
             for i, ts_code in enumerate(need_download, 1):
                 if not self._is_running:
                     self._is_stopped = True
                     break
 
                 try:
+                    # 限流控制
+                    elapsed = time.time() - last_request_time
+                    if elapsed < request_interval:
+                        time.sleep(request_interval - elapsed)
+                    last_request_time = time.time()
+
                     # 增量下载：从已有最新日期+1开始
                     if ts_code in existing_map and ts_code not in new_list:
                         stock_start = (existing_map[ts_code] + timedelta(days=1)).strftime('%Y%m%d')
@@ -1106,9 +1116,19 @@ class TushareDownloadThread(QThread):
                         success_count += 1
                     else:
                         failed_count += 1
+                        if failed_count <= 3:
+                            self.log_signal.emit(f"  ⚠️ {ts_code}: 返回空数据")
 
                 except Exception as e:
                     failed_count += 1
+                    if failed_count <= 3:
+                        self.log_signal.emit(f"  ❌ {ts_code}: {str(e)[:80]}")
+                    # 遇到限流错误时等待更久
+                    err_str = str(e).lower()
+                    if 'limit' in err_str or '频' in str(e) or '429' in str(e):
+                        self.log_signal.emit(f"  🔄 触发限流，等待 30 秒...")
+                        time.sleep(30)
+                        last_request_time = time.time()
                     if failed_count <= 5:
                         self.log_signal.emit(f"  {ts_code} 失败: {str(e)[:40]}")
 
