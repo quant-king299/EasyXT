@@ -286,39 +286,115 @@ class StrategyCoordinator:
         if self.run_mode == "live" and self.api:
             self._execute(filtered_sells, filtered_buys, account_id=self.account_id)
 
+    def _query_asset(self) -> float:
+        """查询账户可用资金（优先 xttrader，降级信号桥接）"""
+        try:
+            if self.api and self.account_id:
+                asset = self.api.trade.get_account_asset(self.account_id)
+                if asset and asset.get('cash', 0) > 0:
+                    cash = float(asset['cash'])
+                    logger.info(f"[资产] 可用资金: {cash:,.0f}")
+                    return cash
+        except Exception:
+            pass
+
+        try:
+            import sys as _sys
+            _bridge_dir = os.path.normpath(os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                '..', 'EasyXT_Strategies_v2.2', 'strategies', 'quant_strategies', 'qmt_bridge'))
+            if _bridge_dir not in _sys.path:
+                _sys.path.insert(0, _bridge_dir)
+            from qmt_signal_bridge import QmtSignalBridge
+            bridge = QmtSignalBridge()
+            data = bridge.query_asset(account_id=self.account_id or '', timeout=10)
+            if data and isinstance(data, dict):
+                cash = float(data.get('available_cash', 0))
+                if cash > 0:
+                    logger.info(f"[资产] 信号桥接: 可用资金 {cash:,.0f}")
+                    return cash
+        except Exception as e:
+            logger.debug(f"[资产] 查询失败: {e}")
+
+        return 0.0
+
+    def _calc_buy_volume(self, code: str, price: float, cash_per_stock: float) -> int:
+        """
+        根据每股可用资金计算买入量（100股整数倍，科创板200股起）
+
+        Args:
+            code: 股票代码
+            price: 价格
+            cash_per_stock: 该标的可用资金
+
+        Returns:
+            买入股数
+        """
+        board_min = 200 if code.startswith('689') else 100  # 科创板200股起
+        unit = 100  # A股最小交易单位
+
+        if price <= 0 or cash_per_stock <= 0:
+            return board_min
+
+        # 最大可买 = 资金 / 价格，取整到100股
+        max_shares = int(cash_per_stock / price / unit) * unit
+        if max_shares < board_min:
+            return board_min  # 资金不够也至少买1手
+        return max_shares
+
     def _execute(self, sells, buys, account_id):
-        """执行交易并更新虚拟簿记"""
+        """执行交易并更新虚拟簿记（动态计算买卖量）"""
         acc = account_id
+
+        # ── 查可用资金，等权重分配 ──
+        available_cash = self._query_asset()
+        num_buy_strategies = len(set(sname for sname, _ in buys)) if buys else 1
+        num_buy_stocks = len(buys) if buys else 1
+        cash_per_stock = available_cash / max(num_buy_stocks, 1) if available_cash > 0 else 0
+        if cash_per_stock > 0:
+            logger.info(f"[资金] 总可用 {available_cash:,.0f}, 买入{num_buy_stocks}只, 每只{cash_per_stock:,.0f}")
+
+        # ── 卖出：用簿记中的实际持仓量 ──
         for sname, s in sells:
             code = _extract_code(s)
             price = s.get("price", 0)
             if not code or price <= 0:
                 continue
-            volume = 200 if code.startswith('689') else 100
+            # 从簿记获取该策略持有的真实数量
+            if self.bookkeeper:
+                pos = self.bookkeeper.get_positions(sname)
+                if not pos.empty:
+                    row = pos[pos['code'] == code]
+                    volume = int(row['volume'].iloc[0]) if not row.empty else 100
+                else:
+                    volume = 100
+            else:
+                volume = 100
             price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
                 self.api.trade.sell(account_id=acc, code=code,
                     volume=volume, price=price, price_type="limit")
-                # 虚拟簿记：扣减持仓
                 if self.bookkeeper:
                     self.bookkeeper.record_sell(sname, code, volume, price)
-                logger.info(f"  [卖出] {sname}: {code} @{price} vol={volume}")
+                logger.info(f"  [卖出] {sname}: {code} @{price:.3f} vol={volume}")
             except Exception as e:
                 logger.info(f"  [卖出失败] {sname}: {code}: {e}")
+
+        # ── 买入：按可用资金动态计算 ──
         for sname, b in buys:
             code = _extract_code(b)
             price = b.get("price", 0)
             if not code or price <= 0:
                 continue
-            volume = 200 if code.startswith('689') else 100
+            volume = self._calc_buy_volume(code, price, cash_per_stock)
             price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
                 self.api.trade.buy(account_id=acc, code=code,
                     volume=volume, price=price, price_type="limit")
-                # 虚拟簿记：增加持仓
                 if self.bookkeeper:
                     self.bookkeeper.record_buy(sname, code, volume, price)
-                logger.info(f"  [买入] {sname}: {code} @{price} vol={volume}")
+                amount = volume * price
+                logger.info(f"  [买入] {sname}: {code} @{price:.3f} vol={volume} ({amount:,.0f}元)")
             except Exception as e:
                 logger.info(f"  [买入失败] {sname}: {code}: {e}")
 
