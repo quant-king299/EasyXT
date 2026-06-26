@@ -249,6 +249,51 @@ class VirtualBookkeeper:
             }
         return result
 
+    # ───── 股票名称查询 ─────
+
+    # 常见可转债/ETF/股票名称映射（本地缓存，快速查询）
+    _NAME_CACHE = None
+
+    @classmethod
+    def _load_name_cache(cls) -> dict:
+        """从 DuckDB 加载股票名称缓存"""
+        if cls._NAME_CACHE is not None:
+            return cls._NAME_CACHE
+        cls._NAME_CACHE = {}
+        try:
+            import duckdb
+            db_path = os.environ.get('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+            con = duckdb.connect(db_path, read_only=True)
+            # 从 stock_daily 提取所有不重复的代码
+            codes = con.execute("SELECT DISTINCT stock_code FROM stock_daily").df()
+            # Tushare 可能下载过 stock_basic
+            try:
+                names = con.execute("SELECT ts_code, name FROM stock_basic").df()
+                for _, r in names.iterrows():
+                    cls._NAME_CACHE[str(r['ts_code'])] = str(r['name'])
+            except Exception:
+                pass
+            con.close()
+        except Exception:
+            pass
+        return cls._NAME_CACHE
+
+    @classmethod
+    def get_stock_name(cls, code: str) -> str:
+        """获取股票名称"""
+        names = cls._load_name_cache()
+        # 直接匹配
+        if code in names:
+            return names[code]
+        # 去掉后缀匹配
+        plain = code.replace('.SH', '').replace('.SZ', '')
+        if plain in names:
+            return names[plain]
+        for k, v in names.items():
+            if k.startswith(plain):
+                return v
+        return ''
+
     def clear_strategy(self, strategy_name: str):
         """清空某个策略的虚拟持仓"""
         if strategy_name in self.data.get("strategies", {}):

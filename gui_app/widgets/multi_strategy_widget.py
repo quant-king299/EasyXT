@@ -941,15 +941,17 @@ class MultiStrategyWidget(QWidget):
 
         # ── 表格 ──
         table = QTableWidget()
-        table.setColumnCount(4)
-        table.setHorizontalHeaderLabels(["股票代码", "可用数量(股)", "成本价", "归属策略"])
+        table.setColumnCount(5)
+        table.setHorizontalHeaderLabels(["代码", "名称", "可用数量", "成本价", "归属策略"])
         table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
-        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
-        table.setColumnWidth(0, 120)
-        table.setColumnWidth(1, 100)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+        table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+        table.setColumnWidth(0, 110)
         table.setColumnWidth(2, 80)
+        table.setColumnWidth(3, 80)
+        table.setColumnWidth(4, 180)
         table.verticalHeader().setVisible(False)
 
         # 查询当前簿记中每个code归属哪个策略
@@ -966,9 +968,11 @@ class MultiStrategyWidget(QWidget):
 
         for i, code in enumerate(all_codes):
             info = real_positions[code]
+            name = VirtualBookkeeper.get_stock_name(code)
             table.setItem(i, 0, QTableWidgetItem(code))
-            table.setItem(i, 1, QTableWidgetItem(str(info['volume'])))
-            table.setItem(i, 2, QTableWidgetItem(str(info['cost'])))
+            table.setItem(i, 1, QTableWidgetItem(name))
+            table.setItem(i, 2, QTableWidgetItem(str(info['volume'])))
+            table.setItem(i, 3, QTableWidgetItem(str(info['cost'])))
 
             combo = QComboBox()
             combo.addItem("手动(不归属策略)", "_manual")
@@ -981,7 +985,7 @@ class MultiStrategyWidget(QWidget):
             if idx >= 0:
                 combo.setCurrentIndex(idx)
             combos[code] = combo
-            table.setCellWidget(i, 3, combo)
+            table.setCellWidget(i, 4, combo)
 
         layout.addWidget(table)
 
@@ -1050,24 +1054,29 @@ class MultiStrategyWidget(QWidget):
             layout.addWidget(summary)
 
             table = QTableWidget()
-            table.setColumnCount(4)
-            table.setHorizontalHeaderLabels(["代码", "数量(股)", "成本价", "市值"])
-            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
-            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+            table.setColumnCount(5)
+            table.setHorizontalHeaderLabels(["代码", "名称", "数量", "成本价", "市值"])
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
             table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
-            table.setColumnWidth(1, 80)
-            table.setColumnWidth(2, 80)
-            table.setColumnWidth(3, 100)
+            table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
+            table.setColumnWidth(0, 110)
+            table.setColumnWidth(2, 70)
+            table.setColumnWidth(3, 75)
+            table.setColumnWidth(4, 90)
             table.verticalHeader().setVisible(False)
             table.setRowCount(len(pos))
 
             for i, (_, row) in enumerate(pos.iterrows()):
-                table.setItem(i, 0, QTableWidgetItem(str(row['code'])))
-                table.setItem(i, 1, QTableWidgetItem(str(int(row['volume']))))
-                table.setItem(i, 2, QTableWidgetItem(f"{row['cost_price']:.3f}"))
+                code = str(row['code'])
+                name = VirtualBookkeeper.get_stock_name(code)
+                table.setItem(i, 0, QTableWidgetItem(code))
+                table.setItem(i, 1, QTableWidgetItem(name))
+                table.setItem(i, 2, QTableWidgetItem(str(int(row['volume']))))
+                table.setItem(i, 3, QTableWidgetItem(f"{row['cost_price']:.3f}"))
                 mv = int(row['volume']) * float(row['cost_price'])
-                table.setItem(i, 3, QTableWidgetItem(f"¥{mv:,.0f}"))
+                table.setItem(i, 4, QTableWidgetItem(f"¥{mv:,.0f}"))
 
             layout.addWidget(table)
 
