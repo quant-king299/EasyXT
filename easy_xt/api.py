@@ -405,52 +405,50 @@ class EasyXT:
 
     # ==================== 交易接口 ====================
     
-    def buy(self, 
-            account_id: str, 
-            code: str, 
-            volume: int, 
-            price: float = 0, 
+    def buy(self,
+            account_id: str,
+            code: str,
+            volume: int,
+            price: float = 0,
             price_type: str = 'market') -> Optional[int]:
         """
         买入股票
-        
+
         Args:
             account_id: 资金账号
             code: 股票代码
             volume: 买入数量
             price: 买入价格，市价单时可为0
             price_type: 价格类型，'market'市价, 'limit'限价
-            
+
         Returns:
             Optional[int]: 委托编号，失败返回None
         """
-        if not self._trade_connected:
-            ErrorHandler.log_error("交易服务未初始化")
-            return None
+        # 不做 _trade_connected 拦截——让 TradeAPI 内部判断
+        # 如果 xttrader 不可用但大QMT在运行，自动降级到信号桥接
         return self.trade.buy(account_id, code, volume, price, price_type)
-    
-    def sell(self, 
-             account_id: str, 
-             code: str, 
-             volume: int, 
-             price: float = 0, 
+
+    def sell(self,
+             account_id: str,
+             code: str,
+             volume: int,
+             price: float = 0,
              price_type: str = 'market') -> Optional[int]:
         """
         卖出股票
-        
+
         Args:
             account_id: 资金账号
             code: 股票代码
             volume: 卖出数量
             price: 卖出价格，市价单时可为0
             price_type: 价格类型，'market'市价, 'limit'限价
-            
+
         Returns:
             Optional[int]: 委托编号，失败返回None
         """
-        if not self._trade_connected:
-            ErrorHandler.log_error("交易服务未初始化")
-            return None
+        # 不做 _trade_connected 拦截——让 TradeAPI 内部判断
+        # 如果 xttrader 不可用但大QMT在运行，自动降级到信号桥接
         return self.trade.sell(account_id, code, volume, price, price_type)
 
     def quick_buy(self,
@@ -476,9 +474,7 @@ class EasyXT:
             >>> # 买入1000元的平安银行
             >>> order_id = api.quick_buy(account_id='123456', code='000001.SZ', amount=1000)
         """
-        if not self._trade_connected:
-            ErrorHandler.log_error("交易服务未初始化")
-            return None
+        # 不做 _trade_connected 拦截——buy() 内部会降级到信号桥接
 
         # 获取当前价格
         try:
@@ -531,9 +527,7 @@ class EasyXT:
             >>> # 卖出1000元的持仓股票
             >>> order_id = api.quick_sell(account_id='123456', code='000001.SZ', amount=1000)
         """
-        if not self._trade_connected:
-            ErrorHandler.log_error("交易服务未初始化")
-            return None
+        # 不做 _trade_connected 拦截——sell() 内部会降级到信号桥接
 
         try:
             # 获取当前持仓
@@ -592,9 +586,7 @@ class EasyXT:
         Returns:
             bool: 是否成功
         """
-        if not self._trade_connected:
-            ErrorHandler.log_error("交易服务未初始化")
-            return False
+        # 不做 _trade_connected 拦截——TradeAPI 内部会降级到信号桥接
         return self.trade.cancel_order(account_id, order_id)
     
     def get_account_asset(self, account_id: str) -> Optional[Dict[str, Any]]:

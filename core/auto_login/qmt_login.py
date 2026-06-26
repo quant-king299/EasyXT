@@ -57,6 +57,21 @@ class QMTAutoLogin:
         self.password = password or os.getenv('QMT_PASSWORD')
         self.data_dir = data_dir or os.getenv('QMT_DATA_DIR')
 
+        # 大QMT（完整版客户端）路径，用于检测是否已登录大QMT
+        big_qmt_path = os.getenv('QMT_EXE_PATH_BIG')
+        if big_qmt_path:
+            self.big_qmt_path = big_qmt_path
+        elif self.exe_path:
+            # 自动推导：XtMiniQmt.exe -> XtItClient.exe（同目录下）
+            exe_dir = os.path.dirname(self.exe_path)
+            derived = os.path.join(exe_dir, 'XtItClient.exe')
+            if os.path.exists(derived):
+                self.big_qmt_path = derived
+            else:
+                self.big_qmt_path = None
+        else:
+            self.big_qmt_path = None
+
         # 验证必要参数
         if not all([self.exe_path, self.password]):
             missing = []
@@ -72,6 +87,8 @@ class QMTAutoLogin:
             )
 
         self.logger.info(f"QMT路径: {self.exe_path}")
+        if self.big_qmt_path:
+            self.logger.info(f"大QMT路径: {self.big_qmt_path}")
 
     def _setup_logger(self) -> logging.Logger:
         """设置日志"""
@@ -101,7 +118,17 @@ class QMTAutoLogin:
             bool: 登录是否成功
         """
         try:
-            # 检查是否已运行
+            # [关键检测] 先检查大QMT（完整版客户端）是否已运行
+            # 如果大QMT已登录，则无需启动miniQMT，直接返回成功
+            if self._is_big_qmt_running():
+                self.logger.info("=" * 60)
+                self.logger.info("大QMT（XtItClient.exe）已在运行中")
+                self.logger.info("miniQMT与大QMT共享后端，无需重复登录miniQMT")
+                self.logger.info("跳过 miniQMT 自动登录")
+                self.logger.info("=" * 60)
+                return True
+
+            # 检查 miniQMT 是否已运行
             app = self._is_running()
             if app:
                 if restart:
@@ -196,7 +223,7 @@ class QMTAutoLogin:
             return None
 
     def _is_running(self) -> Optional[Application]:
-        """检查QMT是否正在运行"""
+        """检查QMT（miniQMT）是否正在运行"""
         try:
             return Application(backend="uia").connect(
                 path=self.exe_path,
@@ -204,6 +231,35 @@ class QMTAutoLogin:
             )
         except (ProcessNotFoundError, Exception):
             return None
+
+    def _is_big_qmt_running(self) -> bool:
+        """
+        检查大QMT（完整版客户端 XtItClient.exe）是否正在运行
+
+        如果大QMT已经登录运行，则无需再启动miniQMT自动登录。
+        大QMT和miniQMT共享同一后端，大QMT登录后miniQMT的API也可用。
+
+        Returns:
+            bool: 大QMT是否正在运行
+        """
+        if not self.big_qmt_path:
+            return False
+
+        try:
+            app = Application(backend="uia").connect(
+                path=self.big_qmt_path,
+                timeout=2
+            )
+            # 检查是否已登录（非登录界面）
+            if app and self._check_logged_in(app):
+                self.logger.info("检测到大QMT（XtItClient.exe）已运行且已登录")
+                return True
+            elif app:
+                self.logger.info("检测到大QMT（XtItClient.exe）正在运行（登录界面）")
+                return True
+            return False
+        except (ProcessNotFoundError, Exception):
+            return False
 
     def _check_logged_in(self, app: Application) -> bool:
         """检查是否已登录"""

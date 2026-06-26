@@ -170,8 +170,23 @@ class MainWindow(QMainWindow):
         """创建状态栏"""
         self.status_bar = QStatusBar()
         self.setStatusBar(self.status_bar)
-        
-        # 添加连接状态指示器
+
+        # ── 大QMT 状态标签 ──
+        self.big_qmt_status = QLabel("🔴 大QMT未检测")
+        self.big_qmt_status.setStyleSheet("""
+            QLabel {
+                background-color: #ff4444;
+                color: white;
+                padding: 4px 8px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+        """)
+        self.big_qmt_status.setToolTip("大QMT (XtItClient.exe) 运行状态\n大QMT 或 miniQMT 登录一个即可")
+        self.big_qmt_status.mousePressEvent = lambda e: self.check_connection_status()
+        self.status_bar.addPermanentWidget(self.big_qmt_status)
+
+        # ── MiniQMT 状态标签 ──
         self.connection_status = QLabel("🔴 MiniQMT未连接")
         self.connection_status.setStyleSheet("""
             QLabel {
@@ -181,23 +196,17 @@ class MainWindow(QMainWindow):
                 border-radius: 4px;
                 font-weight: bold;
             }
-            QLabel:hover {
-                background-color: #ff6666;
-                cursor: pointer;
-            }
         """)
-        # 添加提示文本
-        self.connection_status.setToolTip("点击刷新连接状态")
-        # 连接鼠标点击事件
+        self.connection_status.setToolTip("MiniQMT 数据连接状态\n点击刷新")
         self.connection_status.mousePressEvent = self.on_connection_status_clicked
-        
         self.status_bar.addPermanentWidget(self.connection_status)
+
         self.status_bar.showMessage("就绪")
 
-        # 检查MiniQMT连接状态（启动时延迟1秒检查）
+        # 启动时延迟1秒检查
         QTimer.singleShot(1000, self.check_connection_status)
 
-        # 定期检查连接状态（每30秒检查一次）
+        # 定期检查（每30秒一次，任意一个连上后自动停止）
         self.connection_check_timer = QTimer()
         self.connection_check_timer.timeout.connect(self.check_connection_status)
         self.connection_check_timer.start(30000)  # 30秒
@@ -207,92 +216,113 @@ class MainWindow(QMainWindow):
         logger.info("手动刷新连接状态...")
         self.check_connection_status()
 
+    def _check_big_qmt(self) -> bool:
+        """
+        检测大QMT是否在运行（轻量级，只查进程，不卡）
+
+        Returns:
+            bool: 大QMT (XtItClient.exe) 是否正在运行
+        """
+        try:
+            from core.auto_login.qmt_login import QMTAutoLogin
+            auto = QMTAutoLogin()
+            return auto._is_big_qmt_running()
+        except Exception as e:
+            logger.debug(f"大QMT检测失败: {e}")
+            return False
+
     def check_connection_status(self):
-        """检查MiniQMT连接状态"""
-        logger.info("\n" + "="*60)
-        logger.info("开始检查MiniQMT连接状态...")
-        logger.info("="*60)
+        """检查 QMT 连接状态（大QMT + MiniQMT）"""
+        # ── 1. 先检测大QMT（轻量，不卡）──
+        big_qmt_ok = self._check_big_qmt()
+        self._update_big_qmt_status(big_qmt_ok)
+
+        # ── 2. 如果大QMT已连，跳过 miniQMT 重检测，停止定时器 ──
+        if big_qmt_ok:
+            logger.info("✅ 大QMT已运行，跳过 miniQMT 检测")
+            self.connection_status.setText("⚪ MiniQMT (大QMT已接管)")
+            self.connection_status.setStyleSheet("""
+                QLabel {
+                    background-color: #888888;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
+            # 停止定时器——大QMT已连接，不再反复检测
+            self.connection_check_timer.stop()
+            self.status_bar.showMessage("大QMT已连接 ✓")
+            return
+
+        # ── 3. 大QMT未连，检测 MiniQMT ──
+        logger.info("大QMT未运行，开始检查MiniQMT...")
+        mini_connected = False
 
         try:
-            # 检查easy_xt是否可用
             if not EASYXT_AVAILABLE:
-                logger.info("❌ EasyXT不可用")
                 self.update_connection_status(False)
                 return
 
-            logger.info("✓ EasyXT可用")
+            api = easy_xt.get_api()
 
-            try:
-                api = easy_xt.get_api()
-                logger.info("✓ 成功获取API实例")
-            except Exception as e:
-                logger.info(f"❌ 获取API失败: {str(e)}")
-                self.update_connection_status(False)
-                return
-
-            # 检查data服务
             if not hasattr(api, 'data'):
-                logger.info("❌ API没有data属性")
                 self.update_connection_status(False)
                 return
-
-            logger.info("✓ API有data属性")
 
             # 初始化数据服务
-            logger.info("\n正在初始化数据服务...")
             try:
-                init_result = api.init_data()
-                if init_result:
-                    logger.info("✓ 数据服务初始化成功")
-                else:
-                    logger.info("ℹ️  数据服务初始化返回False")
-                    logger.info("ℹ️  GUI功能正常，可使用Tushare下载获取数据")
-            except Exception as e:
-                logger.info(f"ℹ️  数据服务初始化异常: {str(e)}")
-                logger.info("ℹ️  这不影响GUI使用，可以通过Tushare下载数据")
+                api.init_data()
+            except Exception:
+                pass
 
-            # 验证数据连接
-            logger.info("\n尝试验证数据连接...")
-            test_codes = ['000001.SZ']
-            connected = False
+            # 验证数据连接（只测一只股票，减少等待）
+            try:
+                price_df = api.data.get_current_price(['000001.SZ'])
+                if price_df is not None and hasattr(price_df, 'empty') and not price_df.empty:
+                    mini_connected = True
+            except Exception:
+                pass
 
-            for code in test_codes:
-                try:
-                    logger.info(f"  测试 {code}...")
-                    price_df = api.data.get_current_price([code])
-
-                    if price_df is not None and hasattr(price_df, 'empty') and not price_df.empty:
-                        connected = True
-                        logger.info(f"✓ 数据连接验证成功")
-                        break
-                    else:
-                        logger.info(f"  ℹ️  {code} 数据为空")
-
-                except Exception as e:
-                    # 只在有严重错误时才显示
-                    if "数据服务未连接" not in str(e):
-                        logger.info(f"  ℹ️  连接测试失败: {str(e)[:50]}")
-                    break  # 只测试一个代码就够了
-
-            logger.info("\n" + "="*60)
-            if connected:
-                logger.info("✅ MiniQMT已连接，可使用实时数据功能")
+            # ── 4. MiniQMT 连上了也停止定时器 ──
+            if mini_connected:
+                self.connection_check_timer.stop()
+                self.status_bar.showMessage("MiniQMT已连接 ✓")
             else:
-                logger.info("ℹ️ MiniQMT未连接，但GUI功能正常可用")
-                logger.info("ℹ️ 可以使用Tushare下载功能获取数据")
-            logger.info("="*60 + "\n")
-
-            self.update_connection_status(connected)
+                self.status_bar.showMessage("QMT未连接，请启动大QMT或MiniQMT")
 
         except Exception as e:
-            logger.info(f"\n❌ 检查连接状态异常: {str(e)}")
-            import traceback
-            logger.info(f"详细错误堆栈:\n{traceback.format_exc()}")
-            logger.info("="*60 + "\n")
-            self.update_connection_status(False)
+            logger.debug(f"MiniQMT检测异常: {e}")
+
+        self.update_connection_status(mini_connected)
+
+    def _update_big_qmt_status(self, running: bool):
+        """更新大QMT状态标签"""
+        if running:
+            self.big_qmt_status.setText("🟢 大QMT已运行")
+            self.big_qmt_status.setStyleSheet("""
+                QLabel {
+                    background-color: #00cc00;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
+        else:
+            self.big_qmt_status.setText("🔴 大QMT未检测")
+            self.big_qmt_status.setStyleSheet("""
+                QLabel {
+                    background-color: #ff4444;
+                    color: white;
+                    padding: 4px 8px;
+                    border-radius: 4px;
+                    font-weight: bold;
+                }
+            """)
 
     def update_connection_status(self, connected: bool):
-        """更新连接状态显示
+        """更新MiniQMT连接状态显示
 
         Args:
             connected: 是否已连接
@@ -308,7 +338,6 @@ class MainWindow(QMainWindow):
                     font-weight: bold;
                 }
             """)
-            self.status_bar.showMessage("MiniQMT已连接")
         else:
             self.connection_status.setText("🔴 MiniQMT未连接")
             self.connection_status.setStyleSheet("""
@@ -320,7 +349,6 @@ class MainWindow(QMainWindow):
                     font-weight: bold;
                 }
             """)
-            self.status_bar.showMessage("MiniQMT未连接，请检查QMT客户端是否启动")
 
     def closeEvent(self, a0):
         """关闭事件"""

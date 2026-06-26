@@ -101,6 +101,52 @@ except ImportError:
 from .utils import StockCodeUtils, ErrorHandler
 from .config import config
 
+# 大QMT信号桥接（xttrader 不可用时的降级方案）
+_signal_bridge = None
+_signal_bridge_checked = False
+
+
+def _get_signal_bridge():
+    """
+    获取大QMT信号桥接实例（懒加载）
+
+    仅在 xttrader 不可用且大QMT正在运行时才初始化。
+    信号桥接通过文件信号将交易指令传递给大QMT。
+    """
+    global _signal_bridge, _signal_bridge_checked
+
+    if _signal_bridge_checked:
+        return _signal_bridge
+
+    _signal_bridge_checked = True
+
+    try:
+        # 检查大QMT是否在运行
+        from core.auto_login.qmt_login import QMTAutoLogin
+        auto = QMTAutoLogin()
+        if not auto._is_big_qmt_running():
+            logger.info("[信号桥接] 大QMT未运行，不启用信号桥接")
+            return None
+
+        # 初始化信号桥接（知识星球专属，路径在外部策略项目）
+        import sys
+        qmt_bridge_dir = os.path.join(project_root, '..', 'EasyXT_Strategies_v2.2',
+                                       'strategies', 'quant_strategies', 'qmt_bridge')
+        qmt_bridge_dir = os.path.normpath(qmt_bridge_dir)
+        if qmt_bridge_dir not in sys.path:
+            sys.path.insert(0, qmt_bridge_dir)
+        from qmt_signal_bridge import QmtSignalBridge
+        _signal_bridge = QmtSignalBridge()
+        logger.info("[信号桥接] 大QMT信号桥接已就绪，交易指令将通过文件信号传递到 大QMT")
+        logger.info(f"[信号桥接] 信号目录: {_signal_bridge.signal_dir}")
+        return _signal_bridge
+    except ImportError as e:
+        logger.info(f"[信号桥接] 模块导入失败: {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"[信号桥接] 初始化失败: {e}")
+        return None
+
 # 条件定义SimpleCallback类
 if xt_trader is not None:
     class SimpleCallback(xt_trader.XtQuantTraderCallback):
@@ -313,12 +359,22 @@ class TradeAPI:
             Optional[int]: 委托编号，失败返回None
         """
         if not self.trader or account_id not in self.accounts:
-            ErrorHandler.log_error("交易服务未连接或账户未添加")
+            # ────── 降级：大QMT信号桥接 ──────
+            bridge = _get_signal_bridge()
+            if bridge:
+                logger.info(f"[信号桥接] 通过大QMT发送买入: {code}, 数量: {volume}, 价格: {price}")
+                order_id = bridge.send_buy(code, price, volume, account_id)
+                if order_id:
+                    logger.info(f"[信号桥接] ✅ 买入信号已发送, order_id={order_id}")
+                    return order_id
+                else:
+                    logger.info("[信号桥接] ❌ 买入信号发送失败")
+            ErrorHandler.log_error("交易服务未连接或账户未添加，且大QMT信号桥接不可用")
             return None
-            
+
         account = self.accounts[account_id]
         code = StockCodeUtils.normalize_code(code)
-        
+
         # 价格类型映射
         price_type_map = {
             'market': xt_const.MARKET_PEER_PRICE_FIRST,  # 对手价
@@ -326,9 +382,9 @@ class TradeAPI:
             '市价': xt_const.MARKET_PEER_PRICE_FIRST,
             '限价': xt_const.FIX_PRICE
         }
-        
+
         xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
-        
+
         try:
             logger.info(f"🛒 买入 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
@@ -341,14 +397,14 @@ class TradeAPI:
                 strategy_name='EasyXT',
                 order_remark=f'买入{code}'
             )
-            
+
             if order_id > 0:
                 logger.info(f"[OK] 买入委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
                 ErrorHandler.log_error(f"买入委托失败，返回值: {order_id}")
                 return None
-                
+
         except Exception as e:
             ErrorHandler.log_error(f"买入操作失败: {str(e)}")
             return None
@@ -374,12 +430,22 @@ class TradeAPI:
             Optional[int]: 委托编号，失败返回None
         """
         if not self.trader or account_id not in self.accounts:
-            ErrorHandler.log_error("交易服务未连接或账户未添加")
+            # ────── 降级：大QMT信号桥接 ──────
+            bridge = _get_signal_bridge()
+            if bridge:
+                logger.info(f"[信号桥接] 通过大QMT发送卖出: {code}, 数量: {volume}, 价格: {price}")
+                order_id = bridge.send_sell(code, price, volume, account_id)
+                if order_id:
+                    logger.info(f"[信号桥接] ✅ 卖出信号已发送, order_id={order_id}")
+                    return order_id
+                else:
+                    logger.info("[信号桥接] ❌ 卖出信号发送失败")
+            ErrorHandler.log_error("交易服务未连接或账户未添加，且大QMT信号桥接不可用")
             return None
-            
+
         account = self.accounts[account_id]
         code = StockCodeUtils.normalize_code(code)
-        
+
         # 价格类型映射
         price_type_map = {
             'market': xt_const.MARKET_PEER_PRICE_FIRST,
@@ -387,9 +453,9 @@ class TradeAPI:
             '市价': xt_const.MARKET_PEER_PRICE_FIRST,
             '限价': xt_const.FIX_PRICE
         }
-        
+
         xt_price_type = price_type_map.get(price_type, xt_const.MARKET_PEER_PRICE_FIRST)
-        
+
         try:
             logger.info(f"💰 卖出 {code}, 数量: {volume}, 价格: {price}, 类型: {price_type}")
             order_id = self.trader.order_stock(
@@ -402,14 +468,14 @@ class TradeAPI:
                 strategy_name='EasyXT',
                 order_remark=f'卖出{code}'
             )
-            
+
             if order_id > 0:
                 logger.info(f"[OK] 卖出委托成功: {code}, 数量: {volume}, 委托号: {order_id}")
                 return order_id
             else:
                 ErrorHandler.log_error(f"卖出委托失败，返回值: {order_id}")
                 return None
-                
+
         except Exception as e:
             ErrorHandler.log_error(f"卖出操作失败: {str(e)}")
             return None
@@ -418,20 +484,30 @@ class TradeAPI:
     def cancel_order(self, account_id: str, order_id: int) -> bool:
         """
         撤销委托
-        
+
         Args:
             account_id: 资金账号
             order_id: 委托编号
-            
+
         Returns:
             bool: 是否成功
         """
         if not self.trader or account_id not in self.accounts:
-            ErrorHandler.log_error("交易服务未连接或账户未添加")
+            # ────── 降级：大QMT信号桥接 ──────
+            bridge = _get_signal_bridge()
+            if bridge:
+                logger.info(f"[信号桥接] 通过大QMT发送撤单: order_id={order_id}")
+                result = bridge.cancel_order(str(order_id))
+                if result:
+                    logger.info(f"[信号桥接] ✅ 撤单信号已发送")
+                    return True
+                else:
+                    logger.info("[信号桥接] ❌ 撤单信号发送失败")
+            ErrorHandler.log_error("交易服务未连接或账户未添加，且大QMT信号桥接不可用")
             return False
-            
+
         account = self.accounts[account_id]
-        
+
         try:
             result = self.trader.cancel_order_stock(account, order_id)
             if result == 0:
@@ -440,7 +516,7 @@ class TradeAPI:
             else:
                 ErrorHandler.log_error(f"撤单失败，错误码: {result}")
                 return False
-                
+
         except Exception as e:
             ErrorHandler.log_error(f"撤单操作失败: {str(e)}")
             return False
