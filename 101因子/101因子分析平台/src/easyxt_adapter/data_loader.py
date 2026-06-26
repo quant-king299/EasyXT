@@ -232,7 +232,7 @@ class EasyXTDataLoader:
     def _load_from_duckdb(self, symbols: List[str], start_date: str, end_date: str,
                           fields: List[str]) -> pd.DataFrame:
         """
-        从DuckDB缓存加载数据
+        从DuckDB缓存加载数据（自动后复权：JOIN adj_factor 表）
 
         Args:
             symbols: 股票代码列表
@@ -241,52 +241,98 @@ class EasyXTDataLoader:
             fields: 字段列表
 
         Returns:
-            DataFrame: 从DuckDB加载的数据
+            DataFrame: 从DuckDB加载的数据（后复权价格）
         """
         try:
-            all_data = []
+            import duckdb
+            db_path = Path('D:/StockData/stock_data.ddb')
+            if not db_path.exists():
+                print("[INFO] DuckDB 数据库不存在，跳过缓存")
+                return pd.DataFrame()
 
+            con = duckdb.connect(str(db_path), read_only=True)
+            table_has_adj = con.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'adj_factor'"
+            ).fetchone()[0] > 0
+
+            all_data = []
             for symbol in symbols:
                 try:
-                    # 从DuckDB加载单只股票数据
-                    df_symbol = self.duckdb_manager.load_data(
-                        stock_code=symbol,
-                        period='1d'
-                    )
+                    ts_code = self._stock_to_ts_code(symbol)
+                    stock_has_adj = table_has_adj  # 逐股票独立判断
 
-                    if not df_symbol.empty:
-                        # 过滤日期范围
-                        df_symbol = df_symbol.reset_index()
-                        df_symbol['date'] = pd.to_datetime(df_symbol['date'])
-                        df_symbol = df_symbol[
-                            (df_symbol['date'] >= start_date) &
-                            (df_symbol['date'] <= end_date)
-                        ]
+                    if stock_has_adj:
+                        # ── 后复权：LEFT JOIN adj_factor，按最新因子为基准计算 ──
+                        base_row = con.execute(f"""
+                            SELECT adj_factor FROM adj_factor
+                            WHERE ts_code = '{ts_code}' AND trade_date <= '{end_date}'
+                            ORDER BY trade_date DESC LIMIT 1
+                        """).fetchone()
+                        if not base_row:
+                            stock_has_adj = False  # 该股票无因子数据，降级
 
-                        # 选择需要的字段
-                        available_fields = [f for f in fields if f in df_symbol.columns]
-                        if available_fields:
-                            df_symbol = df_symbol[['date', 'stock_code'] + available_fields]
-                            all_data.append(df_symbol)
+                    if stock_has_adj:
+                        base_factor = base_row[0]
+                        df = con.execute(f"""
+                            SELECT d.stock_code, d.date,
+                                   ROUND(d.open  * COALESCE(a.adj_factor, {base_factor}) / {base_factor}, 4) AS open,
+                                   ROUND(d.high  * COALESCE(a.adj_factor, {base_factor}) / {base_factor}, 4) AS high,
+                                   ROUND(d.low   * COALESCE(a.adj_factor, {base_factor}) / {base_factor}, 4) AS low,
+                                   ROUND(d.close * COALESCE(a.adj_factor, {base_factor}) / {base_factor}, 4) AS close,
+                                   d.volume, d.amount
+                            FROM stock_daily d
+                            LEFT JOIN adj_factor a ON d.date = a.trade_date
+                                AND a.ts_code = '{ts_code}'
+                            WHERE d.stock_code = '{symbol}'
+                              AND d.date >= '{start_date}' AND d.date <= '{end_date}'
+                            ORDER BY d.date
+                        """).df()
+                    else:
+                        # ── 无 adj_factor → 不复权（降级）──
+                        df = con.execute(f"""
+                            SELECT stock_code, date, open, high, low, close, volume, amount
+                            FROM stock_daily
+                            WHERE stock_code = '{symbol}'
+                              AND date >= '{start_date}' AND date <= '{end_date}'
+                            ORDER BY date
+                        """).df()
+
+                    if df is not None and not df.empty:
+                        df['date'] = pd.to_datetime(df['date'])
+                        available = [f for f in fields if f in df.columns]
+                        if available:
+                            df = df[['date', 'stock_code'] + available]
+                            all_data.append(df)
 
                 except Exception as e:
-                    print(f"[DEBUG] 从DuckDB加载 {symbol} 失败: {e}")
+                    print(f"[DEBUG] DuckDB 加载 {symbol} 失败: {e}")
                     continue
+
+            con.close()
 
             if all_data:
                 df_combined = pd.concat(all_data, ignore_index=True)
                 df_combined = df_combined.set_index(['date', 'stock_code']).sort_index()
-
-                # 计算额外字段
                 df_combined = self._calculate_additional_fields(df_combined)
-
+                adj_msg = "后复权(adj_factor)" if table_has_adj else "不复权(无adj_factor表)"
+                print(f"[OK] 从DuckDB加载 {len(all_data)} 只股票, 共 {len(df_combined)} 条 ({adj_msg})")
                 return df_combined
             else:
                 return pd.DataFrame()
 
         except Exception as e:
             print(f"[ERROR] 从DuckDB加载失败: {e}")
+            import traceback
+            traceback.print_exc()
             return pd.DataFrame()
+
+    @staticmethod
+    def _stock_to_ts_code(stock_code: str) -> str:
+        """股票代码转 tushare 格式: 000001.SZ → 000001.SZ, 600000.SH → 600000.SH"""
+        # adj_factor 表的 ts_code 格式跟 stock_daily 的 stock_code 不同
+        # stock_daily: 000001.SZ, adj_factor: 000001.SZ
+        # 如果格式不一致，这里做转换
+        return stock_code
 
     def _load_from_qmt(self, symbols: List[str], start_date: str, end_date: str,
                        fields: List[str]) -> pd.DataFrame:

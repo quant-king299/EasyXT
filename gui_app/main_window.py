@@ -218,7 +218,7 @@ class MainWindow(QMainWindow):
 
     def _check_big_qmt(self) -> bool:
         """
-        检测大QMT是否在运行（轻量级，只查进程，不卡）
+        检测大QMT是否在运行（纯 tasklist，瞬时完成）
 
         Returns:
             bool: 大QMT (XtItClient.exe) 是否正在运行
@@ -226,7 +226,8 @@ class MainWindow(QMainWindow):
         try:
             from core.auto_login.qmt_login import QMTAutoLogin
             auto = QMTAutoLogin()
-            return auto._is_big_qmt_running()
+            # 只用 tasklist，不碰 pywinauto（启动时 pywinauto UIA 初始化需 ~15s）
+            return auto._is_big_qmt_process_only()
         except Exception as e:
             logger.debug(f"大QMT检测失败: {e}")
             return False
