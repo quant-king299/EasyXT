@@ -346,13 +346,27 @@ class StrategyCoordinator:
         """执行交易并更新虚拟簿记（动态计算买卖量）"""
         acc = account_id
 
-        # ── 查可用资金，等权重分配 ──
+        # ── 查可用资金，按策略仓位比例分配 ──
         available_cash = self._query_asset()
-        num_buy_strategies = len(set(sname for sname, _ in buys)) if buys else 1
-        num_buy_stocks = len(buys) if buys else 1
-        cash_per_stock = available_cash / max(num_buy_stocks, 1) if available_cash > 0 else 0
-        if cash_per_stock > 0:
-            logger.info(f"[资金] 总可用 {available_cash:,.0f}, 买入{num_buy_stocks}只, 每只{cash_per_stock:,.0f}")
+        if self.bookkeeper:
+            self.bookkeeper.normalize_allocations(self.strategy_names)
+            allocs = self.bookkeeper.get_all_allocations()
+        else:
+            allocs = {}
+
+        # 按策略分组计算每组可用资金
+        strategy_cash = {}  # strategy_name → total cash for this strategy
+        strategy_buys = {}  # strategy_name → [(code, signal)]
+        for sname, b in buys:
+            strategy_buys.setdefault(sname, []).append((_extract_code(b), b))
+        for sname in strategy_buys:
+            ratio = allocs.get(sname, 0)
+            if ratio <= 0:
+                ratio = 1.0 / len(strategy_buys)  # 未设置则等权
+            strategy_cash[sname] = available_cash * ratio
+            n = len(strategy_buys[sname])
+            per_stock = strategy_cash[sname] / max(n, 1)
+            logger.info(f"[资金] {sname}: {ratio:.0%} = {strategy_cash[sname]:,.0f}, {n}只, 每只{per_stock:,.0f}")
 
         # ── 卖出：用簿记中的实际持仓量 ──
         for sname, s in sells:
@@ -380,13 +394,16 @@ class StrategyCoordinator:
             except Exception as e:
                 logger.info(f"  [卖出失败] {sname}: {code}: {e}")
 
-        # ── 买入：按可用资金动态计算 ──
+        # ── 买入：按每策略分配资金动态计算 ──
         for sname, b in buys:
             code = _extract_code(b)
             price = b.get("price", 0)
             if not code or price <= 0:
                 continue
-            volume = self._calc_buy_volume(code, price, cash_per_stock)
+            s_cash = strategy_cash.get(sname, available_cash / max(len(buys), 1))
+            n_stocks = len(strategy_buys.get(sname, [code]))
+            cash_per = s_cash / max(n_stocks, 1)
+            volume = self._calc_buy_volume(code, price, cash_per)
             price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
                 self.api.trade.buy(account_id=acc, code=code,

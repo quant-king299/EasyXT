@@ -32,7 +32,7 @@ from PyQt5.QtWidgets import (
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
     QPlainTextEdit, QCheckBox, QRadioButton, QButtonGroup,
     QMessageBox, QSplitter, QFrame, QComboBox, QSpinBox,
-    QLineEdit, QFormLayout, QSizePolicy
+    QDoubleSpinBox, QLineEdit, QFormLayout, QSizePolicy
 )
 from PyQt5.QtCore import Qt, QTimer, QProcess, pyqtSignal, QThread
 from PyQt5.QtGui import QFont, QColor, QBrush
@@ -417,9 +417,9 @@ class MultiStrategyWidget(QWidget):
         table_layout = QVBoxLayout(table_group)
 
         self.table = QTableWidget()
-        self.table.setColumnCount(8)
+        self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
-            ["策略名称", "中文名", "状态", "调度类型", "调度参数", "PID", "操作"]
+            ["策略名称", "中文名", "状态", "调度类型", "调度参数", "仓位%", "PID", "操作"]
         )
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -429,13 +429,15 @@ class MultiStrategyWidget(QWidget):
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Fixed)
         self.table.setColumnWidth(0, 130)
         self.table.setColumnWidth(2, 80)
         self.table.setColumnWidth(3, 75)
         self.table.setColumnWidth(4, 70)
-        self.table.setColumnWidth(5, 60)
+        self.table.setColumnWidth(5, 70)
         self.table.setColumnWidth(6, 60)
-        self.table.setColumnWidth(7, 170)
+        self.table.setColumnWidth(7, 60)
+        self.table.setColumnWidth(8, 170)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
@@ -464,10 +466,16 @@ class MultiStrategyWidget(QWidget):
                     user_override.get("schedule_value", sched_val),
                 )
 
+        # 加载簿记中的仓位分配
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+        bk = VirtualBookkeeper()
+        allocations = bk.get_all_allocations()
+
         sorted_names = sorted(discovered.keys(),
                               key=lambda n: discovered[n][1], reverse=True)
         self.table.setRowCount(len(sorted_names))
         self._strategy_rows = {}  # name → row index
+        self._allocation_spinboxes = {}  # name → QDoubleSpinBox
         for i, name in enumerate(sorted_names):
             self._strategy_rows[name] = i
             info = discovered[name]  # (display_name, priority, sched_type, sched_val)
@@ -484,7 +492,18 @@ class MultiStrategyWidget(QWidget):
             self.table.item(i, 4).setToolTip(
                 "daily: HH:MM (如 09:35)\ninterval: 分钟数 (如 5)\n双击编辑"
             )
-            self.table.setItem(i, 5, QTableWidgetItem("—"))  # PID
+            # 仓位比例 SpinBox
+            alloc_spin = QDoubleSpinBox()
+            alloc_spin.setRange(0, 100)
+            alloc_spin.setDecimals(0)
+            alloc_spin.setSuffix("%")
+            alloc_spin.setValue(allocations.get(name, 0) * 100)
+            alloc_spin.setToolTip(f"{name} 资金分配比例\n0%=不参与, 等权=平均分配")
+            alloc_spin.valueChanged.connect(lambda v, n=name: self._on_allocation_changed(n, v))
+            self._allocation_spinboxes[name] = alloc_spin
+            self.table.setCellWidget(i, 5, alloc_spin)
+            # PID
+            self.table.setItem(i, 6, QTableWidgetItem("—"))
             # 操作按钮
             btn_start = QPushButton("▶ 启动")
             btn_start.setFixedWidth(75)
@@ -498,9 +517,9 @@ class MultiStrategyWidget(QWidget):
             btn_layout.setSpacing(4)
             btn_layout.addWidget(btn_start)
             btn_layout.addWidget(btn_stop)
-            self.table.setCellWidget(i, 7, btn_widget)
+            self.table.setCellWidget(i, 8, btn_widget)
             # 保存按钮引用
-            self.table.item(i, 0).setData(Qt.UserRole, (btn_start, btn_stop))
+            self.table.item(i, 0).setData(Qt.UserRole, (btn_start, btn_stop, i))
 
         # 表格双击编辑（调度类型和参数）
         self.table.cellChanged.connect(self._on_cell_changed)
@@ -644,6 +663,22 @@ class MultiStrategyWidget(QWidget):
 
     # ---- 状态刷新 ----
 
+    def _on_allocation_changed(self, name: str, value: float):
+        """仓位 SpinBox 变化时保存到簿记"""
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+        bk = VirtualBookkeeper()
+        bk.set_allocation(name, value / 100.0)
+        # 归一化：重新分配其他策略的权重
+        all_names = list(self._strategy_rows.keys())
+        bk.normalize_allocations(all_names)
+        # 刷新所有 SpinBox（不触发递归）
+        allocs = bk.get_all_allocations()
+        for n, spin in self._allocation_spinboxes.items():
+            spin.blockSignals(True)
+            spin.setValue(allocs.get(n, 0) * 100)
+            spin.blockSignals(False)
+        self._log(f"⚖️ 仓位已更新: {name} → {value:.0f}%")
+
     def refresh_status(self):
         """刷新策略状态表格"""
         for name, row in self._strategy_rows.items():
@@ -651,7 +686,7 @@ class MultiStrategyWidget(QWidget):
             if data:
                 self.table.item(row, 2).setText("● 运行中")
                 self.table.item(row, 2).setForeground(QBrush(QColor("#00aa00")))
-                self.table.item(row, 5).setText(str(data["pid"]))
+                self.table.item(row, 6).setText(str(data["pid"]))
                 btns = self.table.item(row, 0).data(Qt.UserRole)
                 if btns:
                     btns[0].setEnabled(False)
@@ -659,7 +694,7 @@ class MultiStrategyWidget(QWidget):
             else:
                 self.table.item(row, 2).setText("○ 已停止")
                 self.table.item(row, 2).setForeground(QBrush(QColor("#999999")))
-                self.table.item(row, 5).setText("—")
+                self.table.item(row, 6).setText("—")
                 btns = self.table.item(row, 0).data(Qt.UserRole)
                 if btns:
                     btns[0].setEnabled(True)

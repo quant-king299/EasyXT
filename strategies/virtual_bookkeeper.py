@@ -255,3 +255,46 @@ class VirtualBookkeeper:
             del self.data["strategies"][strategy_name]
             self._save()
             logger.info(f"[簿记] 已清空 {strategy_name} 的虚拟持仓")
+
+    # ───── 仓位比例管理 ─────
+
+    def set_allocation(self, strategy_name: str, ratio: float):
+        """
+        设置策略的资金分配比例（如 0.3 = 30%）
+
+        Args:
+            strategy_name: 策略名称
+            ratio: 仓位比例 (0.0 ~ 1.0)
+        """
+        allocations = self.data.setdefault("allocations", {})
+        allocations[strategy_name] = round(max(0.0, min(1.0, ratio)), 2)
+        self._save()
+        logger.info(f"[簿记] {strategy_name} 仓位比例 → {allocations[strategy_name]:.0%}")
+
+    def get_allocation(self, strategy_name: str) -> float:
+        """获取某策略的仓位比例"""
+        allocations = self.data.get("allocations", {})
+        return allocations.get(strategy_name, 0.0)
+
+    def get_all_allocations(self) -> dict:
+        """获取所有策略的仓位比例 {strategy_name: ratio}"""
+        return dict(self.data.get("allocations", {}))
+
+    def normalize_allocations(self, strategy_names: list):
+        """
+        归一化仓位比例（总和 = 1.0）
+
+        如果某策略未设置，等权分配。
+        如果总和为 0，全部等权。
+        """
+        allocations = self.data.setdefault("allocations", {})
+        total = sum(allocations.get(n, 0) for n in strategy_names)
+        if total <= 0:
+            # 全部等权
+            eq = round(1.0 / len(strategy_names), 4) if strategy_names else 0
+            for n in strategy_names:
+                allocations[n] = eq
+        else:
+            for n in strategy_names:
+                allocations[n] = round(allocations.get(n, 0) / total, 4)
+        self._save()
