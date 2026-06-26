@@ -157,29 +157,31 @@ class StrategyCoordinator:
             logger.warning(f"连接失败: {e}")
             return False
 
-    def _query_held_codes(self) -> set:
+    def _query_real_positions(self) -> dict:
         """
-        查询当前持仓代码集合
+        查询真实 QMT 账户持仓，返回 {code: volume} 字典
 
         优先走 xttrader，不可用时走信号桥接查询。
-        查询失败返回空集合（保守策略：不跳过任何信号）。
-        返回的代码统一带交易所后缀（.SH/.SZ），与 _extract_code 输出一致。
+        代码统一带交易所后缀（.SH/.SZ）。
         """
-        codes = set()
+        result = {}
         try:
             # 方式 1：xttrader 直连
             if self.api and self.account_id:
                 positions = self.api.trade.get_positions(self.account_id)
                 if positions is not None and not positions.empty:
-                    for code in positions['code']:
-                        codes.add(_extract_code({'code': code}))
-                    logger.info(f"[持仓] xttrader 查询到 {len(codes)} 只持仓")
-                    return codes
+                    for _, row in positions.iterrows():
+                        code = _extract_code({'code': row.get('code', '')})
+                        vol = int(row.get('can_use_volume', row.get('volume', 0)))
+                        if code and vol > 0:
+                            result[code] = vol
+                    logger.info(f"[持仓] xttrader 查询到 {len(result)} 只有效持仓")
+                    return result
         except Exception:
             pass
 
         try:
-            # 方式 2：信号桥接查询（大QMT 返回代码无后缀，需补齐）
+            # 方式 2：信号桥接查询
             import sys as _sys
             _bridge_dir = os.path.join(
                 os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -192,24 +194,29 @@ class StrategyCoordinator:
             from qmt_signal_bridge import QmtSignalBridge
             bridge = QmtSignalBridge()
             pos_list = bridge.query_positions(account_id=self.account_id or '', timeout=10)
-            if pos_list:
+            if pos_list and not isinstance(pos_list, dict):
                 for p in pos_list:
                     raw = p.get('stock_code', '')
                     vol = p.get('volume', 0)
-                    if raw and vol > 0:  # 只统计有可用数量的持仓
-                        codes.add(_extract_code({'code': raw}))
-                logger.info(f"[持仓] 信号桥接查询到 {len(codes)} 只有效持仓")
-                return codes
+                    if raw and vol > 0:
+                        result[_extract_code({'code': raw})] = vol
+                logger.info(f"[持仓] 信号桥接查询到 {len(result)} 只有效持仓")
         except Exception as e:
             logger.debug(f"[持仓] 信号桥接查询失败: {e}")
 
-        return codes
+        return result
 
     def run_once(self):
         # ── 初始化虚拟簿记 ──
         if self.bookkeeper is None:
             from strategies.virtual_bookkeeper import VirtualBookkeeper
             self.bookkeeper = VirtualBookkeeper()
+
+        # ── 同步真实账户持仓（首次运行导入手动持仓，防止重复买）──
+        if self.run_mode == "live":
+            real_pos = self._query_real_positions()
+            if real_pos:
+                self.bookkeeper.sync_from_account(real_pos)
 
         # ── 每策略独立生成信号（注入虚拟持仓）──
         all_sells = []   # [(strategy_name, sell_dict), ...]

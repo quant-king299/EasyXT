@@ -168,31 +168,68 @@ class VirtualBookkeeper:
 
     # ───── 对账（与真实 QMT 账户同步）──
 
-    def reconcile(self, real_positions: Dict[str, int]):
-        """
-        与真实 QMT 账户持仓对账
+    MANUAL_STRATEGY = "_manual"  # 保留策略名：手工/外部买入的持仓
 
-        如果虚拟持仓合计 > 真实持仓，按比例缩减各策略持仓。
-        如果虚拟持仓合计 < 真实持仓，提示有未知来源的持仓。
+    def sync_from_account(self, real_positions: Dict[str, int]):
+        """
+        从真实 QMT 账户同步持仓到簿记。
+
+        首次运行时，账户中原有的持仓会被归入 "_manual" 策略。
+        后续所有策略的 get_all_held_codes() 都会包含这些手动持仓，
+        从而避免重复买入。
 
         Args:
             real_positions: {code: volume} — QMT 账户的真实可用持仓
         """
-        # 计算虚拟持仓合计
+        if not real_positions:
+            return
+
+        # 计算虚拟持仓合计（不含 _manual）
         virtual_totals = {}
         for name in self.data.get("strategies", {}):
+            if name == self.MANUAL_STRATEGY:
+                continue
             for code, info in self.data["strategies"][name].items():
                 vol = info.get("volume", 0)
                 virtual_totals[code] = virtual_totals.get(code, 0) + vol
 
-        # 对比
-        all_codes = set(list(virtual_totals.keys()) + list(real_positions.keys()))
-        for code in all_codes:
-            virt = virtual_totals.get(code, 0)
-            real = real_positions.get(code, 0)
-            diff = real - virt
-            if abs(diff) > 0:
-                logger.info(f"[对账] {code}: 虚拟{virt} vs 真实{real} (差{diff})")
+        # 找出真实账户中有但虚拟簿记中没有的持仓 → 归入 _manual
+        manual = self.data.setdefault("strategies", {}).setdefault(self.MANUAL_STRATEGY, {})
+        new_manual = 0
+        for code, real_vol in real_positions.items():
+            virt_vol = virtual_totals.get(code, 0)
+            if virt_vol <= 0 and real_vol > 0:
+                # 虚拟簿记中没有此持仓 → 归入手动
+                manual[code] = {
+                    "volume": real_vol,
+                    "cost": 0,  # 成本未知
+                    "last_buy": "manual",
+                }
+                new_manual += 1
+            elif real_vol > virt_vol:
+                # 真实持仓多于虚拟 → 差值归入手动（可能手工加仓了）
+                extra = real_vol - virt_vol
+                manual[code] = {
+                    "volume": extra,
+                    "cost": 0,
+                    "last_buy": "manual_extra",
+                }
+                new_manual += 1
+
+        if new_manual > 0:
+            self._save()
+            logger.info(f"[簿记] 同步 {new_manual} 只手动/外部持仓到 '_manual' 策略")
+
+        # 反向清理：真实账户已清仓但簿记还有的 → 从 _manual 清理
+        cleaned = 0
+        for code in list(manual.keys()):
+            real_vol = real_positions.get(code, 0)
+            if real_vol <= 0:
+                del manual[code]
+                cleaned += 1
+        if cleaned > 0:
+            self._save()
+            logger.info(f"[簿记] 清理 {cleaned} 只已清仓的手动持仓")
 
     # ───── 汇总信息 ─────
 
