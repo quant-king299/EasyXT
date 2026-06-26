@@ -809,34 +809,68 @@ class MultiStrategyWidget(QWidget):
         self.refresh_status()
 
     def _select_strategies_dialog(self, all_names):
-        """弹出策略选择对话框，返回用户选中的策略名称列表"""
+        """弹出策略选择对话框，返回用户选中的策略名称列表（记忆上次选择）"""
         from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox, QGroupBox
-        
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+
+        bk = VirtualBookkeeper()
+        last_selected = set(bk.data.get("last_selected_strategies", []))
+
         dialog = QDialog(self)
         dialog.setWindowTitle("选择要启动的策略")
         dialog.resize(320, 400)
-        
+
         layout = QVBoxLayout(dialog)
-        group = QGroupBox("策略列表 (全选 = 全部启动)")
+
+        # 快捷按钮
+        quick_layout = QHBoxLayout()
+        btn_all = QPushButton("全选")
+        btn_none = QPushButton("取消全选")
+        btn_last = QPushButton("上次选择")
+        btn_last.setToolTip("恢复上次启动时勾选的策略")
+        quick_layout.addWidget(btn_all)
+        quick_layout.addWidget(btn_none)
+        quick_layout.addWidget(btn_last)
+        quick_layout.addStretch()
+        layout.addLayout(quick_layout)
+
+        group = QGroupBox("策略列表")
         group_layout = QVBoxLayout(group)
-        
         checkboxes = {}
+
+        # 默认：有上次记录则用上次，否则全选
+        default_checked = last_selected if last_selected else set(all_names)
         for name in sorted(all_names):
             cn_name = get_strategy_info(name)[0]
             cb = QCheckBox(f"{cn_name} ({name})")
-            cb.setChecked(True)
+            cb.setChecked(name in default_checked)
             group_layout.addWidget(cb)
             checkboxes[name] = cb
-        
+
+        # 快捷按钮事件
+        def do_all():
+            for cb in checkboxes.values(): cb.setChecked(True)
+        def do_none():
+            for cb in checkboxes.values(): cb.setChecked(False)
+        def do_last():
+            for n, cb in checkboxes.items(): cb.setChecked(n in last_selected)
+        btn_all.clicked.connect(do_all)
+        btn_none.clicked.connect(do_none)
+        btn_last.clicked.connect(do_last)
+
         layout.addWidget(group)
-        
+
         btn_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         btn_box.accepted.connect(dialog.accept)
         btn_box.rejected.connect(dialog.reject)
         layout.addWidget(btn_box)
-        
+
         if dialog.exec_() == QDialog.Accepted:
-            return [name for name, cb in checkboxes.items() if cb.isChecked()]
+            selected = [name for name, cb in checkboxes.items() if cb.isChecked()]
+            # 保存到簿记
+            bk.data["last_selected_strategies"] = selected
+            bk._save()
+            return selected
         return all_names  # 取消 = 全部
     
     def start_all(self):
