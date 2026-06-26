@@ -124,12 +124,12 @@ def _wait_for_duckdb(max_retries: int = 10, delay: float = 2.0) -> bool:
 
 
 class StrategyCoordinator:
-    """单进程策略协调器"""
+    """单进程策略协调器（持仓感知，避免重复委托）"""
     def __init__(self, strategy_names, run_mode="dry_run"):
         self.strategy_names = strategy_names
         self.run_mode = run_mode
         self.api = None
-        self._sold = set()
+        self._held_codes = set()   # 当前持仓代码缓存
 
     def init_trading(self):
         if self.run_mode == "dry_run":
@@ -157,8 +157,61 @@ class StrategyCoordinator:
             logger.warning(f"连接失败: {e}")
             return False
 
+    def _query_held_codes(self) -> set:
+        """
+        查询当前持仓代码集合
+
+        优先走 xttrader，不可用时走信号桥接查询。
+        查询失败返回空集合（保守策略：不跳过任何信号）。
+        返回的代码统一带交易所后缀（.SH/.SZ），与 _extract_code 输出一致。
+        """
+        codes = set()
+        try:
+            # 方式 1：xttrader 直连
+            if self.api and self.account_id:
+                positions = self.api.trade.get_positions(self.account_id)
+                if positions is not None and not positions.empty:
+                    for code in positions['code']:
+                        codes.add(_extract_code({'code': code}))
+                    logger.info(f"[持仓] xttrader 查询到 {len(codes)} 只持仓")
+                    return codes
+        except Exception:
+            pass
+
+        try:
+            # 方式 2：信号桥接查询（大QMT 返回代码无后缀，需补齐）
+            import sys as _sys
+            _bridge_dir = os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                '..', 'EasyXT_Strategies_v2.2',
+                'strategies', 'quant_strategies', 'qmt_bridge'
+            )
+            _bridge_dir = os.path.normpath(_bridge_dir)
+            if _bridge_dir not in _sys.path:
+                _sys.path.insert(0, _bridge_dir)
+            from qmt_signal_bridge import QmtSignalBridge
+            bridge = QmtSignalBridge()
+            pos_list = bridge.query_positions(account_id=self.account_id or '', timeout=10)
+            if pos_list:
+                for p in pos_list:
+                    raw = p.get('stock_code', '')
+                    vol = p.get('volume', 0)
+                    if raw and vol > 0:  # 只统计有可用数量的持仓
+                        codes.add(_extract_code({'code': raw}))
+                logger.info(f"[持仓] 信号桥接查询到 {len(codes)} 只有效持仓")
+                return codes
+        except Exception as e:
+            logger.debug(f"[持仓] 信号桥接查询失败: {e}")
+
+        return codes
+
     def run_once(self):
-        self._sold.clear()
+        # ── 查询当前持仓（防止重复买入）──
+        if self.run_mode == "live":
+            self._held_codes = self._query_held_codes()
+        else:
+            self._held_codes = set()
+
         all_sells = []
         all_buys = []
         failed_names = []
@@ -193,20 +246,29 @@ class StrategyCoordinator:
             logger.warning("所有策略均无信号，本轮跳过")
             return
         sells, buys = consolidate_orders(all_sells, all_buys)
+
+        # ── 过滤：卖出只卖持仓股，买入跳过已持仓股 ──
+        if self._held_codes:
+            sells = [s for s in sells if _extract_code(s) in self._held_codes]
+            buys_before = len(buys)
+            buys = [b for b in buys if _extract_code(b) not in self._held_codes]
+            skipped = buys_before - len(buys)
+            if skipped > 0:
+                logger.info(f"  跳过 {skipped} 只已持仓股票")
+
         if failed_names:
             logger.warning(f"以下策略失败: {', '.join(failed_names)}，使用其余策略信号继续")
-        logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（去重后）")
+        logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（持仓过滤后）")
         if self.run_mode == "live" and self.api:
-            self._execute(sells, buys)
+            self._execute(sells, buys, account_id=self.account_id)
 
-    def _execute(self, sells, buys):
-        acc = self.account_id
+    def _execute(self, sells, buys, account_id):
+        acc = account_id
         for s in sells:
             code = _extract_code(s)
             price = s.get("price", 0)
-            if not code or price <= 0 or code in self._sold:
+            if not code or price <= 0:
                 continue
-            self._sold.add(code)
             volume = 200 if code.startswith('689') else 100
             price = round(price, 3) if code[:2] in ('11','12','13','51','56','58','15','16','59','588') else round(price, 2)
             try:
