@@ -280,6 +280,19 @@ class VirtualBookkeeper:
         """获取所有策略的仓位比例 {strategy_name: ratio}"""
         return dict(self.data.get("allocations", {}))
 
+    # ───── 首次确认标记 ─────
+
+    def is_position_confirmed(self) -> bool:
+        """是否已完成持仓分配确认"""
+        return self.data.get("position_confirmed", False)
+
+    def mark_position_confirmed(self):
+        """标记持仓分配已确认"""
+        self.data["position_confirmed"] = True
+        self._save()
+
+    # ───── 仓位比例管理 ─────
+
     def normalize_allocations(self, strategy_names: list):
         """
         归一化仓位比例（总和 = 1.0）

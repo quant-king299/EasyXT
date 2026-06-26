@@ -702,10 +702,39 @@ class MultiStrategyWidget(QWidget):
 
     # ---- 策略操作 ----
 
+    def _ensure_position_confirmed(self) -> bool:
+        """实盘模式下强制确认持仓分配，确认过一次后不再弹窗"""
+        run_mode = "live" if self.rb_live.isChecked() else "dry_run"
+        if run_mode != "live":
+            return True
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+        bk = VirtualBookkeeper()
+        if bk.is_position_confirmed():
+            return True
+        reply = QMessageBox.question(
+            self, "⚠️ 持仓未分配",
+            "检测到首次实盘运行，持仓尚未分配到策略。\n\n"
+            "请先点击「📊 持仓分配」将账户持仓分配到对应策略，\n"
+            "然后再启动策略。\n\n"
+            "是否现在打开持仓分配？",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self._show_position_assignment()
+            # 再次检查是否已确认
+            bk2 = VirtualBookkeeper()
+            return bk2.is_position_confirmed()
+        return False
+
     def start_strategy(self, name: str):
         """启动单个策略"""
         run_mode = "live" if self.rb_live.isChecked() else "dry_run"
         continuous = self.cb_continuous.isChecked()
+
+        # 首次实盘强制确认持仓分配
+        if not self._ensure_position_confirmed():
+            self._log("⚠️ 请先完成持仓分配再启动策略")
+            return
 
         if run_mode == "live" and continuous:
             reply = QMessageBox.question(
@@ -805,6 +834,10 @@ class MultiStrategyWidget(QWidget):
     
     def start_all(self):
         """启动所有策略（单进程协调器，订单去重）"""
+        # 首次实盘强制确认持仓分配
+        if not self._ensure_position_confirmed():
+            self._log("⚠️ 请先完成持仓分配再启动策略")
+            return
         names = self._select_strategies_dialog(list(self._strategy_rows.keys()))
         self._log(f"========== 协调启动 ({len(names)} 个策略) ==========")
 
@@ -976,7 +1009,9 @@ class MultiStrategyWidget(QWidget):
             if manual:
                 bk.data.setdefault("strategies", {})[VirtualBookkeeper.MANUAL_STRATEGY] = manual
                 bk._save()
-            self._log(f"📊 持仓分配已保存: {len(all_codes)} 只")
+            # 标记已确认，后续不再强制弹窗
+            bk.mark_position_confirmed()
+            self._log(f"📊 持仓分配已确认: {len(all_codes)} 只")
             dialog.accept()
         save_btn.clicked.connect(do_save)
         btn_layout.addWidget(save_btn)
