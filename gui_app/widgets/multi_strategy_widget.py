@@ -437,7 +437,7 @@ class MultiStrategyWidget(QWidget):
         self.table.setColumnWidth(5, 70)
         self.table.setColumnWidth(6, 60)
         self.table.setColumnWidth(7, 60)
-        self.table.setColumnWidth(8, 170)
+        self.table.setColumnWidth(8, 220)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
@@ -505,21 +505,28 @@ class MultiStrategyWidget(QWidget):
             # PID
             self.table.setItem(i, 6, QTableWidgetItem("—"))
             # 操作按钮
-            btn_start = QPushButton("▶ 启动")
-            btn_start.setFixedWidth(75)
+            btn_start = QPushButton("▶")
+            btn_start.setFixedWidth(32)
+            btn_start.setToolTip(f"启动 {name}")
             btn_start.clicked.connect(lambda checked, n=name: self.start_strategy(n))
-            btn_stop = QPushButton("⏹ 停止")
-            btn_stop.setFixedWidth(75)
+            btn_stop = QPushButton("⏹")
+            btn_stop.setFixedWidth(32)
+            btn_stop.setToolTip(f"停止 {name}")
             btn_stop.clicked.connect(lambda checked, n=name: self.stop_strategy(n))
+            btn_pos = QPushButton("📋")
+            btn_pos.setFixedWidth(32)
+            btn_pos.setToolTip(f"查看 {name} 虚拟持仓")
+            btn_pos.clicked.connect(lambda checked, n=name: self._show_strategy_positions(n))
             btn_widget = QWidget()
             btn_layout = QHBoxLayout(btn_widget)
             btn_layout.setContentsMargins(2, 2, 2, 2)
-            btn_layout.setSpacing(4)
+            btn_layout.setSpacing(2)
             btn_layout.addWidget(btn_start)
             btn_layout.addWidget(btn_stop)
+            btn_layout.addWidget(btn_pos)
             self.table.setCellWidget(i, 8, btn_widget)
             # 保存按钮引用
-            self.table.item(i, 0).setData(Qt.UserRole, (btn_start, btn_stop, i))
+            self.table.item(i, 0).setData(Qt.UserRole, (btn_start, btn_stop, btn_pos, i))
 
         # 表格双击编辑（调度类型和参数）
         self.table.cellChanged.connect(self._on_cell_changed)
@@ -689,16 +696,16 @@ class MultiStrategyWidget(QWidget):
                 self.table.item(row, 6).setText(str(data["pid"]))
                 btns = self.table.item(row, 0).data(Qt.UserRole)
                 if btns:
-                    btns[0].setEnabled(False)
-                    btns[1].setEnabled(True)
+                    btns[0].setEnabled(False)   # start
+                    btns[1].setEnabled(True)     # stop
             else:
                 self.table.item(row, 2).setText("○ 已停止")
                 self.table.item(row, 2).setForeground(QBrush(QColor("#999999")))
                 self.table.item(row, 6).setText("—")
                 btns = self.table.item(row, 0).data(Qt.UserRole)
                 if btns:
-                    btns[0].setEnabled(True)
-                    btns[1].setEnabled(False)
+                    btns[0].setEnabled(True)     # start
+                    btns[1].setEnabled(False)    # stop
 
     # ---- 策略操作 ----
 
@@ -1017,6 +1024,53 @@ class MultiStrategyWidget(QWidget):
         btn_layout.addWidget(save_btn)
 
         layout.addLayout(btn_layout)
+        dialog.exec_()
+
+    def _show_strategy_positions(self, strategy_name: str):
+        """查看某策略的虚拟持仓明细"""
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, QLabel
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+
+        bk = VirtualBookkeeper()
+        pos = bk.get_positions(strategy_name)
+        alloc = bk.get_allocation(strategy_name)
+        info = get_strategy_info(strategy_name)
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"{info[0]} ({strategy_name}) — 虚拟持仓")
+        dialog.resize(550, 350)
+        layout = QVBoxLayout(dialog)
+
+        # 概要
+        if pos.empty:
+            layout.addWidget(QLabel("暂无持仓"))
+        else:
+            total_value = sum(pos['volume'] * pos['cost_price'])
+            summary = QLabel(f"持仓 {len(pos)} 只 | 成本市值 ¥{total_value:,.0f} | 仓位 {alloc:.0%}")
+            layout.addWidget(summary)
+
+            table = QTableWidget()
+            table.setColumnCount(4)
+            table.setHorizontalHeaderLabels(["代码", "数量(股)", "成本价", "市值"])
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+            table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
+            table.setColumnWidth(1, 80)
+            table.setColumnWidth(2, 80)
+            table.setColumnWidth(3, 100)
+            table.verticalHeader().setVisible(False)
+            table.setRowCount(len(pos))
+
+            for i, (_, row) in enumerate(pos.iterrows()):
+                table.setItem(i, 0, QTableWidgetItem(str(row['code'])))
+                table.setItem(i, 1, QTableWidgetItem(str(int(row['volume']))))
+                table.setItem(i, 2, QTableWidgetItem(f"{row['cost_price']:.3f}"))
+                mv = int(row['volume']) * float(row['cost_price'])
+                table.setItem(i, 3, QTableWidgetItem(f"¥{mv:,.0f}"))
+
+            layout.addWidget(table)
+
         dialog.exec_()
 
     def show_report(self):
