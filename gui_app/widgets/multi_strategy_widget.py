@@ -815,6 +815,18 @@ class MultiStrategyWidget(QWidget):
         bk = VirtualBookkeeper()
         strategy_names = list(self._strategy_rows.keys())
 
+        # 读取账户ID
+        account_id = ''
+        try:
+            env_file = PROJECT_ROOT / '.env'
+            if env_file.exists():
+                for line in env_file.read_text(encoding='utf-8').splitlines():
+                    if line.strip().startswith('QMT_ACCOUNT_ID='):
+                        account_id = line.split('=', 1)[1].strip()
+                        break
+        except Exception:
+            pass
+
         # 查询真实持仓
         real_positions = {}
         try:
@@ -826,7 +838,7 @@ class MultiStrategyWidget(QWidget):
                 sys.path.insert(0, bridge_dir)
             from qmt_signal_bridge import QmtSignalBridge
             bridge = QmtSignalBridge()
-            pos_list = bridge.query_positions(account_id='', timeout=10)
+            pos_list = bridge.query_positions(account_id=account_id, timeout=10)
             if pos_list and not isinstance(pos_list, dict):
                 for p in pos_list:
                     code = str(p.get('stock_code', ''))
