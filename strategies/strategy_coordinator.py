@@ -124,12 +124,12 @@ def _wait_for_duckdb(max_retries: int = 10, delay: float = 2.0) -> bool:
 
 
 class StrategyCoordinator:
-    """单进程策略协调器（持仓感知，避免重复委托）"""
+    """单进程策略协调器（虚拟簿记 + 持仓感知）"""
     def __init__(self, strategy_names, run_mode="dry_run"):
         self.strategy_names = strategy_names
         self.run_mode = run_mode
         self.api = None
-        self._held_codes = set()   # 当前持仓代码缓存
+        self.bookkeeper = None  # 延迟初始化
 
     def init_trading(self):
         if self.run_mode == "dry_run":
@@ -206,14 +206,14 @@ class StrategyCoordinator:
         return codes
 
     def run_once(self):
-        # ── 查询当前持仓（防止重复买入）──
-        if self.run_mode == "live":
-            self._held_codes = self._query_held_codes()
-        else:
-            self._held_codes = set()
+        # ── 初始化虚拟簿记 ──
+        if self.bookkeeper is None:
+            from strategies.virtual_bookkeeper import VirtualBookkeeper
+            self.bookkeeper = VirtualBookkeeper()
 
-        all_sells = []
-        all_buys = []
+        # ── 每策略独立生成信号（注入虚拟持仓）──
+        all_sells = []   # [(strategy_name, sell_dict), ...]
+        all_buys = []    # [(strategy_name, buy_dict), ...]
         failed_names = []
         for i, name in enumerate(self.strategy_names, 1):
             total = len(self.strategy_names)
@@ -224,11 +224,15 @@ class StrategyCoordinator:
                 try:
                     cls = load_strategy_class(name)
                     strategy = cls(api=self.api)
+                    # ── 注入虚拟持仓 ──
+                    virt_pos = self.bookkeeper.get_positions(name)
+                    if not virt_pos.empty:
+                        strategy.positions = virt_pos
                     buy_list, sell_list = strategy.generate_signals()
                     for _, row in sell_list.iterrows():
-                        all_sells.append(dict(row))
+                        all_sells.append((name, dict(row)))
                     for _, row in buy_list.iterrows():
-                        all_buys.append(dict(row))
+                        all_buys.append((name, dict(row)))
                     success = True
                     buy_count = len(buy_list) if hasattr(buy_list, '__len__') else 0
                     sell_count = len(sell_list) if hasattr(sell_list, '__len__') else 0
@@ -245,26 +249,40 @@ class StrategyCoordinator:
         if not all_sells and not all_buys:
             logger.warning("所有策略均无信号，本轮跳过")
             return
-        sells, buys = consolidate_orders(all_sells, all_buys)
 
-        # ── 过滤：卖出只卖持仓股，买入跳过已持仓股 ──
-        if self._held_codes:
-            sells = [s for s in sells if _extract_code(s) in self._held_codes]
-            buys_before = len(buys)
-            buys = [b for b in buys if _extract_code(b) not in self._held_codes]
-            skipped = buys_before - len(buys)
-            if skipped > 0:
-                logger.info(f"  跳过 {skipped} 只已持仓股票")
+        # ── 每策略独立过滤（只卖自己的持仓，不买自己已持有的）──
+        filtered_sells = []  # [(strategy_name, sell_dict)]
+        filtered_buys = []   # [(strategy_name, buy_dict)]
+        skipped_buys = 0
+        for sname, s in all_sells:
+            code = _extract_code(s)
+            held = self.bookkeeper.get_held_codes(sname)
+            if code in held:
+                filtered_sells.append((sname, s))
+        for sname, b in all_buys:
+            code = _extract_code(b)
+            held = self.bookkeeper.get_held_codes(sname)
+            all_held = self.bookkeeper.get_all_held_codes()
+            if code in held:
+                skipped_buys += 1  # 本策略已持有
+            elif code in all_held:
+                skipped_buys += 1  # 其他策略已持有
+            else:
+                filtered_buys.append((sname, b))
+
+        if skipped_buys > 0:
+            logger.info(f"  跳过 {skipped_buys} 只已持仓股票（虚拟簿记）")
 
         if failed_names:
             logger.warning(f"以下策略失败: {', '.join(failed_names)}，使用其余策略信号继续")
-        logger.info(f"  卖出 {len(sells)} 只，买入 {len(buys)} 只（持仓过滤后）")
+        logger.info(f"  卖出 {len(filtered_sells)} 只，买入 {len(filtered_buys)} 只（虚拟簿记过滤后）")
         if self.run_mode == "live" and self.api:
-            self._execute(sells, buys, account_id=self.account_id)
+            self._execute(filtered_sells, filtered_buys, account_id=self.account_id)
 
     def _execute(self, sells, buys, account_id):
+        """执行交易并更新虚拟簿记"""
         acc = account_id
-        for s in sells:
+        for sname, s in sells:
             code = _extract_code(s)
             price = s.get("price", 0)
             if not code or price <= 0:
@@ -274,10 +292,13 @@ class StrategyCoordinator:
             try:
                 self.api.trade.sell(account_id=acc, code=code,
                     volume=volume, price=price, price_type="limit")
-                logger.info(f"  [卖出] {code} @{price} vol={volume}")
+                # 虚拟簿记：扣减持仓
+                if self.bookkeeper:
+                    self.bookkeeper.record_sell(sname, code, volume, price)
+                logger.info(f"  [卖出] {sname}: {code} @{price} vol={volume}")
             except Exception as e:
-                logger.info(f"  [卖出失败] {code}: {e}")
-        for b in buys:
+                logger.info(f"  [卖出失败] {sname}: {code}: {e}")
+        for sname, b in buys:
             code = _extract_code(b)
             price = b.get("price", 0)
             if not code or price <= 0:
@@ -287,9 +308,12 @@ class StrategyCoordinator:
             try:
                 self.api.trade.buy(account_id=acc, code=code,
                     volume=volume, price=price, price_type="limit")
-                logger.info(f"  [买入] {code} @{price} vol={volume}")
+                # 虚拟簿记：增加持仓
+                if self.bookkeeper:
+                    self.bookkeeper.record_buy(sname, code, volume, price)
+                logger.info(f"  [买入] {sname}: {code} @{price} vol={volume}")
             except Exception as e:
-                logger.info(f"  [买入失败] {code}: {e}")
+                logger.info(f"  [买入失败] {sname}: {code}: {e}")
 
 def main():
     import argparse
