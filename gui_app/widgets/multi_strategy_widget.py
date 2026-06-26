@@ -539,6 +539,14 @@ class MultiStrategyWidget(QWidget):
         batch_layout.addWidget(self.btn_refresh)
         batch_layout.addWidget(self.btn_report)
 
+        self.btn_position_assign = QPushButton("📊 持仓分配")
+        self.btn_position_assign.setToolTip(
+            "查看真实账户持仓\n"
+            "将持仓分配到具体策略（虚拟簿记）"
+        )
+        self.btn_position_assign.clicked.connect(self._show_position_assignment)
+        batch_layout.addWidget(self.btn_position_assign)
+
         self.btn_new_strategy = QPushButton("📝 新建策略")
         self.btn_new_strategy.setToolTip(
             "在 strategies/ 目录下创建策略模板\n"
@@ -791,6 +799,143 @@ class MultiStrategyWidget(QWidget):
         count = self.pm.stop_all_running()
         self._log(f"✅ 已停止 {count} 个策略")
         self.refresh_status()
+
+    def _show_position_assignment(self):
+        """打开持仓分配对话框——查看真实账户持仓并分配到策略"""
+        from PyQt5.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout,
+            QTableWidget, QTableWidgetItem, QHeaderView, QPushButton, QComboBox)
+        from strategies.virtual_bookkeeper import VirtualBookkeeper
+
+        dialog = QDialog(self)
+        dialog.setWindowTitle("持仓分配 — 虚拟簿记")
+        dialog.resize(700, 500)
+        layout = QVBoxLayout(dialog)
+
+        # ── 加载数据 ──
+        bk = VirtualBookkeeper()
+        strategy_names = list(self._strategy_rows.keys())
+
+        # 查询真实持仓
+        real_positions = {}
+        try:
+            import sys, os
+            bridge_dir = os.path.normpath(os.path.join(
+                str(PROJECT_ROOT), '..', 'EasyXT_Strategies_v2.2',
+                'strategies', 'quant_strategies', 'qmt_bridge'))
+            if bridge_dir not in sys.path:
+                sys.path.insert(0, bridge_dir)
+            from qmt_signal_bridge import QmtSignalBridge
+            bridge = QmtSignalBridge()
+            pos_list = bridge.query_positions(account_id='', timeout=10)
+            if pos_list and not isinstance(pos_list, dict):
+                for p in pos_list:
+                    code = str(p.get('stock_code', ''))
+                    vol = int(p.get('volume', 0))
+                    if code and vol > 0:
+                        # 补齐后缀
+                        if not code.endswith(('.SH', '.SZ')):
+                            if code.startswith(('51','56','58','588','689')): code += '.SH'
+                            elif code.startswith(('11','12','13')): code += '.SH' if code.startswith('11') else '.SZ'
+                            elif code.startswith(('6',)): code += '.SH'
+                            else: code += '.SZ'
+                        real_positions[code] = {
+                            'volume': vol,
+                            'cost': round(float(p.get('cost_price', 0)), 3),
+                        }
+        except Exception as e:
+            QMessageBox.warning(dialog, "查询失败", f"无法查询大QMT持仓:\n{e}")
+            dialog.reject()
+            return
+
+        if not real_positions:
+            QMessageBox.information(dialog, "无持仓", "当前账户无持仓")
+            dialog.reject()
+            return
+
+        # ── 表格 ──
+        table = QTableWidget()
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["股票代码", "可用数量(股)", "成本价", "归属策略"])
+        table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
+        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        table.setColumnWidth(0, 120)
+        table.setColumnWidth(1, 100)
+        table.setColumnWidth(2, 80)
+        table.verticalHeader().setVisible(False)
+
+        # 查询当前簿记中每个code归属哪个策略
+        code_to_strategy = {}
+        for sname in bk.data.get("strategies", {}):
+            if sname == VirtualBookkeeper.MANUAL_STRATEGY:
+                continue
+            for code in bk.data["strategies"][sname]:
+                code_to_strategy[code] = sname
+
+        all_codes = sorted(real_positions.keys())
+        table.setRowCount(len(all_codes))
+        combos = {}  # code → QComboBox
+
+        for i, code in enumerate(all_codes):
+            info = real_positions[code]
+            table.setItem(i, 0, QTableWidgetItem(code))
+            table.setItem(i, 1, QTableWidgetItem(str(info['volume'])))
+            table.setItem(i, 2, QTableWidgetItem(str(info['cost'])))
+
+            combo = QComboBox()
+            combo.addItem("手动(不归属策略)", "_manual")
+            for sn in strategy_names:
+                display_name = get_strategy_info(sn)[0]
+                combo.addItem(f"{display_name} ({sn})", sn)
+            # 设置当前归属
+            current = code_to_strategy.get(code, "_manual")
+            idx = combo.findData(current)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+            combos[code] = combo
+            table.setCellWidget(i, 3, combo)
+
+        layout.addWidget(table)
+
+        # ── 按钮 ──
+        btn_layout = QHBoxLayout()
+
+        info_label = QLabel(f"共 {len(all_codes)} 只持仓，{len(strategy_names)} 个策略")
+        btn_layout.addWidget(info_label)
+        btn_layout.addStretch()
+
+        refresh_btn = QPushButton("🔄 刷新持仓")
+        def do_refresh():
+            dialog.accept()
+            self._show_position_assignment()
+        refresh_btn.clicked.connect(do_refresh)
+        btn_layout.addWidget(refresh_btn)
+
+        save_btn = QPushButton("💾 保存分配")
+        save_btn.setStyleSheet("QPushButton { background-color: #0078d4; color: white; padding: 6px 16px; }")
+        def do_save():
+            # 清空所有策略持仓，按分配重建
+            for sn in strategy_names:
+                bk.clear_strategy(sn)
+            manual = {}
+            for code, combo in combos.items():
+                sname = combo.currentData()
+                info = real_positions[code]
+                if sname == "_manual":
+                    manual[code] = {"volume": info['volume'], "cost": info['cost'], "last_buy": "manual"}
+                else:
+                    bk.record_buy(sname, code, info['volume'], info['cost'])
+            if manual:
+                bk.data.setdefault("strategies", {})[VirtualBookkeeper.MANUAL_STRATEGY] = manual
+                bk._save()
+            self._log(f"📊 持仓分配已保存: {len(all_codes)} 只")
+            dialog.accept()
+        save_btn.clicked.connect(do_save)
+        btn_layout.addWidget(save_btn)
+
+        layout.addLayout(btn_layout)
+        dialog.exec_()
 
     def show_report(self):
         """显示简要运行报告"""
