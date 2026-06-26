@@ -18,22 +18,35 @@ from typing import Dict, List, Optional
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-STRATEGY_MODULES = {
-    "limit_up": "strategies.quant_strategies.limit_up",
-    "etf_trend": "strategies.quant_strategies.etf_trend",
-    "etf_hot_theme": "strategies.quant_strategies.etf_hot_theme",
-    "dividend_lowvol": "strategies.quant_strategies.dividend_lowvol",
-    "cb_double_low": "strategies.quant_strategies.cb_double_low",
-    "cb_three_low": "strategies.quant_strategies.cb_three_low",
-    "cb_factor_rotation": "strategies.quant_strategies.cb_factor_rotation",
-}
+# 策略模块路径（优先知识星球专属 quant_strategies/，其次公开 strategies/）
+_STRATEGY_NAMES = [
+    "limit_up", "etf_trend", "etf_hot_theme", "dividend_lowvol",
+    "cb_double_low", "cb_three_low", "cb_factor_rotation",
+]
+
+def _resolve_strategy_module(name: str) -> str:
+    """解析策略模块路径，优先知识星球目录，失败则尝试公开目录"""
+    quant_path = f"strategies.quant_strategies.{name}"
+    public_path = f"strategies.{name}"
+    import importlib
+    try:
+        importlib.import_module(quant_path)
+        return quant_path
+    except ImportError:
+        return public_path
 
 def load_strategy_class(name: str):
     import importlib
-    mod_path = STRATEGY_MODULES.get(name)
-    if not mod_path:
+    if name not in _STRATEGY_NAMES:
         raise ValueError(f"未知策略: {name}")
-    mod = importlib.import_module(mod_path)
+    mod_path = _resolve_strategy_module(name)
+    try:
+        mod = importlib.import_module(mod_path)
+    except ImportError:
+        raise ImportError(
+            f"策略 '{name}' 不存在。\n"
+            f"部分策略为知识星球专属，请加入知识星球获取完整策略包。"
+        )
     for attr in dir(mod):
         obj = getattr(mod, attr)
         if isinstance(obj, type) and attr.endswith("Strategy"):

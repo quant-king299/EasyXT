@@ -49,19 +49,20 @@ class EasyXT:
     def init_trade(self, userdata_path: str, session_id: Optional[str] = None) -> bool:
         """
         初始化交易服务
-        
+
         Args:
             userdata_path: 迅投客户端userdata路径
             session_id: 会话ID
-            
+
         Returns:
             bool: 是否成功
         """
+        # 大QMT 模式下跳过 xttrader 连接（connect() 内部检测），交易走信号桥接
         self._trade_connected = self.trade.connect(userdata_path, session_id if session_id else "")
         if self._trade_connected:
-            logger.info("交易服务初始化成功")
+            logger.info("交易服务初始化成功（xttrader 直连）")
         else:
-            logger.info("交易服务初始化失败")
+            logger.info("交易服务初始化：xttrader 未连接，将使用信号桥接降级")
         return self._trade_connected
     
     def add_account(self, account_id: str, account_type: str = 'STOCK') -> bool:

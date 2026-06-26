@@ -225,6 +225,20 @@ class TradeAPI:
         Returns:
             bool: 是否连接成功
         """
+        # ── 大QMT 运行中 → 跳过 xttrader 连接，交易走信号桥接 ──
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq XtItClient.exe'],
+                capture_output=True, text=True, timeout=3
+            )
+            if 'XtItClient.exe' in result.stdout:
+                logger.info("[信号桥接] 大QMT 已运行，跳过 xttrader 连接")
+                logger.info("[信号桥接] buy/sell 将自动走文件信号通道")
+                return False  # 不连 xttrader，后续 buy/sell 内部降级到信号桥接
+        except Exception:
+            pass
+
         if not _ensure_xt_trader():
             ErrorHandler.log_error("交易模块不可用")
             return False

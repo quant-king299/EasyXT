@@ -278,11 +278,25 @@ class StrategyScheduler:
                     else:
                         self._log("ERROR", f"缺少配置: QMT_DATA_DIR={qmt_path}, QMT_ACCOUNT_ID={account_id}")
 
-            # 获取策略类
-            from strategies.quant_strategies import get_strategy_class
-            strategy_class = get_strategy_class(self.strategy_name)
+            # 获取策略类（优先知识星球专属，其次公开策略，最后报错）
+            strategy_class = None
+            try:
+                from strategies.quant_strategies import get_strategy_class
+                strategy_class = get_strategy_class(self.strategy_name)
+            except ImportError:
+                # GitHub 公开版不含 quant_strategies/，尝试从 strategies/ 直接导入
+                import importlib
+                try:
+                    mod = importlib.import_module(f'strategies.{self.strategy_name}')
+                    # 按约定：策略类名为 {Name}Strategy
+                    class_name = ''.join(part.capitalize() for part in self.strategy_name.split('_')) + 'Strategy'
+                    strategy_class = getattr(mod, class_name, None)
+                except (ImportError, AttributeError):
+                    strategy_class = None
+
             if not strategy_class:
                 self._log("ERROR", f"策略不存在: {self.strategy_name}")
+                self._log("INFO", "提示：部分策略为知识星球专属，请加入知识星球获取完整策略包")
                 return False
 
             # 创建策略实例

@@ -264,8 +264,42 @@ from typing import Dict, List, Optional
 from datetime import datetime, timedelta
 
 import time
+import subprocess
 
 import pandas as pd
+
+
+# ── 大QMT 快速进程检测（tasklist，瞬时完成，不依赖 pywinauto）──
+_big_qmt_cache = None  # None=未检测, True=运行中, False=未运行
+
+
+def _is_big_qmt_fast() -> bool:
+    """
+    用 Windows tasklist 快速检测大QMT是否在运行（<0.1秒）
+
+    比 pywinauto Application.connect() 快 100 倍以上，
+    用于在 data_api 等热点路径中跳过 miniQMT 连接尝试。
+    """
+    global _big_qmt_cache
+    if _big_qmt_cache is not None:
+        return _big_qmt_cache
+
+    try:
+        result = subprocess.run(
+            ['tasklist', '/FI', 'IMAGENAME eq XtItClient.exe'],
+            capture_output=True, text=True, timeout=3
+        )
+        _big_qmt_cache = 'XtItClient.exe' in result.stdout
+    except Exception:
+        _big_qmt_cache = False
+
+    return _big_qmt_cache
+
+
+def _reset_big_qmt_cache():
+    """重置大QMT检测缓存（供外部手动刷新）"""
+    global _big_qmt_cache
+    _big_qmt_cache = None
 
 
 
@@ -923,12 +957,17 @@ class DataAPI:
 
     def _connect_qmt(self) -> bool:
 
-        """连接QMT数据源（失败时自动尝试启动QMT）"""
+        """连接QMT数据源（大QMT运行时跳过 miniQMT 连接，避免卡顿）"""
+
+        # ── 快速退出：大QMT 已在运行 → 不需要连接 miniQMT ──
+        if _is_big_qmt_fast():
+            logger.info("[INFO] 大QMT（XtItClient.exe）已运行，跳过 miniQMT 数据连接")
+            logger.info("[INFO] 数据走 Tushare/DuckDB，交易走信号桥接")
+            return False
 
         if not self.xt:
 
-            # xtdata 未导入，尝试自动启动 QMT 后再导入
-
+            # xtdata 未导入，尝试自动启动 miniQMT 后再导入
             if not getattr(self, '_qmt_recovery_attempted', False):
 
                 self._qmt_recovery_attempted = True
@@ -972,8 +1011,7 @@ class DataAPI:
 
 
 
-        # 连接失败，尝试自动启动 QMT
-
+        # 连接失败，尝试自动启动 miniQMT
         if not getattr(self, '_qmt_recovery_attempted', False):
 
             self._qmt_recovery_attempted = True

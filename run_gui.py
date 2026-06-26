@@ -71,12 +71,16 @@ def main():
             print(f"  [FAIL] {file_path} (不存在)")
             return False
 
-    # 自动检测并启动 miniQMT
+    # 自动检测并启动 miniQMT（大QMT运行时快速跳过）
     print("\n[*] 检测 miniQMT...")
     try:
         from core.auto_login.qmt_login import QMTAutoLogin
         auto_login = QMTAutoLogin()
-        if auto_login._is_running():
+
+        # 先快速检测大QMT（tasklist，<0.1秒）
+        if auto_login._is_big_qmt_process_only():
+            print("  [OK] 大QMT（XtItClient.exe）已运行，跳过 miniQMT 登录")
+        elif auto_login._is_running():
             print("  [OK] miniQMT 已在运行中")
         else:
             print("  [!] miniQMT 未启动，自动登录中...")

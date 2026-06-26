@@ -118,9 +118,8 @@ class QMTAutoLogin:
             bool: 登录是否成功
         """
         try:
-            # [关键检测] 先检查大QMT（完整版客户端）是否已运行
-            # 如果大QMT已登录，则无需启动miniQMT，直接返回成功
-            if self._is_big_qmt_running():
+            # [关键检测] 大QMT进程存在 → 立即跳过，不碰 pywinauto（<0.1秒）
+            if self._is_big_qmt_process_only():
                 self.logger.info("=" * 60)
                 self.logger.info("大QMT（XtItClient.exe）已在运行中")
                 self.logger.info("miniQMT与大QMT共享后端，无需重复登录miniQMT")
@@ -232,9 +231,32 @@ class QMTAutoLogin:
         except (ProcessNotFoundError, Exception):
             return None
 
+    def _is_big_qmt_process_only(self) -> bool:
+        """
+        仅用 tasklist 检测大QMT进程是否存在（<0.1秒，无 pywinauto）
+
+        用于 login() 中快速跳过 miniQMT 自动登录。
+        """
+        if not self.big_qmt_path:
+            return False
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq XtItClient.exe'],
+                capture_output=True, text=True, timeout=3
+            )
+            return 'XtItClient.exe' in result.stdout
+        except Exception:
+            return False
+
     def _is_big_qmt_running(self) -> bool:
         """
         检查大QMT（完整版客户端 XtItClient.exe）是否正在运行
+
+        三层检测：
+        1. tasklist 快速检测进程是否存在（<0.1秒）
+        2. pywinauto 确认窗口是否可连接（~2秒，仅 tasklist 命中时）
+        3. pywinauto 失败时退化到进程存在即算（tasklist 命中就够了）
 
         如果大QMT已经登录运行，则无需再启动miniQMT自动登录。
         大QMT和miniQMT共享同一后端，大QMT登录后miniQMT的API也可用。
@@ -245,12 +267,16 @@ class QMTAutoLogin:
         if not self.big_qmt_path:
             return False
 
+        # 第一层：tasklist 快速检测进程（瞬时，不卡）
+        if not self._is_big_qmt_process_only():
+            return False
+
+        # 第二层：pywinauto 确认窗口状态（给 GUI 状态栏用的详细确认）
         try:
             app = Application(backend="uia").connect(
                 path=self.big_qmt_path,
                 timeout=2
             )
-            # 检查是否已登录（非登录界面）
             if app and self._check_logged_in(app):
                 self.logger.info("检测到大QMT（XtItClient.exe）已运行且已登录")
                 return True
@@ -259,7 +285,9 @@ class QMTAutoLogin:
                 return True
             return False
         except (ProcessNotFoundError, Exception):
-            return False
+            # tasklist 命中了但 pywinauto 连不上——进程存在就是最好的证据
+            self.logger.info("检测到大QMT进程正在运行（tasklist确认）")
+            return True
 
     def _check_logged_in(self, app: Application) -> bool:
         """检查是否已登录"""
