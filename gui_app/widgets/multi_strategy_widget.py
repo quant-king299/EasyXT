@@ -419,25 +419,26 @@ class MultiStrategyWidget(QWidget):
         self.table = QTableWidget()
         self.table.setColumnCount(9)
         self.table.setHorizontalHeaderLabels(
-            ["策略名称", "中文名", "状态", "调度类型", "调度参数", "仓位%", "PID", "操作"]
+            ["策略名称", "中文名", "状态", "调度类型", "调度参数", "仓位%", "PID", "", "操作"]
         )
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        self.table.setColumnWidth(1, 90)
         self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(5, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(7, QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Fixed)
+        self.table.horizontalHeader().setSectionResizeMode(8, QHeaderView.Stretch)
         self.table.setColumnWidth(0, 130)
+        self.table.setColumnWidth(1, 90)
         self.table.setColumnWidth(2, 80)
         self.table.setColumnWidth(3, 75)
         self.table.setColumnWidth(4, 70)
         self.table.setColumnWidth(5, 70)
         self.table.setColumnWidth(6, 60)
         self.table.setColumnWidth(7, 60)
-        self.table.setColumnWidth(8, 220)
         self.table.setSelectionBehavior(QTableWidget.SelectRows)
         self.table.setAlternatingRowColors(True)
         self.table.verticalHeader().setVisible(False)
@@ -492,13 +493,15 @@ class MultiStrategyWidget(QWidget):
             self.table.item(i, 4).setToolTip(
                 "daily: HH:MM (如 09:35)\ninterval: 分钟数 (如 5)\n双击编辑"
             )
-            # 仓位比例 SpinBox
+            # 仓位比例 SpinBox（禁用滚轮，防误触）
             alloc_spin = QDoubleSpinBox()
             alloc_spin.setRange(0, 100)
             alloc_spin.setDecimals(0)
             alloc_spin.setSuffix("%")
             alloc_spin.setValue(allocations.get(name, 0) * 100)
-            alloc_spin.setToolTip(f"{name} 资金分配比例\n0%=不参与, 等权=平均分配")
+            alloc_spin.setToolTip(f"{name} 资金分配比例\n0%=不参与, 等权=平均分配\n键盘输入或点击箭头调整")
+            alloc_spin.setButtonSymbols(QDoubleSpinBox.UpDownArrows)  # 显示箭头按钮
+            alloc_spin.wheelEvent = lambda e: e.ignore()  # 禁用鼠标滚轮
             alloc_spin.valueChanged.connect(lambda v, n=name: self._on_allocation_changed(n, v))
             self._allocation_spinboxes[name] = alloc_spin
             self.table.setCellWidget(i, 5, alloc_spin)
