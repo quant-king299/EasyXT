@@ -284,7 +284,6 @@ strategies/xueqiu_follow/config/default.json
 strategies/xueqiu_follow/config/jq2qmt_config.json
 
 # 私有实时服务依赖清单（不随仓库发布）
-requirements_realtime.txt
 deploy/requirements_realtime.txt
 
 # 服务器配置文件（包含敏感信息）
@@ -307,7 +306,8 @@ backup/
 integration_test_logs/
 logs/
 reports/
-tests/
+tests/*
+!tests/test_requirements_realtime.py
 demo*/
 
 # Demo图表文件
