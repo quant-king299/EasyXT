@@ -7,7 +7,7 @@ name = "easyxt"
 version = "1.0.0"
 description = "EasyXT - 基于迅投QMT的量化交易扩展工具包"
 readme = "README.md"
-authors = [{ name = "CodeBuddy", email = "noreply@example.com" }]
+authors = [{ name = "王者quant", email = "2174721315@qq.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.8"
 classifiers = [

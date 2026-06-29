@@ -7,7 +7,7 @@ name = "easy-xt"
 version = "0.1.0"
 description = "Unified helpers and adapters for EasyXT integration"
 readme = "README.md"
-authors = [{ name = "EasyXT Team", email = "noreply@example.com" }]
+authors = [{ name = "王者quant", email = "2174721315@qq.com" }]
 license = { text = "MIT" }
 requires-python = ">=3.8"
 classifiers = [

@@ -7,7 +7,7 @@ EasyXT - xtquant的简化API封装
 """
 
 __version__ = "1.0.0"
-__author__ = "CodeBuddy"
+__author__ = "王者quant"
 
 # ============================================================
 # ⚠️ 线程安全：尽早对 xtdata 下载方法进行 monkey-patch
