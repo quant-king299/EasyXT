@@ -715,10 +715,25 @@ class MultiStrategyWidget(QWidget):
 
     # ---- 策略操作 ----
 
+    def _is_big_qmt(self) -> bool:
+        """检测是否为大QMT环境（大QMT才有 XtItClient.exe 进程）"""
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq XtItClient.exe'],
+                capture_output=True, text=True, timeout=3
+            )
+            return 'XtItClient.exe' in result.stdout
+        except Exception:
+            return False
+
     def _ensure_position_confirmed(self) -> bool:
-        """实盘模式下强制确认持仓分配，确认过一次后不再弹窗"""
+        """实盘模式下强制确认持仓分配（仅大QMT需要，miniQMT 自动跳过）"""
         run_mode = "live" if self.rb_live.isChecked() else "dry_run"
         if run_mode != "live":
+            return True
+        # miniQMT 可以直接查询持仓，不需要人工分配
+        if not self._is_big_qmt():
             return True
         from strategies.virtual_bookkeeper import VirtualBookkeeper
         bk = VirtualBookkeeper()
