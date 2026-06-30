@@ -29,35 +29,31 @@
 ### 一键安装步骤
 
 ```powershell
-# 1. 克隆项目（如果还没有）
+# 方式1：直接从 PyPI 安装（推荐）⭐
+pip install easyxt
+
+# 方式2：实时数据推送功能（可选，如需通达信数据源）
+pip install easyxt[realtime]
+
+# 方式3：从源码安装（开发模式，如需修改代码）
 git clone https://github.com/quant-king299/EasyXT.git
 cd EasyXT
-
-# 2. 选择安装方式
-
-# 方式1：仅安装核心库（命令行使用）
-pip install -e ./easy_xt
-
-# 方式2：完整安装（包含GUI、回测等所有功能）⭐ 推荐
 pip install -e .
-
-# 方式3：实时数据推送功能（可选）
-pip install -r requirements_realtime.txt
 ```
 
 **💡 说明**：
-- **方式1**：只安装核心数据API，适合命令行使用，不包含GUI界面
-- **方式2**：完整安装，包含GUI界面、回测框架等所有功能
-- **方式3**：实时数据推送功能，包括：
+- **方式1**：安装完整的 EasyXT 功能，包含 GUI、回测框架等所有模块
+- **方式2**：在方式1基础上增加实时数据推送功能，包括：
   - ✅ **pytdx** - 通达信数据接口，支持实时行情和历史数据
   - ✅ **aiohttp/websockets** - 异步HTTP和WebSocket支持
   - ✅ **实时数据推送** - 支持实时行情订阅和推送
   - ✅ **自动降级** - 当QMT数据不可用时自动切换到通达信数据源
+- **方式3**：开发模式，适合需要修改代码或参与开发的用户
 
 **安装建议**：
-- 如果需要使用GUI界面（main_app.py（101因子平台）），请使用**方式2**
-- 如果需要**实时数据推送**或**通达信数据源**（推荐），额外安装**方式3**
-- 完整安装：方式2 + 方式3
+- 大多数用户只需**方式1**
+- 如果需要**实时数据推送**或**通达信数据源**（推荐），使用**方式2**
+- 完整安装：`pip install easyxt[realtime]`
 
 ### 验证安装
 
@@ -212,12 +208,34 @@ cd EasyXT
 
 ---
 
-### 第二步：安装 easy_xt（核心库）
+### 第二步：安装 EasyXT
 
-**什么是 easy_xt？**
+**什么是 EasyXT？**
 - QMT API 的轻量级封装
-- 提供数据获取、交易下单等功能
-- **必需的**，除非你只用回测框架
+- 提供数据获取、交易下单、GUI界面、回测框架等完整功能
+- **必需的**
+
+#### 方式A：从 PyPI 直接安装（推荐）
+
+```powershell
+# 安装 EasyXT（包含完整功能）
+pip install easyxt
+
+# 如需实时数据推送功能（可选）
+pip install easyxt[realtime]
+```
+
+**可能的输出**：
+```
+Successfully installed easyxt-1.0.0
+```
+
+**验证安装**：
+```powershell
+python -c "from easy_xt import get_api; print('easy_xt OK')"
+```
+
+#### 方式B：从源码安装（开发模式）
 
 ```powershell
 # 安装 easy_xt
@@ -236,12 +254,14 @@ python -c "from easy_xt import get_api; print('easy_xt OK')"
 
 ---
 
-### 第三步：安装 easyxt_backtest（回测框架）
+### 第三步：安装 easyxt_backtest（回测框架，可选）
 
 **什么是 easyxt_backtest？**
 - 通用量化策略回测框架
 - 支持技术指标、选股、网格等多种策略
 - **可选的**，如果你只做数据查询不需要回测
+
+> **注意**：如果你已经通过 `pip install easyxt` 安装了完整版本，回测框架已经包含在内，无需单独安装。
 
 #### 方式A：使用 pip 安装（推荐，最简单）
 
@@ -395,10 +415,13 @@ ModuleNotFoundError: No module named 'PyQt5'
 
 **解决方案**：
 
-**方案1：重新安装完整依赖**（推荐）
+**方案1：从 PyPI 重新安装完整依赖**（推荐）
 ```powershell
-# 从项目根目录安装（包含 GUI、回测等所有依赖）
-pip install -e .
+# 卸载旧版本
+pip uninstall easyxt -y
+
+# 安装完整版本
+pip install easyxt
 ```
 
 **方案2：单独安装 PyQt5**
@@ -412,8 +435,7 @@ python -c "from PyQt5.QtWidgets import QApplication; print('PyQt5 OK')"
 ```
 
 **说明**：
-- ✅ `pip install -e ./easy_xt` - 只安装核心库，适合命令行使用
-- ✅ `pip install -e .` - 完整安装，包含 GUI 界面、回测框架等
+- ✅ `pip install easyxt` - 完整安装，包含 GUI 界面、回测框架等所有功能
 - 如果需要使用 `main_app.py（101因子平台）`，必须使用**完整安装**
 
 ---
@@ -436,7 +458,7 @@ pip install duckdb
 
 **方案2：重新安装完整依赖**
 ```powershell
-pip install -e .
+pip install easyxt
 ```
 
 **验证安装**：
@@ -756,16 +778,16 @@ rmdir venv
 
 ## 📊 安装方式对比
 
-| 方式 | easy_xt | easyxt_backtest | 实时数据推送 |
-|------|---------|-----------------|-------------|
-| **安装方式** | `pip install -e ./easy_xt` | `pip install -e ./easyxt_backtest` | `pip install -r requirements_realtime.txt` |
-| **是否必需** | 是 | 可选 | 可选 |
-| **主要功能** | QMT数据API | 回测框架 | pytdx+实时推送 |
-| **是否设置 PYTHONPATH** | 否 | **否** | 否 |
+| 方式 | PyPI 安装 | 源码安装（开发模式） | 实时数据推送 |
+|------|----------|---------------------|-------------|
+| **安装命令** | `pip install easyxt` | `pip install -e .` | `pip install easyxt[realtime]` |
+| **是否必需** | 是（推荐） | 可选（开发者） | 可选 |
+| **主要功能** | 完整功能（GUI、回测、API） | 完整功能 + 可编辑源码 | pytdx+实时推送 |
+| **是否设置 PYTHONPATH** | 否 | 否 | 否 |
 | **pip list 可见** | 是 | 是 | 是 |
 | **重启终端** | 不需要 | 不需要 | 不需要 |
-| **更新代码** | `git pull` | `git pull` | `git pull` |
-| **卸载方式** | `pip uninstall easy-xt` | `pip uninstall easyxt-backtest` | 手动删除 |
+| **更新方式** | `pip install --upgrade easyxt` | `git pull` | 同 PyPI 版本 |
+| **卸载方式** | `pip uninstall easyxt` | `pip uninstall easyxt` | `pip uninstall easyxt` |
 | **IDE 识别** | ✅ 完美 | ✅ 完美 | ✅ 完美 |
 
 ---
@@ -775,39 +797,36 @@ rmdir venv
 ### 新手用户（推荐）
 
 ```powershell
-# 1. 克隆项目
-git clone https://github.com/quant-king299/EasyXT.git
-cd EasyXT
+# 1. 直接从 PyPI 安装
+pip install easyxt
 
-# 2. 安装核心库
-pip install -e ./easy_xt
+# 2. 安装实时数据推送功能（可选，推荐）⭐
+pip install easyxt[realtime]
 
-# 3. 安装回测框架
-pip install -e ./easyxt_backtest
-
-# 4. 安装实时数据推送功能（可选，推荐）⭐
-pip install -r requirements_realtime.txt
-
-# 5. 验证安装
-python -c "from easyxt_backtest import EnhancedBacktestEngine; print('安装成功！')"
+# 3. 验证安装
+python -c "from easy_xt import get_api; print('安装成功！')"
 ```
 
 ### 开发者
 
 ```powershell
-# 1. 使用虚拟环境（推荐）
+# 1. 克隆项目
+git clone https://github.com/quant-king299/EasyXT.git
+cd EasyXT
+
+# 2. 使用虚拟环境（推荐）
 python -m venv venv
 .\venv\Scripts\Activate.ps1
 
-# 2. 安装所有依赖
-pip install -e ./easy_xt
+# 3. 安装所有依赖（开发模式）
+pip install -e .
 pip install -e ./easyxt_backtest
-pip install -r requirements_realtime.txt  # 实时数据推送功能
+pip install easyxt[realtime]  # 实时数据推送功能
 
-# 3. 配置开发环境
+# 4. 配置开发环境
 code .
 
-# 4. 开始开发
+# 5. 开始开发
 ```
 
 ---
