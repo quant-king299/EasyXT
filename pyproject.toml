@@ -4,7 +4,7 @@ build-backend = "flit_core.buildapi"
 
 [project]
 name = "easyxt"
-version = "1.0.0"
+version = "1.0.1"
 description = "EasyXT - 基于迅投QMT的量化交易扩展工具包"
 readme = "README.md"
 authors = [{ name = "王者quant", email = "2174721315@qq.com" }]
