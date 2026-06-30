@@ -972,7 +972,7 @@ ID: {order['id']}
         self.monitor_timer.start(5000)  # 每5秒检查一次
 
     def init_trade_connection(self):
-        """初始化交易连接"""
+        """初始化交易连接（静默模式，失败不弹错误）"""
         if not EASYXT_AVAILABLE:
             self.log("提示: EasyXT不可用，条件单功能受限")
             return
@@ -981,6 +981,7 @@ ID: {order['id']}
             import easy_xt
             import json
             import os
+            import logging
 
             # 读取统一配置文件
             config_file = os.path.join(
@@ -1015,14 +1016,21 @@ ID: {order['id']}
             # 获取扩展API实例
             self.trade_api = easy_xt.get_extended_api()
 
-            # 初始化交易服务
+            # 初始化交易服务（临时抑制 easy_xt 内部的 ERROR 日志）
             if hasattr(self.trade_api, 'init_trade'):
-                result = self.trade_api.init_trade(userdata_path)
+                xt_logger = logging.getLogger('easy_xt')
+                prev_level = xt_logger.level
+                xt_logger.setLevel(logging.WARNING)  # 初始化期间只显示 WARNING 及以上
+                try:
+                    result = self.trade_api.init_trade(userdata_path)
+                finally:
+                    xt_logger.setLevel(prev_level)
+
                 if result:
                     self._trade_initialized = True
                     self.log("✓ 交易服务连接成功")
                 else:
-                    self.log("✗ 交易服务连接失败")
+                    self.log("ℹ 交易服务未连接（条件单执行功能不可用，监控仍正常）")
                     return
 
             # 添加账户
@@ -1032,19 +1040,14 @@ ID: {order['id']}
                     if self.trade_api.add_account(account_id, account_type):
                         self.log(f"✓ 已添加账户: {account_id} ({account_type})")
                     else:
-                        self.log(f"✗ 添加账户失败: {account_id}")
+                        self.log(f"ℹ 账户 {account_id} 未添加（条件单仅监控，不执行）")
                 else:
-                    # 如果没有add_account方法，说明API版本不同，跳过这一步
                     self.log(f"ℹ️ 账户 {account_id} 已连接 (跳过账户添加)")
             except Exception as e:
-                # 添加账户失败不影响条件单功能
                 self.log(f"⚠️ 添加账户时出现警告: {str(e)}")
-                self.log(f"ℹ️ 条件单功能仍可正常使用")
 
         except Exception as e:
             self.log(f"初始化交易连接时出错: {str(e)}")
-            import traceback
-            traceback.print_exc()
 
     def monitor_orders(self):
         """监控条件单并自动触发"""
