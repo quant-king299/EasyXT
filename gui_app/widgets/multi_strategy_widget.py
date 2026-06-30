@@ -605,6 +605,7 @@ class MultiStrategyWidget(QWidget):
         self.cb_verbose.setToolTip("勾选=显示所有日志\n取消=只显示买卖信号/错误/关键信息")
         filter_layout.addWidget(self.cb_verbose)
         filter_layout.addStretch()
+
         clear_log_btn = QPushButton("清空日志")
         clear_log_btn.setFixedWidth(80)
         clear_log_btn.clicked.connect(self.log_output.clear)
@@ -667,9 +668,11 @@ class MultiStrategyWidget(QWidget):
         if not self._should_show(msg):
             return
         ts = datetime.now().strftime('%H:%M:%S')
-        self.log_output.appendPlainText(f"[{ts}] {msg}")
         scrollbar = self.log_output.verticalScrollBar()
-        scrollbar.setValue(scrollbar.maximum())
+        at_bottom = scrollbar.value() >= scrollbar.maximum() - 10
+        self.log_output.appendPlainText(f"[{ts}] {msg}")
+        if at_bottom:
+            scrollbar.setValue(scrollbar.maximum())
 
     # ---- 状态刷新 ----
 
@@ -941,35 +944,78 @@ class MultiStrategyWidget(QWidget):
 
         # 查询真实持仓
         real_positions = {}
+
+        # 检测是否为大QMT环境（只有大QMT才有qmt_signal_bridge）
+        is_big_qmt = False
         try:
-            import sys, os
-            bridge_dir = os.path.normpath(os.path.join(
-                str(PROJECT_ROOT), '..', 'EasyXT_Strategies_v2.2',
-                'strategies', 'quant_strategies', 'qmt_bridge'))
-            if bridge_dir not in sys.path:
-                sys.path.insert(0, bridge_dir)
-            from qmt_signal_bridge import QmtSignalBridge
-            bridge = QmtSignalBridge()
-            pos_list = bridge.query_positions(account_id=account_id, timeout=10)
-            if pos_list and not isinstance(pos_list, dict):
-                for p in pos_list:
-                    code = str(p.get('stock_code', ''))
-                    vol = int(p.get('volume', 0))
-                    if code and vol > 0:
-                        # 补齐后缀
-                        if not code.endswith(('.SH', '.SZ')):
-                            if code.startswith(('51','56','58','588','689')): code += '.SH'
-                            elif code.startswith(('11','12','13')): code += '.SH' if code.startswith('11') else '.SZ'
-                            elif code.startswith(('6',)): code += '.SH'
-                            else: code += '.SZ'
-                        real_positions[code] = {
-                            'volume': vol,
-                            'cost': round(float(p.get('cost_price', 0)), 3),
-                        }
-        except Exception as e:
-            QMessageBox.warning(dialog, "查询失败", f"无法查询大QMT持仓:\n{e}")
-            dialog.reject()
-            return
+            import subprocess
+            result = subprocess.run(
+                ['tasklist', '/FI', 'IMAGENAME eq XtItClient.exe'],
+                capture_output=True, text=True, timeout=3
+            )
+            is_big_qmt = 'XtItClient.exe' in result.stdout
+        except Exception:
+            is_big_qmt = False
+
+        # 大QMT环境：使用qmt_signal_bridge查询
+        if is_big_qmt:
+            try:
+                import sys, os
+                bridge_dir = os.path.normpath(os.path.join(
+                    str(PROJECT_ROOT), '..', 'EasyXT_Strategies_v2.2',
+                    'strategies', 'quant_strategies', 'qmt_bridge'))
+                if bridge_dir not in sys.path:
+                    sys.path.insert(0, bridge_dir)
+                from qmt_signal_bridge import QmtSignalBridge
+                bridge = QmtSignalBridge()
+                pos_list = bridge.query_positions(account_id=account_id, timeout=10)
+                if pos_list and not isinstance(pos_list, dict):
+                    for p in pos_list:
+                        code = str(p.get('stock_code', ''))
+                        vol = int(p.get('volume', 0))
+                        if code and vol > 0:
+                            # 补齐后缀
+                            if not code.endswith(('.SH', '.SZ')):
+                                if code.startswith(('51','56','58','588','689')): code += '.SH'
+                                elif code.startswith(('11','12','13')): code += '.SH' if code.startswith('11') else '.SZ'
+                                elif code.startswith(('6',)): code += '.SH'
+                                else: code += '.SZ'
+                            real_positions[code] = {
+                                'volume': vol,
+                                'cost': round(float(p.get('cost_price', 0)), 3),
+                            }
+            except ImportError as e:
+                QMessageBox.warning(dialog, "模块缺失",
+                    f"无法导入 qmt_signal_bridge 模块。\n\n错误: {e}")
+                dialog.reject()
+                return
+        else:
+            # miniQMT环境：使用通用API查询持仓
+            try:
+                from easy_xt import get_api
+                api = get_api()
+                # 确保交易服务已初始化
+                if not api.trade or not hasattr(api.trade, 'get_positions'):
+                    QMessageBox.warning(dialog, "服务未初始化",
+                        "交易服务未初始化，请先启动QMT客户端并登录。")
+                    dialog.reject()
+                    return
+
+                positions_df = api.trade.get_positions(account_id)
+                if not positions_df.empty:
+                    for _, row in positions_df.iterrows():
+                        code = row['code']
+                        vol = int(row['volume']) if row['volume'] > 0 else 0
+                        if code and vol > 0:
+                            real_positions[code] = {
+                                'volume': vol,
+                                'cost': round(float(row.get('open_price', 0)), 3),
+                            }
+            except Exception as e:
+                QMessageBox.warning(dialog, "查询失败",
+                    f"miniQMT持仓查询失败:\n{e}")
+                dialog.reject()
+                return
 
         if not real_positions:
             QMessageBox.information(dialog, "无持仓", "当前账户无持仓")
