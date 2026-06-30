@@ -32,13 +32,7 @@
   "settings": {
     "settings_comment": "运行时的通用设置（账户、风控、监控、日志、交易参数等）",
     "account": {
-      "account_comment": "交易账户配置",
-      "qmt_path": "",
-      "qmt_path_comment": "QMT交易端的安装/数据路径（留空则从.env QMT_DATA_DIR读取，或自动检测）",
-      "account_id": "",
-      "account_id_comment": "交易账户ID（留空则从.env QMT_ACCOUNT_ID读取）",
-      "password": "",
-      "password_comment": "账户密码（如无需则留空，注意安全）",
+      "account_comment": "交易账户配置（qmt_path / account_id 请到项目根目录 .env 文件中设置）",
       "auto_detect_qmt": true,
       "auto_detect_qmt_comment": "是否自动检测QMT路径与状态"
     },
