@@ -8,6 +8,14 @@ GUI应用快速启动脚本
 import sys
 import os
 
+# 初始化 Windows COM，防止 OleSetClipboard 等剪贴板报错
+if sys.platform == 'win32':
+    try:
+        import ctypes
+        ctypes.windll.ole32.CoInitializeEx(0, 0)  # COINIT_APARTMENTTHREADED
+    except Exception:
+        pass
+
 def main():
     # 获取项目根目录
     project_root = os.path.dirname(os.path.abspath(__file__))
