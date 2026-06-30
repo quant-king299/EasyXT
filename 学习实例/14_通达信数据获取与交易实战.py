@@ -17,6 +17,7 @@
 """
 
 import sys
+import os
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -59,12 +60,24 @@ try:
 
 except Exception as e:
     # 备用配置
-    print(f"[WARN] 配置文件加载失败，使用默认配置: {e}")
+    print(f"[WARN] 配置文件加载失败，尝试从环境变量读取: {e}")
 
-    QMT_PATH = r'D:\国金QMT交易端模拟\userdata_mini'
-    ACCOUNT_ID = ''
-    MAX_POSITION_RATIO = 0.8
-    STOP_LOSS_RATIO = 0.05
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+        QMT_PATH = os.getenv('QMT_USERDATA_PATH', r'D:\国金QMT交易端模拟\userdata_mini')
+        ACCOUNT_ID = os.getenv('QMT_ACCOUNT_ID', '')
+        MAX_POSITION_RATIO = 0.8
+        STOP_LOSS_RATIO = 0.05
+        print(f"[OK] 从环境变量读取配置成功")
+        print(f"  QMT userdata路径: {QMT_PATH}")
+        print(f"  账户ID: {ACCOUNT_ID if ACCOUNT_ID else '未设置'}")
+    except ImportError:
+        QMT_PATH = r'D:\国金QMT交易端模拟\userdata_mini'
+        ACCOUNT_ID = ''
+        MAX_POSITION_RATIO = 0.8
+        STOP_LOSS_RATIO = 0.05
+        print(f"[WARN] 无法从环境变量读取，使用默认配置")
 
 STOCK_POOL = {
     '核心蓝筹': ['605168.SH', '000333.SZ', '600519.SH'],

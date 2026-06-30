@@ -18,14 +18,14 @@ sys.path.insert(0, parent_dir)
 
 import easy_xt
 
-# 加载模拟数据生成器和交易功能
+# 自动从 .env 读取配置
 try:
-    exec(open(os.path.join(parent_dir, 'generate_mock_data.py')).read())
-    exec(open(os.path.join(parent_dir, 'mock_trade_functions.py')).read())
-    mock_mode = True
-    print("🔄 模拟数据和交易模式已启用")
-except (ValueError, TypeError):
-    mock_mode = False
+    from dotenv import load_dotenv
+    load_dotenv()
+    env_account = os.getenv('QMT_ACCOUNT_ID')
+    ACCOUNT_ID = env_account if env_account else None
+except ImportError:
+    ACCOUNT_ID = None
 
 # 尝试导入高级交易API
 try:
@@ -37,7 +37,8 @@ except ImportError:
 
 # 配置信息（请根据实际情况修改）
 USERDATA_PATH = r'D:\国金QMT交易端模拟\userdata_mini' #修改为实际的路径
-ACCOUNT_ID = ""  # 修改为实际账号
+# ACCOUNT_ID 已自动从 .env 读取，如需手动指定请取消下面注释
+# ACCOUNT_ID = "你的账号"
 TEST_CODES = ["000001.SZ", "000002.SZ", "600000.SH"]  # 测试用股票
 
 class MockAdvancedTradeAPI:

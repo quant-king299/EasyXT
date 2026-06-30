@@ -17,18 +17,24 @@ sys.path.insert(0, parent_dir)
 
 import easy_xt
 
-# 加载模拟数据生成器和交易功能
+# 自动从 .env 读取配置
 try:
-    exec(open(os.path.join(parent_dir, 'generate_mock_data.py')).read())
-    exec(open(os.path.join(parent_dir, 'mock_trade_functions.py')).read())
-    mock_mode = True
-    print("🔄 模拟数据和交易模式已启用")
-except (ValueError, TypeError):
-    mock_mode = False
+    from dotenv import load_dotenv
+    load_dotenv()
+    # 如果环境变量中有账户ID，自动使用
+    env_account = os.getenv('QMT_ACCOUNT_ID')
+    if env_account:
+        ACCOUNT_ID = env_account
+    else:
+        ACCOUNT_ID = None
+except ImportError:
+    # 如果没有 python-dotenv，用户需要手动填写
+    ACCOUNT_ID = None
 
 # 配置信息（请根据实际情况修改）
 USERDATA_PATH = r'D:\国金QMT交易端模拟\userdata_mini' #修改为实际的路径
-ACCOUNT_ID = ""  # 修改为实际账号
+# ACCOUNT_ID 已自动从 .env 读取，如需手动指定请取消下面注释
+# ACCOUNT_ID = "你的账号"
 TEST_CODE = "000001.SZ"  # 测试用股票代码
 
 def lesson_01_trade_setup():
@@ -49,20 +55,12 @@ def lesson_01_trade_setup():
         if success:
             print("✓ 数据服务初始化成功")
         else:
-            if mock_mode:
-                print("⚠️ 数据服务初始化失败，切换到模拟模式")
-                success = True
-            else:
-                print("✗ 数据服务初始化失败")
-                return None
-    except Exception as e:
-        if mock_mode:
-            print(f"⚠️ 数据服务初始化异常: {e}")
-            print("🔄 切换到模拟模式继续学习")
-            success = True
-        else:
-            print(f"✗ 数据服务初始化异常: {e}")
+            print("✗ 数据服务初始化失败")
+            print("请检查 QMT 客户端是否启动")
             return None
+    except Exception as e:
+        print(f"✗ 数据服务初始化异常: {e}")
+        return None
 
     # 3. 初始化交易服务
     print("\n3. 初始化交易服务")
@@ -72,25 +70,14 @@ def lesson_01_trade_setup():
         if success:
             print("✓ 交易服务初始化成功")
         else:
-            if mock_mode:
-                print("⚠️ 交易服务初始化失败，切换到模拟模式")
-                success = api.mock_init_trade(USERDATA_PATH, 'learning_session')
-                print("✓ 模拟交易服务初始化成功")
-            else:
-                print("✗ 交易服务初始化失败")
-                print("请检查：")
-                print("- 迅投客户端是否启动并登录")
-                print("- userdata路径是否正确")
-                return None
-    except Exception as e:
-        if mock_mode:
-            print(f"⚠️ 交易服务初始化异常: {e}")
-            print("🔄 切换到模拟交易模式")
-            success = api.mock_init_trade(USERDATA_PATH, 'learning_session')
-            print("✓ 模拟交易服务初始化成功")
-        else:
-            print(f"✗ 交易服务初始化异常: {e}")
+            print("✗ 交易服务初始化失败")
+            print("请检查：")
+            print("- 迅投客户端是否启动并登录")
+            print("- userdata路径是否正确")
             return None
+    except Exception as e:
+        print(f"✗ 交易服务初始化异常: {e}")
+        return None
 
     # 4. 添加交易账户
     print(f"\n4. 添加交易账户: {ACCOUNT_ID}")
@@ -99,23 +86,12 @@ def lesson_01_trade_setup():
         if success:
             print("✓ 交易账户添加成功")
         else:
-            if mock_mode:
-                print("⚠️ 交易账户添加失败，切换到模拟模式")
-                success = api.mock_add_account(ACCOUNT_ID, 'STOCK')
-                print("✓ 模拟交易账户添加成功")
-            else:
-                print("✗ 交易账户添加失败")
-                print("请检查账户信息是否正确")
-                return None
-    except Exception as e:
-        if mock_mode:
-            print(f"⚠️ 添加交易账户异常: {e}")
-            print("🔄 切换到模拟账户模式")
-            success = api.mock_add_account(ACCOUNT_ID, 'STOCK')
-            print("✓ 模拟交易账户添加成功")
-        else:
-            print(f"✗ 添加交易账户异常: {e}")
+            print("✗ 交易账户添加失败")
+            print("请检查账户信息是否正确")
             return None
+    except Exception as e:
+        print(f"✗ 添加交易账户异常: {e}")
+        return None
 
     return api
 

@@ -655,7 +655,7 @@ class EasyXT:
         if hasattr(self.trade, 'trader') and self.trade.trader and account_id in self.trade.accounts:
             account = self.trade.accounts[account_id]
             trades = self.trade.trader.query_stock_trades(account)
-            logger.info("成交数量:", len(trades))
+            logger.info(f"成交数量: {len(trades)}")
             
             if len(trades) == 0:
                 return pd.DataFrame()

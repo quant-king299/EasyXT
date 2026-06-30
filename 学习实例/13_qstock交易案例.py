@@ -76,9 +76,22 @@ except ImportError as e:
 plt.rcParams['font.sans-serif'] = ['SimHei']
 plt.rcParams['axes.unicode_minus'] = False
 
+# 自动从 .env 读取账户ID
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    DEFAULT_ACCOUNT_ID = os.getenv('QMT_ACCOUNT_ID', '')
+    if not DEFAULT_ACCOUNT_ID:
+        DEFAULT_ACCOUNT_ID = ""
+        print("⚠️ 未从 .env 读取到账户ID，请手动配置")
+except ImportError:
+    DEFAULT_ACCOUNT_ID = ""
+    print("⚠️ 未安装 python-dotenv，请手动配置账户ID")
+
 # 配置信息 - 请根据实际情况修改
 USERDATA_PATH = r'D:\国金QMT交易端模拟\userdata_mini'  # 修改为实际的迅投客户端路径
-DEFAULT_ACCOUNT_ID = ""  # 修改为实际账号
+# DEFAULT_ACCOUNT_ID 已自动从 .env 读取，如需手动指定请取消下面注释
+# DEFAULT_ACCOUNT_ID = "你的账号"
 
 class FixedRealTradingQStockStrategy:
     """基于真实qstock数据和easy_xt交易的策略类 (修复交易服务版)"""
