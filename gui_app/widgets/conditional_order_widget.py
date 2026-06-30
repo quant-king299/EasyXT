@@ -994,19 +994,31 @@ ID: {order['id']}
             with open(config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
 
-            # 获取QMT路径和账户ID
+            # 获取QMT路径和账户ID（优先 unified_config，为空则从 .env 读取）
             settings = config.get('settings', {})
             account_config = settings.get('account', {})
 
             userdata_path = account_config.get('qmt_path', '')
             account_id = account_config.get('account_id', '')
 
+            # 如果 unified_config 中为空，从 .env 读取
+            if not userdata_path or not account_id:
+                env_file = os.path.join(os.path.dirname(__file__), '..', '..', '.env')
+                if os.path.exists(env_file):
+                    with open(env_file, 'r', encoding='utf-8') as ef:
+                        for line in ef:
+                            line = line.strip()
+                            if not userdata_path and line.startswith('QMT_DATA_DIR='):
+                                userdata_path = line.split('=', 1)[1].strip()
+                            if not account_id and line.startswith('QMT_ACCOUNT_ID='):
+                                account_id = line.split('=', 1)[1].strip()
+
             if not userdata_path:
-                self.log("提示: 统一配置文件中未设置QMT路径 (settings.account.qmt_path)")
+                self.log("提示: 未设置QMT路径（unified_config 和 .env 均为空）")
                 return
 
             if not account_id:
-                self.log("提示: 统一配置文件中未设置账户ID (settings.account.account_id)")
+                self.log("提示: 未设置账户ID（unified_config 和 .env 均为空）")
                 return
 
             self.log(f"正在初始化交易连接...")
