@@ -1,7 +1,10 @@
 # 导入函数库
 import time
+import logging
 import requests
 from datetime import datetime as dt
+
+logger = logging.getLogger(__name__)
 
 # 简化的QMT客户端，通过中转服务发送信号
 class QMTClient:
