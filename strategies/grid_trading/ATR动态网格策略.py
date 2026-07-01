@@ -6,10 +6,13 @@ ATR动态网格策略
 
 import json
 import time
+import logging
 from sys import path
 from datetime import datetime
 from pathlib import Path
 from collections import deque
+
+logger = logging.getLogger(__name__)
 
 # ========================================
 # 路径配置：使用统一路径管理器

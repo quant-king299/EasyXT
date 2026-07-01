@@ -28,10 +28,13 @@
 import sys
 import os
 import json
+import logging
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # ========================================
 # 路径配置：使用统一路径管理器
