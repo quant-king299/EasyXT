@@ -5,7 +5,11 @@
 [![QMT](https://img.shields.io/badge/QMT-Compatible-orange.svg)](https://www.gtja.com/)
 [![Website](https://img.shields.io/badge/Website-ptqmt.com-blue?logo=google-chrome)](https://www.ptqmt.com)
 
-> **注意**：本项目使用的是miniQMT环境。QMT有两个版本：完整版QMT（包含GUI界面）和miniQMT（轻量级API版本）。两者在API使用上基本一致，但在环境配置和部署方式上有显著区别。详细区别请参阅 [📖 QMT版本说明](docs/assets/QMT_VERSIONS.md)。
+> **🎉 重要更新：** EasyXT 已全面支持**大 QMT（完整版）和 miniQMT**！
+> - ✅ 大 QMT 用户：通过信号桥接实现完整交易功能（知识星球专属）
+> - ✅ miniQMT 用户：直连模式，响应速度极快
+> - ✅ 代码零改动：自动检测并选择最优模式
+> - 详细说明请参阅 [📖 QMT版本说明](docs/assets/QMT_VERSIONS.md) 和下方"大 QMT 支持说明"章节
 
 > 量化为王，策略致胜，我是只聊干货的王者 quant！
 
@@ -19,7 +23,8 @@
 
 - 🎯 **简化API**: 封装复杂的QMT接口，提供易用的Python API
 - 💰 **真实交易**: 支持通过EasyXT接口进行真实股票交易
-- 📊 **数据获取**: 集成qstock、akshare等多种数据源
+- 🔀 **双模式支持**: 大 QMT（信号桥接）和 miniQMT（直连）自动切换
+- 📊 **多数据源**: Tushare、DuckDB、东方财富、akshare 智能降级
 - 📈 **技术指标**: 内置常用技术指标计算
 - 🚀 **策略开发**: 提供完整的量化策略开发框架
 - 🔐 **自动登录**: 支持QMT/miniQMT自动登录，包括验证码识别
@@ -30,10 +35,11 @@
 
 | 模块 | 类型 | 说明 | 独立性 |
 |------|------|------|--------|
-| **easy_xt** | 📦 核心库 | QMT API的轻量级封装，提供简洁的数据/交易接口 | ✅ 可独立使用 |
+| **easy_xt** | 📦 核心库 | QMT API的轻量级封装，支持大 QMT/miniQMT 双模式 | ✅ 可独立使用 |
 | **easyxt_backtest** | 🔧 扩展工具 | 通用回测框架，支持多策略、多数据源 | ✅ 可独立使用 |
 | **101因子平台** | 📊 独立应用 | 基于Streamlit的因子分析Web应用 | ✅ 完全独立 |
 | **strategies** | 📁 策略集合 | 完整的交易策略示例（雪球跟单、网格交易等） | ⚠️ 依赖easy_xt |
+| **quant_strategies** | ⭐ 知识星球专属 | 大 QMT 信号桥接 + 高级策略集合 | ⚠️ 星球专属 |
 | **学习实例** | 📚 教学案例 | 从入门到实战的代码教程 | ⚠️ 依赖easy_xt |
 
 **核心理念**：按需选用，低耦合，清晰边界
@@ -64,6 +70,17 @@
 
 #### 我想下载/更新基础数据
 → 📋 **数据下载速查表**（见下方）
+
+### 📋 环境要求
+
+| 组件 | 要求 | 说明 |
+|------|------|------|
+| **Python** | 3.9+ | 推荐使用 3.10 或 3.11 |
+| **操作系统** | Windows/macOS/Linux | Windows 原生支持，Mac/Linux 通过 xqshare |
+| **QMT** | 大 QMT 或 miniQMT | 交易功能必需，回测功能可选 |
+| **数据源** | Tushare Token（推荐） | 可选，但有 Tushare 数据体验更好 |
+
+---
 
 ### 📋 数据下载速查表
 
@@ -184,6 +201,87 @@ Eastmoney (东方财富)
 ### 感谢贡献者
 
 特别感谢 **[@jasonhu](https://github.com/jasonhu)** 为项目贡献了 xqshare 跨平台支持功能！
+
+---
+
+## 🔥 大 QMT 支持说明
+
+EasyXT 已全面支持**大 QMT（完整版）**和 miniQMT，实现代码零改动的双模式运行！
+
+### 🎯 双模式架构
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    EasyXT 智能检测层                         │
+├─────────────────────────────────────────────────────────────┤
+│  检测 XtItClient.exe 进程 → 自动选择最优模式                 │
+└─────────────────────────────────────────────────────────────┘
+                              ↓
+         ┌────────────────────┴────────────────────┐
+         ↓                                         ↓
+    大 QMT 运行中                              miniQMT 可用
+         ↓                                         ↓
+   ┌─────────────────┐                     ┌─────────────────┐
+   │  信号桥接模式    │                     │   直连模式      │
+   │ (星球专属)      │                     │                 │
+   ├─────────────────┤                     ├─────────────────┤
+   │ Python策略      │                     │ xttrader API    │
+   │     ↓           │                     │     ↓           │
+   │ 文件信号        │                     │ 直接调用        │
+   │     ↓           │                     │     ↓           │
+   │ 大QMT执行       │                     │ miniQMT执行     │
+   └─────────────────┘                     └─────────────────┘
+```
+
+### ⭐ 知识星球专属功能
+
+**大 QMT 信号桥接**是知识星球专属功能，提供：
+
+- 📡 **信号桥接系统**：通过文件信号实现 Python 策略与大 QMT 的通信
+- 🚀 **高级策略集合**：ETF 热门主题轮动、ETF 趋势、涨停板策略等
+- 🔄 **完整交易支持**：买入、卖出、撤单、查询持仓/资产
+- 📊 **实时监控**：订单状态跟踪、执行结果反馈
+
+**工作原理**：
+```python
+# Python 端（EasyXT）
+from easy_xt import get_api
+
+api = get_api()
+api.init_trade()  # 自动检测大 QMT，启用信号桥接
+
+# 下单（自动走信号桥接）
+api.buy(account_id='xxx', code='600000.SH', volume=100, price=12.5)
+```
+
+```python
+# 大 QMT 端（星球专属 qmt_signal_receiver_for_qmt.py）
+# 定时扫描信号目录，自动执行交易指令
+```
+
+> 💡 **加入知识星球**获取完整的大 QMT 信号桥接代码和高级策略！
+
+### 📊 数据获取完全独立
+
+无论使用大 QMT 还是 miniQMT，数据获取都完全独立于 QMT 行情端：
+
+```
+行情数据源（不依赖 xtdata）：
+├── Tushare        → 完整历史 + 实时数据
+├── DuckDB         → 本地极速查询
+├── 东方财富       → 免费备用数据源
+└── akshare        → 补充数据源
+
+交易通道：
+├── 大 QMT         → 信号桥接（星球专属）
+└── miniQMT        → xttrader 直连
+```
+
+### 📖 相关文档
+
+- [📢 听说miniQMT要关停，别慌！EasyXT已全面支持大QMT](docs/公众号推文_听说miniqmt要关停别慌EasyXT已全面支持大QMT.md)
+- [📖 QMT版本说明](docs/assets/QMT_VERSIONS.md)
+- [📖 QMT自动登录](docs/assets/QMT_AUTOLOGIN_SECTION.md)
 
 ---
 
@@ -489,7 +587,7 @@ gui_app/main_window.py
 
 - Python 3.9+
 - Windows系统（QMT限制，但 Mac/Linux 可通过 xqshare 使用）
-- 已安装QMT客户端（标准版或miniQMT，如需交易功能）
+- 已安装QMT客户端（大 QMT 或 miniQMT，如需交易功能）
 
 ### 克隆项目
 
