@@ -268,12 +268,24 @@ class 固定网格策略优化版:
     def get_current_price(self, stock_code):
         """获取当前价格"""
         try:
+            # 检查 API 是否已初始化
+            if not self.api:
+                self.log(f"获取价格失败 {stock_code}: API 未初始化")
+                return None
+
+            # 检查数据服务是否可用
+            if not hasattr(self.api, 'data') or not hasattr(self.api.data, 'get_current_price'):
+                self.log(f"获取价格失败 {stock_code}: 数据服务不可用")
+                return None
+
             price_df = self.api.data.get_current_price([stock_code])
             if price_df is None or price_df.empty:
+                self.log(f"获取价格失败 {stock_code}: 无数据返回")
                 return None
 
             stock_data = price_df[price_df['code'] == stock_code]
             if stock_data.empty:
+                self.log(f"获取价格失败 {stock_code}: 股票代码不存在")
                 return None
 
             return stock_data.iloc[0]['price']
