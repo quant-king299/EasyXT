@@ -24,8 +24,12 @@ class QMTLocalReader:
     性能提升：50-100倍
     """
 
-    # QMT 数据目录配置
+    # QMT 数据目录配置（支持大QMT和miniQMT）
     DEFAULT_DATA_DIR = Path(r"D:/国金QMT交易端模拟/userdata_mini/datadir")
+    BIG_QMT_DATA_DIR = Path(r"D:/国金QMT交易端模拟/datadir")
+
+    # 大QMT文件命名后缀
+    BIG_QMT_SUFFIX = "_9000"
 
     # 周期代码映射
     PERIOD_CODES = {
@@ -46,8 +50,9 @@ class QMTLocalReader:
         if not self.data_dir.exists():
             raise FileNotFoundError(f"QMT data directory not found: {self.data_dir}")
 
-    def get_file_path(self, stock_code: str, period: str) -> Optional[Path]:
-        """获取股票数据文件路径"""
+    def get_file_path(self, stock_code: str, period: str,
+                      prefer_big_qmt: bool = False) -> Optional[Path]:
+        """获取股票数据文件路径，支持大QMT和miniQMT两种格式"""
         if stock_code.endswith('.SZ'):
             market = 'SZ'
             code = stock_code.replace('.SZ', '')
@@ -62,12 +67,44 @@ class QMTLocalReader:
         if not period_code:
             raise ValueError(f"Unsupported period: {period}")
 
-        if period == '1d':
-            file_dir = self.data_dir / market / '0' / code
-            return file_dir if file_dir.exists() else None
+        # 构建候选路径列表（按优先级）
+        candidates = []
+
+        if prefer_big_qmt:
+            # 大QMT优先: datadir/market/{period_code}/{code}.DAT
+            candidates.append(
+                self.BIG_QMT_DATA_DIR / market / period_code / f"{code}.DAT"
+            )
+            # 大QMT也兼容 market/0/{code}_9000.DAT 格式
+            candidates.append(
+                self.BIG_QMT_DATA_DIR / market / '0' / f"{code}{self.BIG_QMT_SUFFIX}.DAT"
+            )
+            # 回退到 miniQMT
+            candidates.append(
+                self.data_dir / market / period_code / f"{code}.DAT"
+            )
         else:
-            file_path = self.data_dir / market / period_code / f"{code}.DAT"
-            return file_path if file_path.exists() else None
+            # miniQMT优先: userdata_mini/datadir/market/{period_code}/{code}.DAT
+            candidates.append(
+                self.data_dir / market / period_code / f"{code}.DAT"
+            )
+            # 回退到 大QMT
+            candidates.append(
+                self.BIG_QMT_DATA_DIR / market / period_code / f"{code}.DAT"
+            )
+            candidates.append(
+                self.BIG_QMT_DATA_DIR / market / '0' / f"{code}{self.BIG_QMT_SUFFIX}.DAT"
+            )
+
+        # 兼容旧的日线目录格式
+        if period == '1d':
+            candidates.append(self.data_dir / market / '0' / code)
+
+        for path in candidates:
+            if path.exists():
+                return path
+
+        return None
 
     def read_minute_data(self, stock_code: str, period: str = '1m',
                         start_date: Optional[str] = None,
@@ -93,6 +130,78 @@ class QMTLocalReader:
 
         except Exception as e:
             logger.error(f"[ERROR] Failed to read file {file_path}: {e}")
+            import traceback
+            traceback.print_exc()
+            return None
+
+    def read_daily_data(self, stock_code: str,
+                        start_date: Optional[str] = None,
+                        end_date: Optional[str] = None) -> Optional[pd.DataFrame]:
+        """读取日线数据（支持大QMT和miniQMT下载的数据格式）"""
+        file_path = self.get_file_path(stock_code, '1d')
+        if not file_path or not file_path.exists():
+            logger.warning(f"[WARNING] Daily data file not found: {stock_code}")
+            return None
+
+        try:
+            with open(file_path, 'rb') as f:
+                raw = f.read()
+
+            # 日线格式: 8字节头部 + 32字节记录(8个int32)
+            # 但有效记录在偶数索引 (0, 2, 4, ...)，奇数索引是复权元数据
+            header_size = 8
+            rec_size = 32
+            data = raw[header_size:]
+            total_records = len(data) // rec_size
+
+            records = []
+            for i in range(0, total_records, 2):  # 只取偶数索引
+                offset = i * rec_size
+                vals = struct.unpack_from('<IIIIIIII', data, offset)
+                ts = vals[0]
+                # 验证时间戳合理性 (1990-2026)
+                if not (631152000 < ts < 1767225600):
+                    continue
+
+                dt = datetime.fromtimestamp(ts)
+                open_p = vals[1] / 1000.0
+                high_p = vals[2] / 1000.0
+                low_p = vals[3] / 1000.0
+                close_p = vals[4] / 1000.0
+                volume_lots = vals[6]  # 成交量（手）
+                # vals[5] = 0 (reserved), vals[7] = market flag
+
+                # 基本数据验证
+                if not (0.01 < open_p < 100000 and 0.01 < close_p < 100000):
+                    continue
+                if high_p < low_p:
+                    continue
+
+                records.append({
+                    'time': dt,
+                    'open': open_p,
+                    'high': high_p,
+                    'low': low_p,
+                    'close': close_p,
+                    'volume': volume_lots * 100,  # 手转股
+                    'amount': 0,  # 日线格式不含成交额
+                })
+
+            if not records:
+                logger.error(f"[ERROR] No valid records found in {stock_code} daily data")
+                return None
+
+            df = pd.DataFrame(records)
+            df = df.sort_values('time').drop_duplicates('time')
+
+            if start_date or end_date:
+                df = self._filter_by_date(df, start_date, end_date)
+
+            logger.info(f"[OK] Read {len(df)} daily records for {stock_code}")
+            return df
+
+        except Exception as e:
+            logger.error(f"[ERROR] Failed to read daily data {stock_code}: {e}")
             import traceback
             traceback.print_exc()
             return None
@@ -203,6 +312,78 @@ class QMTLocalReader:
 
         logger.error(f"[ERROR] Cannot parse file format: {stock_code} {period}")
         return None
+
+    def list_available_stocks(self, period: str = '1d',
+                             market: Optional[str] = None) -> List[str]:
+        """列出数据目录中所有可用的股票代码
+
+        Args:
+            period: 周期 ('1d', '1m', '5m' 等)
+            market: 市场过滤 (None=全部, 'SH', 'SZ')
+
+        Returns:
+            股票代码列表 (如 '000001.SZ')
+        """
+        period_code = self.PERIOD_CODES.get(period)
+        if not period_code:
+            raise ValueError(f"Unsupported period: {period}")
+
+        stocks = []
+        markets = [market] if market else ['SH', 'SZ']
+
+        for mkt in markets:
+            # 大QMT路径
+            big_dir = self.BIG_QMT_DATA_DIR / mkt / period_code
+            if big_dir.exists():
+                for f in big_dir.glob('*.DAT'):
+                    code = f.stem
+                    if code.isdigit():
+                        stocks.append(f"{code}.{mkt}")
+
+            # miniQMT路径
+            mini_dir = self.data_dir / mkt / period_code
+            if mini_dir.exists():
+                for f in mini_dir.glob('*.DAT'):
+                    code = f.stem
+                    if code.isdigit():
+                        stock_code = f"{code}.{mkt}"
+                        if stock_code not in stocks:
+                            stocks.append(stock_code)
+
+        return sorted(stocks)
+
+    def get_data_summary(self) -> Dict:
+        """获取数据目录摘要信息"""
+        summary = {
+            'big_qmt': {'path': str(self.BIG_QMT_DATA_DIR), 'exists': False, 'daily_count': 0},
+            'mini_qmt': {'path': str(self.data_dir), 'exists': False, 'daily_count': 0},
+        }
+
+        # 大QMT
+        for mkt in ['SH', 'SZ']:
+            big_dir = self.BIG_QMT_DATA_DIR / mkt / '86400'
+            if big_dir.exists():
+                summary['big_qmt']['exists'] = True
+                summary['big_qmt'][f'{mkt}_count'] = len(list(big_dir.glob('*.DAT')))
+
+        # miniQMT
+        for mkt in ['SH', 'SZ']:
+            mini_dir = self.data_dir / mkt / '86400'
+            if mini_dir.exists():
+                summary['mini_qmt']['exists'] = True
+                summary['mini_qmt'][f'{mkt}_count'] = len(list(mini_dir.glob('*.DAT')))
+
+        if summary['big_qmt']['exists']:
+            sh = summary['big_qmt'].get('SH_count', 0)
+            sz = summary['big_qmt'].get('SZ_count', 0)
+            summary['big_qmt']['daily_count'] = sh + sz
+
+        if summary['mini_qmt']['exists']:
+            sh = summary['mini_qmt'].get('SH_count', 0)
+            sz = summary['mini_qmt'].get('SZ_count', 0)
+            summary['mini_qmt']['daily_count'] = sh + sz
+
+        return summary
 
     def _records_to_dataframe(self, records: List[tuple], stock_code: str,
                              period: str, fmt: str) -> pd.DataFrame:

@@ -8,6 +8,7 @@
 
 - [xtquant 相关](#xtquant-相关) ← 🆕 常见问题
 - [数据相关](#数据相关)
+  - [大QMT vs miniQMT 数据下载](#11-大-qmt-vs-miniqmt-数据下载) ← 🆕
 - [配置相关](#配置相关) ← 🆕 新增章节
 - [QMT自动登录相关](#qmt自动登录相关) ← 🆕 新增
 - [代码转换相关](#代码转换相关)
@@ -842,6 +843,146 @@ data = api.get_price(['000001.SZ'], period='1m', count=20)
 #### 回测时是否必须启动 QMT？
 
 目前是的。如果 QMT 未启动，系统会降级返回不复权的原始数据并给出提示。后续如果有"离线回测"需求，可以考虑增加一层复权结果缓存（按股票+日期范围缓存 QMT 返回的复权数据），按需填充，不会像之前那样预存全量复权列。
+
+---
+
+### 11. 大 QMT vs miniQMT 数据下载
+
+#### 核心区别
+
+| 项目 | 大 QMT（XtItClient.exe） | miniQMT（XtMiniQmt.exe） |
+|------|--------------------------|--------------------------|
+| 数据目录 | `QMT安装目录\datadir\` | `QMT安装目录\userdata_mini\datadir\` |
+| 日线路径 | `SH/86400/{code}.DAT` | `SH/86400/{code}.DAT` |
+| 文件格式 | 完全相同（8字节头 + 32字节记录） | 完全相同 |
+| xtdata 服务端口 | 58600（仅交易，数据下载受限） | 58610（完整数据服务） |
+| 外部 Python 下载 | ❌ 投研版功能不可用 | ✅ 可用 xtquant.xtdata |
+| 内置 Python 下载 | ✅ `download_history_data()` | 不适用 |
+| GUI 手动下载 | ✅ 操作 → 数据管理 → 补充数据 | 不适用 |
+| 数据覆盖范围 | **从上市日开始**（更全） | 受 xtdata 限制（较少） |
+
+#### 数据不互通
+
+大 QMT 和 miniQMT 的下载数据**存储在各自的目录中，不会自动共享**。同一只股票需要分别在两边下载。
+
+以平安银行（000001.SZ）为例：
+
+| 数据来源 | 文件路径 | 大小 | 记录数 | 起始日期 |
+|---------|---------|------|--------|---------|
+| 大 QMT | `datadir\SZ\86400\000001.DAT` | 540 KB | 8,330 条 | 1991-01-05 |
+| miniQMT | `userdata_mini\datadir\SZ\86400\000001.DAT` | 252 KB | 3,830 条 | 2009-12-10 |
+
+#### 二进制数据格式
+
+两种 QMT 数据文件使用**相同的二进制格式**：
+
+```
+文件结构:
+┌─────────────────────────────────────┐
+│ 8 字节头部 (magic number)            │
+├─────────────────────────────────────┤
+│ 32字节记录 × N                       │
+│  ┌─────────────────────────────────┐ │
+│  │ int32[0]: Unix 时间戳           │ │
+│  │ int32[1]: 开盘价 × 1000         │ │
+│  │ int32[2]: 最高价 × 1000         │ │
+│  │ int32[3]: 最低价 × 1000         │ │
+│  │ int32[4]: 收盘价 × 1000         │ │
+│  │ int32[5]: 保留 (0)              │ │
+│  │ int32[6]: 成交量 (手)           │ │
+│  │ int32[7]: 市场标记               │ │
+│  └─────────────────────────────────┘ │
+│  注意: 有效记录在偶数索引 (0,2,4...)，│
+│        奇数索引存储复权元数据          │
+└─────────────────────────────────────┘
+```
+
+#### 下载方式
+
+**方式 1：大 QMT 图形界面下载（推荐）**
+
+1. 打开大 QMT → 操作 → 数据管理 → 补充数据
+2. 选择市场（沪深A股）
+3. 选择周期（日线/1分钟/5分钟等）
+4. 选择日期范围（建议全量下载）
+5. 点击"开始补充"
+
+**方式 2：大 QMT 内置 Python 下载**
+
+```python
+# coding: gbk
+# 在大 QMT 的 Python 编辑器（量化 → Python编辑器）中运行
+def init(C):
+    # 下载单只股票日线
+    download_history_data("000001.SZ", "1d", "20240101", "")
+    
+    # 批量下载
+    stocks = ["000001.SZ", "000002.SZ", "600000.SH", "600036.SH"]
+    for code in stocks:
+        try:
+            download_history_data(code, "1d", "20240101", "")
+            print(f"  [OK] {code}")
+        except Exception as e:
+            print(f"  [FAIL] {code}: {e}")
+```
+
+**方式 3：miniQMT 外部 Python 下载**
+
+```python
+from xtquant import xtdata
+
+# 需要 miniQMT (XtMiniQmt.exe) 正在运行，端口 58610 开启
+xtdata.download_history_data(
+    stock_code="000001.SZ",
+    period="1d",
+    start_time="20240101",
+    end_time="",
+    incrementally=True
+)
+```
+
+#### 在 GUI 中使用大 QMT 数据
+
+EasyXT GUI 支持**直接从大 QMT 数据目录读取 DAT 文件**，无需 xtquant 连接：
+
+1. **先在大 QMT 中下载数据**（见上面的方式 1 或 2）
+2. **打开 EasyXT GUI** → 「📊 数据管理」标签页
+3. 设置日期范围（可选）
+4. 点击 **「📂 从大QMT导入」** 按钮
+5. 数据自动读取 DAT 文件 → 导入 DuckDB
+
+> 这个功能使用 `QMTLocalReader` 直接解析二进制 DAT 文件，完全不依赖 xtquant，速度更快（批量读取 200 只/批）。
+
+#### 常见问题
+
+**Q: 勾选"从大QMT导入"和"下载A股数据"有什么区别？**
+
+| 功能 | 下载A股数据 | 从大QMT导入 |
+|------|-----------|------------|
+| 依赖 | 需要 xtquant (miniQMT 端口 58610) | 直接读 DAT 文件，无需 xtquant |
+| 数据来源 | QMT API (`get_market_data_ex`) | QMT 本地缓存 (`.DAT` 文件) |
+| 下载触发 | 触发远程下载到 QMT 缓存 | 仅读取已存在的本地文件 |
+| 适用场景 | miniQMT 用户 | **大 QMT 用户** |
+| 速度 | 较慢（网络请求） | 较快（本地文件读取） |
+
+**Q: 可以用 miniQMT 的数据导入 GUI 吗？**
+
+可以。点击「📂 从大QMT导入」按钮默认优先读取大 QMT 目录，但 `QMTLocalReader` 会自动回退到 miniQMT 目录（`userdata_mini/datadir/`）。
+
+**Q: 大 QMT 和 miniQMT 都安装了，数据需要下载两遍吗？**
+
+是的。两者数据目录独立，不共享。如果只需要在 GUI 中用，建议**只在大 QMT 中下载**（数据更全），然后用「📂 从大QMT导入」导入 DuckDB。
+
+**Q: 导入时提示"未找到QMT数据文件"？**
+
+说明数据目录中没有 DAT 文件。解决方法：
+1. 确认已在大 QMT 中下载了数据（操作 → 数据管理 → 补充数据）
+2. 检查数据目录是否存在：`QMT安装目录\datadir\SH\86400\` 和 `SZ\86400\`
+3. 手动验证：`python -c "from core.qmt_local_reader import QMTLocalReader; r = QMTLocalReader(data_dir=r'D:\国金QMT交易端模拟\datadir'); print(r.get_data_summary())"`
+
+**Q: 能否同时运行大 QMT 和 miniQMT？**
+
+可以共存。大 QMT（`XtItClient.exe`）监听端口 58600 提供交易服务，miniQMT（`XtMiniQmt.exe`）监听端口 58610 提供数据服务。两者可以同时运行，但共享同一个账户登录。
 
 ---
 

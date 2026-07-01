@@ -725,6 +725,165 @@ class DataDownloadThread(QThread):
         self.quit()
 
 
+class BigQMTImportThread(QThread):
+    """大QMT数据导入线程 — 直接从datadir读取DAT文件并导入DuckDB"""
+    log_signal = pyqtSignal(str)
+    progress_signal = pyqtSignal(int, int)
+    finished_signal = pyqtSignal(dict)
+    error_signal = pyqtSignal(str)
+
+    def __init__(self, symbols=None, start_date='', end_date='', data_type='daily',
+                 prefer_big_qmt=True):
+        super().__init__()
+        self.symbols = symbols
+        self.start_date = start_date
+        self.end_date = end_date
+        self.data_type = data_type
+        self.prefer_big_qmt = prefer_big_qmt
+        self._is_running = True
+
+    def run(self):
+        try:
+            self._import_from_qmt_datadir()
+        except Exception as e:
+            import traceback
+            error_msg = f"大QMT导入失败: {str(e)}\n{traceback.format_exc()}"
+            self.log_signal.emit(error_msg)
+            self.error_signal.emit(error_msg)
+
+    def _import_from_qmt_datadir(self):
+        """从QMT数据目录直接导入数据到DuckDB"""
+        from core.qmt_local_reader import QMTLocalReader
+        from data_manager.duckdb_connection_pool import get_db_manager
+
+        if self.prefer_big_qmt:
+            reader = QMTLocalReader(data_dir=r'D:\国金QMT交易端模拟\datadir')
+            self.log_signal.emit("📂 使用大QMT数据目录: datadir/")
+        else:
+            reader = QMTLocalReader()
+            self.log_signal.emit("📂 使用miniQMT数据目录: userdata_mini/datadir/")
+
+        summary = reader.get_data_summary()
+        source = 'big_qmt' if self.prefer_big_qmt else 'mini_qmt'
+        if summary[source]['exists']:
+            info = summary[source]
+            self.log_signal.emit(
+                f"📊 {info.get('SH_count', 0)}沪 + {info.get('SZ_count', 0)}深 = "
+                f"{info.get('daily_count', 0)} 只日线数据"
+            )
+        else:
+            self.log_signal.emit("⚠️ 未找到QMT数据文件，请先在QMT中下载数据")
+            self.finished_signal.emit({'total': 0, 'success': 0, 'failed': 0, 'failed_list': []})
+            return
+
+        if not self.symbols:
+            self.log_signal.emit("📊 正在扫描可用股票...")
+            self.symbols = reader.list_available_stocks('1d')
+            etf_patterns = ['51', '159', '150', '588', '50', '56', '58']
+            filtered = []
+            for s in self.symbols:
+                code = s.split('.')[0]
+                if not any(code.startswith(p) for p in etf_patterns):
+                    filtered.append(s)
+            self.symbols = filtered
+            self.log_signal.emit(f"✅ 找到 {len(self.symbols)} 只股票（已排除ETF）")
+
+        db_manager = get_db_manager(get_default_db_path())
+        total = len(self.symbols)
+        success_count = 0
+        failed_count = 0
+        failed_list = []
+
+        BATCH_SIZE = 200
+
+        for batch_idx in range(0, total, BATCH_SIZE):
+            if not self._is_running:
+                self.log_signal.emit("⚠️ 用户中断导入")
+                break
+
+            batch_codes = self.symbols[batch_idx:batch_idx + BATCH_SIZE]
+            batch_num = batch_idx // BATCH_SIZE + 1
+            total_batches = (total + BATCH_SIZE - 1) // BATCH_SIZE
+
+            self.progress_signal.emit(min(batch_idx + BATCH_SIZE, total), total)
+
+            if batch_num <= 3 or batch_num % 10 == 0:
+                self.log_signal.emit(
+                    f"📦 批次 {batch_num}/{total_batches}: "
+                    f"{batch_codes[0]} ~ {batch_codes[-1]}"
+                )
+
+            batch_save_data = []
+
+            for stock_code in batch_codes:
+                if not self._is_running:
+                    break
+                try:
+                    df = reader.read_daily_data(stock_code)
+                    if df is None or df.empty:
+                        failed_count += 1
+                        failed_list.append(f"{stock_code} - 无数据")
+                        continue
+
+                    if self.start_date:
+                        df = df[df['time'] >= pd.to_datetime(self.start_date)]
+                    if self.end_date:
+                        df = df[df['time'] <= pd.to_datetime(self.end_date)]
+
+                    if df.empty:
+                        failed_count += 1
+                        continue
+
+                    for _, row in df.iterrows():
+                        batch_save_data.append({
+                            'stock_code': stock_code,
+                            'symbol_type': 'stock',
+                            'date': row['time'].strftime('%Y-%m-%d') if hasattr(row['time'], 'strftime') else str(row['time'])[:10],
+                            'period': '1d',
+                            'open': float(row['open']),
+                            'high': float(row['high']),
+                            'low': float(row['low']),
+                            'close': float(row['close']),
+                            'volume': int(row['volume']),
+                            'amount': float(row.get('amount', 0)),
+                            'created_at': datetime.now(),
+                            'updated_at': datetime.now(),
+                        })
+
+                    success_count += 1
+
+                except Exception as e:
+                    failed_count += 1
+                    failed_list.append(f"{stock_code} - {str(e)[:50]}")
+
+            if batch_save_data:
+                try:
+                    df_batch = pd.DataFrame(batch_save_data)
+                    db_manager.insert_dataframe(df_batch, 'stock_daily',
+                                               conflict_handling='replace')
+                    self.log_signal.emit(
+                        f"  ✅ 批次 {batch_num}: {len(batch_save_data)} 条 → DuckDB"
+                    )
+                except Exception as e:
+                    self.log_signal.emit(f"  ⚠️ 保存失败: {str(e)[:80]}")
+
+        result = {
+            'total': total,
+            'success': success_count,
+            'failed': failed_count,
+            'failed_list': failed_list,
+            'task_type': 'big_qmt_import'
+        }
+        self.finished_signal.emit(result)
+        self.log_signal.emit(
+            f"✅ 导入完成! 成功: {success_count}, 失败: {failed_count}"
+        )
+
+    def stop(self):
+        self._is_running = False
+        self.quit()
+
+
 class SingleStockDownloadThread(QThread):
     """单个标的下载线程"""
     log_signal = pyqtSignal(str)
@@ -1502,6 +1661,27 @@ class LocalDataManagerWidget(QWidget):
 
         # 可转债数据下载已移除 - QMT 不提供溢价率数据，策略必须使用 Tushare
         # 请使用 "Tushare数据下载" 标签页中的可转债下载功能
+
+        self.import_big_qmt_btn = QPushButton("📂 从大QMT导入")
+        self.import_big_qmt_btn.setToolTip("直接从大QMT数据目录读取DAT文件并导入DuckDB\n无需xtquant连接，适合大QMT用户")
+        self.import_big_qmt_btn.clicked.connect(self.import_from_big_qmt)
+        self.import_big_qmt_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #0b7dda;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        btn_layout.addWidget(self.import_big_qmt_btn)
 
         self.update_data_btn = QPushButton("🔄 一键补全数据")
         self.update_data_btn.setToolTip("智能检测并补全所有缺失数据\n自动分析每只股票缺几天，一键全部补齐")
@@ -2407,6 +2587,34 @@ class LocalDataManagerWidget(QWidget):
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "下载失败", error_msg)
 
+    def import_from_big_qmt(self):
+        """从大QMT数据目录直接导入数据到DuckDB"""
+        if self.download_thread and self.download_thread.isRunning():
+            QMessageBox.warning(self, "提示", "已有任务正在运行")
+            return
+
+        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+
+        self.log("📂 开始从大QMT数据目录导入A股日线数据...")
+        self.log(f"   日期范围: {start_date} ~ {end_date}")
+        self.log("💡 提示: 请确保已在大QMT中下载了历史数据")
+
+        self.download_thread = BigQMTImportThread(
+            symbols=None,
+            start_date=start_date,
+            end_date=end_date,
+            data_type='daily',
+            prefer_big_qmt=True
+        )
+        self.download_thread.log_signal.connect(self.log)
+        self.download_thread.progress_signal.connect(self.update_progress)
+        self.download_thread.finished_signal.connect(self.on_download_finished)
+        self.download_thread.error_signal.connect(self.on_download_error)
+        self.download_thread.start()
+
+        self._set_download_state(True)
+
     def download_stocks(self):
         """下载A股数据"""
         if self.download_thread and self.download_thread.isRunning():
@@ -2520,6 +2728,7 @@ class LocalDataManagerWidget(QWidget):
         """设置下载状态"""
         self.download_stocks_btn.setEnabled(not is_downloading)
         # download_bonds_btn 已移除 - QMT 不提供溢价率数据
+        self.import_big_qmt_btn.setEnabled(not is_downloading)
         self.update_data_btn.setEnabled(not is_downloading)
         self.manual_download_btn.setEnabled(not is_downloading)
         self.verify_data_btn.setEnabled(not is_downloading)
