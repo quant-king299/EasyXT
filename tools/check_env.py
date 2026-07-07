@@ -52,27 +52,51 @@ def main():
     else:
         logger.info("    ✗ 版本过低，建议升级到Python 3.9+")
 
-    # 2. xtquant模块检查
-    logger.info("\n[2] xtquant模块检查")
-    try:
-        from xtquant import datacenter
-        logger.info("    ✓ xtquant已安装")
+    # 2. QMT连接检查（平台自适应）
+    is_linux_or_mac = sys.platform.startswith('linux') or sys.platform == 'darwin'
 
-        # 检查是否是正确的版本
+    if is_linux_or_mac:
+        # Linux/Mac：检查 xqshare 远程连接配置
+        logger.info("\n[2] xqshare远程连接检查（Mac/Linux）")
+        xq_host = os.environ.get('XQSHARE_REMOTE_HOST', '')
+        xq_port = os.environ.get('XQSHARE_REMOTE_PORT', '18812')
+
+        if xq_host:
+            logger.info(f"    ✓ xqshare已配置: {xq_host}:{xq_port}")
+            try:
+                from xqshare.client import connect
+                logger.info("    ✓ xqshare模块已安装")
+            except ImportError:
+                logger.info("    ⚠️ xqshare模块未安装")
+                logger.info("    运行: pip install xqshare")
+        else:
+            logger.info("    ⚠️ xqshare未配置（非报错，QMT仅在Windows可用）")
+            logger.info("    如使用远程QMT，在.env中配置：")
+            logger.info("    XQSHARE_REMOTE_HOST=你的Windows机器IP")
+            logger.info("    XQSHARE_REMOTE_PORT=18812")
+            logger.info("    并运行: pip install xqshare")
+            logger.info("")
+            logger.info("    如果只用Tushare/TDX数据源（不做交易），忽略此项。")
+    else:
+        # Windows：检查 xtquant 本地安装
+        logger.info("\n[2] xtquant模块检查")
         try:
-            # 尝试导入datacenter，这是特殊版本的特征
-            from xtquant import xtdata
-            logger.info("    ✓ xtquant版本正确（特殊版本）")
-        except ImportError:
-            logger.info("    ⚠️ xtquant版本可能不完整")
-            logger.info("    建议：下载项目提供的特殊版本")
+            from xtquant import datacenter
+            logger.info("    ✓ xtquant已安装")
 
-    except ImportError as e:
-        logger.info("    ✗ xtquant未安装或版本错误")
-        logger.info("    解决方案：")
-        logger.info("    1. 访问：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0")
-        logger.info("    2. 下载：xtquant.rar")
-        logger.info("    3. 解压到项目根目录")
+            try:
+                from xtquant import xtdata
+                logger.info("    ✓ xtquant版本正确（特殊版本）")
+            except ImportError:
+                logger.info("    ⚠️ xtquant版本可能不完整")
+                logger.info("    建议：下载项目提供的特殊版本")
+
+        except ImportError as e:
+            logger.info("    ✗ xtquant未安装或版本错误")
+            logger.info("    解决方案：")
+            logger.info("    1. 访问：https://github.com/quant-king299/EasyXT/releases/tag/v1.0.0")
+            logger.info("    2. 下载：xtquant.rar")
+            logger.info("    3. 解压到项目根目录")
 
     # 3. easy_xt模块检查
     logger.info("\n[3] easy_xt模块检查")
@@ -231,11 +255,16 @@ def main():
 
     issues = []
 
-    # 检查xtquant
-    try:
-        from xtquant import datacenter
-    except ImportError:
-        issues.append("1. xtquant未安装 → 下载特殊版本并解压到项目根目录")
+    # 检查QMT连接（平台自适应）
+    if is_linux_or_mac:
+        xq_host = os.environ.get('XQSHARE_REMOTE_HOST', '')
+        if not xq_host:
+            issues.append("1. xqshare未配置 → 如需远程QMT，在.env中设置XQSHARE_REMOTE_HOST")
+    else:
+        try:
+            from xtquant import datacenter
+        except ImportError:
+            issues.append("1. xtquant未安装 → 下载特殊版本并解压到项目根目录")
 
     # 检查easy_xt
     try:
