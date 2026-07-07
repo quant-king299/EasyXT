@@ -285,6 +285,10 @@ class SimpleFunctionAdapter(StrategyBase):
 
             self._category_data = df
 
+            # ── CB 强赎过滤：排除处于强赎危险区的可转债 ──
+            if self.category == 'cb' and not df.empty:
+                self._category_data = self._filter_redemption_risk(df)
+
         except Exception as e:
 
             logger.error(f"[ERROR] SimpleFunctionAdapter 预加载失败: {e}")
@@ -1061,6 +1065,72 @@ class SimpleFunctionAdapter(StrategyBase):
         return self._get_all_trading_days(start_date or self._start,
 
                                           end_date or self._end)
+
+    def _filter_redemption_risk(self, df: pd.DataFrame) -> pd.DataFrame:
+        """排除处于强赎危险区的可转债
+
+        从 cb_call 表获取强赎状态，排除已满足/提示/实施强赎的转债。
+        """
+        import duckdb
+        try:
+            db_path = 'D:/StockData/stock_data.ddb'
+            con = duckdb.connect(db_path, read_only=True)
+            exists = con.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_call'"
+            ).fetchone()[0] > 0
+            if not exists:
+                con.close()
+                return df
+
+            calls = con.execute("""
+                SELECT ts_code, ann_date, is_call
+                FROM cb_call WHERE call_type = '强赎'
+                ORDER BY ts_code, ann_date
+            """).fetchdf()
+            con.close()
+
+            if calls.empty:
+                return df
+
+            danger_statuses = {'已满足强赎条件', '公告提示强赎', '公告实施强赎'}
+            excluded_set = set()
+
+            for ts_code, group in calls.groupby('ts_code'):
+                group = group.sort_values('ann_date')
+                is_danger = False
+                danger_start = None
+                for _, row in group.iterrows():
+                    if row['is_call'] in danger_statuses:
+                        if not is_danger:
+                            is_danger = True
+                            danger_start = row['ann_date']
+                    elif row['is_call'] == '公告不强赎':
+                        if is_danger:
+                            excluded_set.add((ts_code, danger_start, row['ann_date']))
+                            is_danger = False
+                if is_danger and danger_start is not None:
+                    excluded_set.add((ts_code, danger_start, pd.Timestamp.max))
+
+            if excluded_set:
+                before = len(df)
+                mask = pd.Series(True, index=df.index)
+                for ts_code, start, end in excluded_set:
+                    m = (df['ts_code'] == ts_code) & (df['trade_date'] >= start)
+                    if end is not pd.Timestamp.max:
+                        m = m & (df['trade_date'] <= end)
+                    mask = mask & ~m
+                df = df[mask]
+                removed = before - len(df)
+                if removed > 0:
+                    logger.info(
+                        f"[CB] 强赎过滤: 排除 {removed} 行 "
+                        f"({len(set(c[0] for c in excluded_set))} 只转债)"
+                    )
+
+            return df
+        except Exception as e:
+            logger.warning(f"[CB] 强赎过滤异常，降级为不过滤: {e}")
+            return df
 
 
 

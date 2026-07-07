@@ -647,6 +647,219 @@ def download_sw_industry(db_path: Optional[str] = None,
 
 
 # ═══════════════════════════════════════════════════════════
+# 5. 可转债强赎公告 cb_call
+# ═══════════════════════════════════════════════════════════
+
+SQL_CREATE_CB_CALL = """
+CREATE TABLE IF NOT EXISTS cb_call (
+    ts_code VARCHAR,
+    ann_date DATE,
+    call_type VARCHAR,
+    is_call VARCHAR,
+    call_date DATE,
+    call_price DOUBLE,
+    call_price_tax DOUBLE,
+    call_vol DOUBLE,
+    call_amount DOUBLE,
+    payment_date DATE,
+    call_reg_date DATE,
+    PRIMARY KEY (ts_code, ann_date)
+)
+"""
+
+
+def download_cb_call(db_path: Optional[str] = None,
+                     start_date: str = '20200101',
+                     end_date: Optional[str] = None,
+                     progress_callback: Optional[Callable] = None) -> dict:
+    """
+    下载可转债强赎公告数据（Tushare cb_call 接口）
+
+    用于回测时排除处于强赎危险区的转债：
+    - is_call='已满足强赎条件' → 进入强赎区，应排除
+    - is_call='公告提示强赎'   → 强赎预告，应排除
+    - is_call='公告实施强赎'   → 已确定赎回，应排除
+    - is_call='公告不强赎'     → 安全
+
+    Args:
+        db_path: DuckDB 路径
+        start_date: 公告开始日期 (YYYYMMDD)
+        end_date: 公告结束日期 (YYYYMMDD)，默认今天
+        progress_callback: 进度回调
+
+    Returns:
+        {'total_records': N, 'errors': [...]}
+    """
+    if end_date is None:
+        end_date = datetime.now().strftime('%Y%m%d')
+
+    db_path = _get_db_path(db_path)
+    _log(f"下载可转债强赎公告数据: {start_date} ~ {end_date}")
+
+    pro = _get_pro_api()
+    conn = duckdb.connect(db_path)
+    _ensure_table(conn, 'cb_call', SQL_CREATE_CB_CALL)
+
+    total_records = 0
+    errors = []
+
+    # cb_call 数据量小（~2000条），按年分段下载即可
+    current = datetime.strptime(start_date, '%Y%m%d')
+    end_dt = datetime.strptime(end_date, '%Y%m%d')
+    total_years = end_dt.year - current.year + 1
+
+    for i in range(total_years):
+        year = current.year + i
+        seg_start = f'{year}0101'
+        seg_end = f'{year}1231' if year < end_dt.year else end_date
+
+        if progress_callback:
+            progress_callback(i + 1, total_years, f"下载可转债强赎 {year}")
+
+        df = _api_call_with_retry(
+            lambda ss=seg_start, se=seg_end: pro.cb_call(start_date=ss, end_date=se),
+            log_label=f"cb_call[{year}]"
+        )
+
+        if df is not None and not df.empty:
+            # 转换日期列
+            for col in ['ann_date', 'call_date', 'payment_date', 'call_reg_date']:
+                if col in df.columns:
+                    df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+
+            # 只保留表结构需要的列
+            table_cols = ['ts_code', 'ann_date', 'call_type', 'is_call',
+                         'call_date', 'call_price', 'call_price_tax',
+                         'call_vol', 'call_amount', 'payment_date', 'call_reg_date']
+            cols_to_keep = [c for c in table_cols if c in df.columns]
+            df = df[cols_to_keep]
+
+            count = _upsert_by_date(conn, 'cb_call', df, 'ann_date')
+            total_records += count
+
+    conn.close()
+    _log(f"可转债强赎公告下载完成: {total_records:,} 条", "OK")
+    return {'total_records': total_records, 'errors': errors}
+
+
+# ═══════════════════════════════════════════════════════════
+# 6. 可转债转股进度 cb_share（用于检测下修）
+# ═══════════════════════════════════════════════════════════
+
+SQL_CREATE_CB_SHARE = """
+CREATE TABLE IF NOT EXISTS cb_share (
+    ts_code VARCHAR,
+    publish_date DATE,
+    end_date DATE,
+    issue_size DOUBLE,
+    convert_price_initial DOUBLE,
+    convert_price DOUBLE,
+    convert_val DOUBLE,
+    convert_vol DOUBLE,
+    convert_ratio DOUBLE,
+    acc_convert_val DOUBLE,
+    acc_convert_vol DOUBLE,
+    acc_convert_ratio DOUBLE,
+    remain_size DOUBLE,
+    total_shares DOUBLE,
+    PRIMARY KEY (ts_code, publish_date)
+)
+"""
+
+
+def download_cb_share(db_path: Optional[str] = None,
+                      progress_callback: Optional[Callable] = None) -> dict:
+    """
+    下载可转债转股进度数据（Tushare cb_share 接口，逐只下载）
+
+    用于检测下修事件：convert_price 下降 → 下修发生。
+
+    Args:
+        db_path: DuckDB 路径
+        progress_callback: 进度回调
+
+    Returns:
+        {'total_cb': N, 'total_records': M, 'errors': [...]}
+    """
+    db_path = _get_db_path(db_path)
+    _log("下载可转债转股进度数据（逐只下载，用于检测下修）")
+
+    pro = _get_pro_api()
+    conn = duckdb.connect(db_path)
+    _ensure_table(conn, 'cb_share', SQL_CREATE_CB_SHARE)
+
+    # 从 cb_basic 获取转债列表
+    try:
+        codes = [r[0] for r in conn.execute(
+            "SELECT ts_code FROM cb_basic ORDER BY ts_code"
+        ).fetchall()]
+    except Exception:
+        _log("cb_basic 表不存在，请先下载可转债基本信息", "ERROR")
+        conn.close()
+        return {'total_cb': 0, 'total_records': 0, 'errors': ['cb_basic not found']}
+
+    if not codes:
+        _log("cb_basic 表为空", "WARN")
+        conn.close()
+        return {'total_cb': 0, 'total_records': 0, 'errors': []}
+
+    _log(f"共 {len(codes)} 只可转债")
+
+    total_records = 0
+    errors = []
+    total = len(codes)
+    last_request_time = 0
+    request_interval = 0.06  # ~1000次/分钟（5000积分）
+
+    for i, ts_code in enumerate(codes):
+        if progress_callback:
+            progress_callback(i + 1, total, f"下载 {ts_code} 转股进度")
+
+        # 限流
+        elapsed = time.time() - last_request_time
+        if elapsed < request_interval:
+            time.sleep(request_interval - elapsed)
+
+        try:
+            df = _api_call_with_retry(
+                lambda tc=ts_code: pro.cb_share(ts_code=tc),
+                log_label=f"cb_share[{ts_code}]",
+                max_retries=2
+            )
+            last_request_time = time.time()
+
+            if df is not None and not df.empty:
+                # 转换日期列
+                for col in ['publish_date', 'end_date']:
+                    if col in df.columns:
+                        df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
+
+                # 只保留表结构需要的列
+                table_cols = ['ts_code', 'publish_date', 'end_date', 'issue_size',
+                             'convert_price_initial', 'convert_price',
+                             'convert_val', 'convert_vol', 'convert_ratio',
+                             'acc_convert_val', 'acc_convert_vol', 'acc_convert_ratio',
+                             'remain_size', 'total_shares']
+                cols_to_keep = [c for c in table_cols if c in df.columns]
+                df = df[cols_to_keep]
+
+                # 删除该 CB 的旧数据再插入（全量刷新）
+                conn.execute("DELETE FROM cb_share WHERE ts_code = ?", [ts_code])
+                conn.execute("INSERT INTO cb_share SELECT * FROM df")
+                total_records += len(df)
+
+        except Exception as e:
+            errors.append(f"{ts_code}: {e}")
+
+        if (i + 1) % 100 == 0 or (i + 1) == total:
+            _log(f"[{i+1}/{total}] 已下载 {total_records:,} 条转股记录")
+
+    conn.close()
+    _log(f"可转债转股进度下载完成: {total_records:,} 条, {total} 只", "OK")
+    return {'total_cb': total, 'total_records': total_records, 'errors': errors}
+
+
+# ═══════════════════════════════════════════════════════════
 # 一键下载全部
 # ═══════════════════════════════════════════════════════════
 
@@ -676,23 +889,31 @@ def download_all_basic(db_path: Optional[str] = None,
     _log("=" * 60)
 
     # 1. 股票复权因子
-    _log("\n[1/5] 股票复权因子")
+    _log("\n[1/7] 股票复权因子")
     results['adj_factor'] = download_adj_factor(db_path, start_date, end_date, progress_callback)
 
     # 2. ETF 复权因子
-    _log("\n[2/5] ETF 复权因子")
+    _log("\n[2/7] ETF 复权因子")
     results['etf_adj_factor'] = download_etf_adj_factor(db_path, start_date, end_date, progress_callback)
 
     # 3. 涨跌停价格
-    _log("\n[3/5] 涨跌停价格")
+    _log("\n[3/7] 涨跌停价格")
     results['stk_limit'] = download_stk_limit(db_path, start_date, end_date, progress_callback)
 
     # 4. 停复牌信息
-    _log("\n[4/5] 停复牌信息")
+    _log("\n[4/7] 停复牌信息")
     results['suspend'] = download_suspend(db_path, start_date, end_date, progress_callback)
 
-    # 5. 申万行业
-    _log("\n[5/5] 申万行业分类")
+    # 5. 可转债强赎公告
+    _log("\n[5/7] 可转债强赎公告")
+    results['cb_call'] = download_cb_call(db_path, start_date, end_date, progress_callback)
+
+    # 6. 可转债转股进度
+    _log("\n[6/7] 可转债转股进度")
+    results['cb_share'] = download_cb_share(db_path, progress_callback)
+
+    # 7. 申万行业
+    _log("\n[7/7] 申万行业分类")
     results['sw_industry'] = download_sw_industry(db_path, progress_callback)
 
     _log("\n" + "=" * 60)

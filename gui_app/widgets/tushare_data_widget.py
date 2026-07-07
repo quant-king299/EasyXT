@@ -122,6 +122,10 @@ class TushareDownloadThread(QThread):
                 self._download_suspend_info()
             elif self.task_type == 'sw_industry':
                 self._download_sw_industry()
+            elif self.task_type == 'cb_call':
+                self._download_cb_call()
+            elif self.task_type == 'cb_share':
+                self._download_cb_share()
             elif self.task_type == 'basic_all':
                 self._download_basic_all()
             else:
@@ -962,6 +966,10 @@ class TushareDownloadThread(QThread):
                     self._download_suspend_info()
                 elif task_type == 'sw_industry':
                     self._download_sw_industry()
+                elif task_type == 'cb_call':
+                    self._download_cb_call()
+                elif task_type == 'cb_share':
+                    self._download_cb_share()
                     self._download_daily()
                 elif task_type == 'financial_indicator':
                     self._download_financial_indicator()
@@ -2251,6 +2259,66 @@ class TushareDownloadThread(QThread):
         except Exception as e:
             import traceback
             self.error_signal.emit(f"ETF 复权因子下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_cb_call(self):
+        """下载可转债强赎公告数据（用于回测排除强赎标的）"""
+        try:
+            from tushare_manager.download_basic_data import download_cb_call as _dl_cb_call
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载可转债强赎公告数据")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_cb_call(db_path=db_path, start_date=start_date, end_date=end_date,
+                                progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 可转债强赎公告下载完成！共 {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'cb_call', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"可转债强赎公告下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_cb_share(self):
+        """下载可转债转股进度数据（用于检测下修事件）"""
+        try:
+            from tushare_manager.download_basic_data import download_cb_share as _dl_cb_share
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载可转债转股进度数据")
+            self.log_signal.emit("  逐只下载，用于检测转股价下修事件")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                if current % 50 == 0 or current == total:
+                    self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_cb_share(db_path=db_path, progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ 转股进度下载完成！共 {result['total_cb']} 只, {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'cb_share', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"可转债转股进度下载失败: {str(e)}\n{traceback.format_exc()}")
 
     def _download_stk_limit(self):
         """下载涨跌停价格数据"""
@@ -3951,6 +4019,34 @@ class TushareDataWidget(QWidget):
         suspend_info.setStyleSheet("color: #666; font-size: 11px;")
         btn_layout.addWidget(suspend_info, 3, 1)
 
+        # 可转债强赎公告
+        cb_call_btn = QPushButton("🔔 下载可转债强赎公告")
+        cb_call_btn.setFont(QFont("Microsoft YaHei", 10))
+        cb_call_btn.setStyleSheet("""
+            QPushButton { background-color: #C62828; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #B71C1C; }
+        """)
+        cb_call_btn.clicked.connect(self.start_download_cb_call)
+        btn_layout.addWidget(cb_call_btn, 4, 0)
+
+        cb_call_info = QLabel("排除强赎标的，避免回测买入即将暴跌的转债")
+        cb_call_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(cb_call_info, 4, 1)
+
+        # 可转债转股进度
+        cb_share_btn = QPushButton("📉 下载可转债转股进度")
+        cb_share_btn.setFont(QFont("Microsoft YaHei", 10))
+        cb_share_btn.setStyleSheet("""
+            QPushButton { background-color: #AD1457; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #880E4F; }
+        """)
+        cb_share_btn.clicked.connect(self.start_download_cb_share)
+        btn_layout.addWidget(cb_share_btn, 5, 0)
+
+        cb_share_info = QLabel("追踪转股价变动，检测下修事件（逐只下载，较慢）")
+        cb_share_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(cb_share_info, 5, 1)
+
         # 申万行业分类
         sw_btn = QPushButton("🏷️ 下载申万行业分类")
         sw_btn.setFont(QFont("Microsoft YaHei", 10))
@@ -3959,11 +4055,11 @@ class TushareDataWidget(QWidget):
             QPushButton:hover { background-color: #004D40; }
         """)
         sw_btn.clicked.connect(self.start_download_sw_industry)
-        btn_layout.addWidget(sw_btn, 4, 0)
+        btn_layout.addWidget(sw_btn, 6, 0)
 
         sw_info = QLabel("L1/L2行业分类+成分股（无需选日期）")
         sw_info.setStyleSheet("color: #666; font-size: 11px;")
-        btn_layout.addWidget(sw_info, 4, 1)
+        btn_layout.addWidget(sw_info, 6, 1)
 
         layout.addWidget(btn_group)
 
@@ -4051,6 +4147,32 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setValue(0)
         thread = TushareDownloadThread('suspend_info', token=token,
                                        start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_cb_call(self):
+        """开始下载可转债强赎公告"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('cb_call', token=token,
+                                       start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_cb_share(self):
+        """开始下载可转债转股进度"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('cb_share', token=token)
         self._start_download_thread(thread)
 
     def start_download_sw_industry(self):

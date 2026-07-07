@@ -217,6 +217,10 @@ class VectorizedBacktestEngine:
 
         df.sort_values(['trade_date', code_col], inplace=True)
 
+        # ── CB 强赎过滤：排除处于强赎危险区的可转债 ──
+        if self.category == 'cb':
+            df = self._filter_redemption_risk(df)
+
 
 
         trading_dates = sorted(df['trade_date'].unique())
@@ -500,6 +504,93 @@ class VectorizedBacktestEngine:
 
                     pass
 
+    def _filter_redemption_risk(self, df: pd.DataFrame) -> pd.DataFrame:
+        """排除处于强赎危险区的可转债
+
+        从 cb_call 表获取强赎状态，对每个交易日排除：
+        - 已满足强赎条件
+        - 公告提示强赎
+        - 公告实施强赎
+
+        只在状态为'公告不强赎'或之前处于安全状态时保留。
+
+        Args:
+            df: cb_daily DataFrame，含 ts_code, trade_date 列
+
+        Returns:
+            过滤后的 DataFrame
+        """
+        import duckdb
+        try:
+            con = duckdb.connect(self.db_path, read_only=True)
+            # 检查 cb_call 表是否存在
+            exists = con.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_call'"
+            ).fetchone()[0] > 0
+            if not exists:
+                con.close()
+                return df
+
+            calls = con.execute("""
+                SELECT ts_code, ann_date, is_call
+                FROM cb_call
+                WHERE call_type = '强赎'
+                ORDER BY ts_code, ann_date
+            """).fetchdf()
+            con.close()
+
+            if calls.empty:
+                return df
+
+            # 定义需要排除的状态
+            danger_statuses = {'已满足强赎条件', '公告提示强赎', '公告实施强赎'}
+
+            # 按转债分组，对每个交易日构建状态时间线
+            # 简化方案：取每个 CB 最早的强赎危险公告日期，从该日期起排除
+            # 如果后续有"公告不强赎"，则从该日期起恢复安全
+            excluded_set = set()
+
+            for ts_code, group in calls.groupby('ts_code'):
+                group = group.sort_values('ann_date')
+                is_danger = False
+                danger_start = None
+                for _, row in group.iterrows():
+                    if row['is_call'] in danger_statuses:
+                        if not is_danger:
+                            is_danger = True
+                            danger_start = row['ann_date']
+                    elif row['is_call'] == '公告不强赎':
+                        if is_danger:
+                            # 记录排除区间
+                            excluded_set.add((ts_code, danger_start, row['ann_date']))
+                            is_danger = False
+                # 如果结束时仍在危险区，排除到数据结束日
+                if is_danger and danger_start is not None:
+                    excluded_set.add((ts_code, danger_start, pd.Timestamp.max))
+
+            # 过滤 DataFrame
+            if excluded_set:
+                before_count = len(df)
+                original_shape = len(df)
+                mask = pd.Series(True, index=df.index)
+                for ts_code, start, end in excluded_set:
+                    code_mask = (df['ts_code'] == ts_code) & \
+                                (df['trade_date'] >= start)
+                    if end is not pd.Timestamp.max:
+                        code_mask = code_mask & (df['trade_date'] <= end)
+                    mask = mask & ~code_mask
+                df = df[mask]
+                removed = original_shape - len(df)
+                if removed > 0:
+                    unique_excluded = len(set(c[0] for c in excluded_set))
+                    print(f"[CB引擎] 强赎过滤: 排除 {removed} 行 ({unique_excluded} 只转债)")
+
+            return df
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[CB引擎] 强赎过滤异常，降级为不过滤: {e}")
+            return df
 
 
     # ── 结果构建 ──
