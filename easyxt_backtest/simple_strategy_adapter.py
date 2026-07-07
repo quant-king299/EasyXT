@@ -154,6 +154,23 @@ class SimpleFunctionAdapter(StrategyBase):
 
             con = duckdb.connect(db_path, read_only=True)
 
+            # ETF 复权因子检查：需要复权但没有数据时给出警告
+            if self.category == 'etf' and self.adjust != 'none':
+                has_etf_adj = con.execute("""
+                    SELECT COUNT(*) FROM adj_factor
+                    WHERE ts_code LIKE '5%' OR ts_code LIKE '15%'
+                       OR ts_code LIKE '16%' OR ts_code LIKE '58%'
+                    LIMIT 1
+                """).fetchone()[0]
+                if has_etf_adj == 0:
+                    import warnings
+                    warnings.warn(
+                        "ETF 复权因子数据缺失！adj_factor 表中没有 ETF 数据。"
+                        "请在 GUI「Tushare下载 → 基础数据」中点击「📊 下载ETF复权因子」，"
+                        "或运行 download_etf_adj_factor()。"
+                        "当前将降级为不复权价格（不影响运行，但回测结果可能不准确）。"
+                    )
+
 
 
             if self.category == 'cb':
@@ -180,23 +197,68 @@ class SimpleFunctionAdapter(StrategyBase):
 
             else:  # etf
 
-                query = f"""
+                if self.adjust != 'none':
 
-                    SELECT ts_code, trade_date, open, high, low, close,
+                    # 后复权：adj_close = close / factor_today * factor_latest（复用股票 adj_factor 表）
+                    query = f"""
 
-                           vol, amount, pct_chg
+                        SELECT e.ts_code, e.trade_date, e.open, e.high, e.low,
 
-                    FROM etf_daily
+                               e.close / COALESCE(f_today.adj_factor, 1.0)
 
-                    WHERE trade_date >= DATE '{start_fmt}'
+                                      * COALESCE(f_latest.adj_factor, 1.0) AS close,
 
-                      AND trade_date <= DATE '{end_fmt}'
+                               e.vol, e.amount, e.pct_chg
 
-                      AND close > 0
+                        FROM etf_daily e
 
-                    ORDER BY ts_code, trade_date
+                        LEFT JOIN adj_factor f_today
 
-                """
+                          ON e.ts_code = f_today.ts_code AND e.trade_date = f_today.trade_date
+
+                        LEFT JOIN (
+
+                            SELECT ts_code, adj_factor FROM (
+
+                                SELECT ts_code, adj_factor,
+
+                                       ROW_NUMBER() OVER (PARTITION BY ts_code ORDER BY trade_date DESC) AS rn
+
+                                FROM adj_factor
+
+                            ) sub WHERE rn = 1
+
+                        ) f_latest ON e.ts_code = f_latest.ts_code
+
+                        WHERE e.trade_date >= DATE '{start_fmt}'
+
+                          AND e.trade_date <= DATE '{end_fmt}'
+
+                          AND e.close > 0
+
+                        ORDER BY e.ts_code, e.trade_date
+
+                    """
+
+                else:
+
+                    query = f"""
+
+                        SELECT ts_code, trade_date, open, high, low, close,
+
+                               vol, amount, pct_chg
+
+                        FROM etf_daily
+
+                        WHERE trade_date >= DATE '{start_fmt}'
+
+                          AND trade_date <= DATE '{end_fmt}'
+
+                          AND close > 0
+
+                        ORDER BY ts_code, trade_date
+
+                    """
 
 
 

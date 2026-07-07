@@ -114,6 +114,8 @@ class TushareDownloadThread(QThread):
                 self._download_etf_daily()
             elif self.task_type == 'adj_factor':
                 self._download_adj_factor()
+            elif self.task_type == 'etf_adj_factor':
+                self._download_etf_adj_factor()
             elif self.task_type == 'stk_limit':
                 self._download_stk_limit()
             elif self.task_type == 'suspend_info':
@@ -952,6 +954,8 @@ class TushareDownloadThread(QThread):
                     self._download_cashflow_data()
                 elif task_type == 'adj_factor':
                     self._download_adj_factor()
+                elif task_type == 'etf_adj_factor':
+                    self._download_etf_adj_factor()
                 elif task_type == 'stk_limit':
                     self._download_stk_limit()
                 elif task_type == 'suspend_info':
@@ -2214,6 +2218,39 @@ class TushareDownloadThread(QThread):
         except Exception as e:
             import traceback
             self.error_signal.emit(f"复权因子下载失败: {str(e)}\n{traceback.format_exc()}")
+
+    def _download_etf_adj_factor(self):
+        """下载 ETF 复权因子数据（Tushare fund_adj 接口，存入 adj_factor 表与股票共用）"""
+        try:
+            from tushare_manager.download_basic_data import download_etf_adj_factor as _dl_etf_adj
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs.get('start_date', '20200101')
+            end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
+
+            self.log_signal.emit("=" * 60)
+            self.log_signal.emit("开始下载 ETF 复权因子数据")
+            self.log_signal.emit(f"  日期范围: {start_date} ~ {end_date}")
+            self.log_signal.emit("  存储表: adj_factor（与股票共用）")
+            self.log_signal.emit("=" * 60)
+
+            def progress_cb(current, total, msg):
+                if not self._is_running:
+                    raise StopIteration("下载已停止")
+                self.progress_signal.emit(current, total)
+                if current % 50 == 0 or current == total:
+                    self.log_signal.emit(f"  [{current}/{total}] {msg}")
+
+            result = _dl_etf_adj(db_path=db_path, start_date=start_date, end_date=end_date,
+                                progress_callback=progress_cb)
+
+            self.log_signal.emit(f"\n✅ ETF 复权因子下载完成！共 {result['total_records']:,} 条")
+            self.finished_signal.emit({'success': True, 'type': 'etf_adj_factor', **result})
+
+        except StopIteration:
+            pass
+        except Exception as e:
+            import traceback
+            self.error_signal.emit(f"ETF 复权因子下载失败: {str(e)}\n{traceback.format_exc()}")
 
     def _download_stk_limit(self):
         """下载涨跌停价格数据"""
@@ -3872,6 +3909,20 @@ class TushareDataWidget(QWidget):
         adj_info.setStyleSheet("color: #666; font-size: 11px;")
         btn_layout.addWidget(adj_info, 0, 1)
 
+        # ETF 复权因子
+        etf_adj_btn = QPushButton("📊 下载ETF复权因子")
+        etf_adj_btn.setFont(QFont("Microsoft YaHei", 10))
+        etf_adj_btn.setStyleSheet("""
+            QPushButton { background-color: #388E3C; color: white; padding: 10px; border-radius: 5px; }
+            QPushButton:hover { background-color: #2E7D32; }
+        """)
+        etf_adj_btn.clicked.connect(self.start_download_etf_adj_factor)
+        btn_layout.addWidget(etf_adj_btn, 1, 0)
+
+        etf_adj_info = QLabel("ETF分红/拆分复权，回测更准确")
+        etf_adj_info.setStyleSheet("color: #666; font-size: 11px;")
+        btn_layout.addWidget(etf_adj_info, 1, 1)
+
         # 涨跌停价格
         limit_btn = QPushButton("🚫 下载涨跌停价格")
         limit_btn.setFont(QFont("Microsoft YaHei", 10))
@@ -3880,11 +3931,11 @@ class TushareDataWidget(QWidget):
             QPushButton:hover { background-color: #BF360C; }
         """)
         limit_btn.clicked.connect(self.start_download_stk_limit)
-        btn_layout.addWidget(limit_btn, 1, 0)
+        btn_layout.addWidget(limit_btn, 2, 0)
 
         limit_info = QLabel("涨停价/跌停价，打板策略必需")
         limit_info.setStyleSheet("color: #666; font-size: 11px;")
-        btn_layout.addWidget(limit_info, 1, 1)
+        btn_layout.addWidget(limit_info, 2, 1)
 
         # 停复牌信息
         suspend_btn = QPushButton("⏸️ 下载停复牌信息")
@@ -3894,11 +3945,11 @@ class TushareDataWidget(QWidget):
             QPushButton:hover { background-color: #4A148C; }
         """)
         suspend_btn.clicked.connect(self.start_download_suspend_info)
-        btn_layout.addWidget(suspend_btn, 2, 0)
+        btn_layout.addWidget(suspend_btn, 3, 0)
 
         suspend_info = QLabel("过滤停牌股，避免虚假回测信号")
         suspend_info.setStyleSheet("color: #666; font-size: 11px;")
-        btn_layout.addWidget(suspend_info, 2, 1)
+        btn_layout.addWidget(suspend_info, 3, 1)
 
         # 申万行业分类
         sw_btn = QPushButton("🏷️ 下载申万行业分类")
@@ -3908,11 +3959,11 @@ class TushareDataWidget(QWidget):
             QPushButton:hover { background-color: #004D40; }
         """)
         sw_btn.clicked.connect(self.start_download_sw_industry)
-        btn_layout.addWidget(sw_btn, 3, 0)
+        btn_layout.addWidget(sw_btn, 4, 0)
 
         sw_info = QLabel("L1/L2行业分类+成分股（无需选日期）")
         sw_info.setStyleSheet("color: #666; font-size: 11px;")
-        btn_layout.addWidget(sw_info, 3, 1)
+        btn_layout.addWidget(sw_info, 4, 1)
 
         layout.addWidget(btn_group)
 
@@ -3957,6 +4008,20 @@ class TushareDataWidget(QWidget):
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
         thread = TushareDownloadThread('adj_factor', token=token,
+                                       start_date=start_date, end_date=end_date)
+        self._start_download_thread(thread)
+
+    def start_download_etf_adj_factor(self):
+        """开始下载 ETF 复权因子"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        start_date, end_date = self._get_basic_date_range()
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        thread = TushareDownloadThread('etf_adj_factor', token=token,
                                        start_date=start_date, end_date=end_date)
         self._start_download_thread(thread)
 

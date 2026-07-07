@@ -225,6 +225,92 @@ def download_adj_factor(db_path: Optional[str] = None,
 
 
 # ═══════════════════════════════════════════════════════════
+# 1b. ETF 复权因子 fund_adj — 与股票共享 adj_factor 表
+# ═══════════════════════════════════════════════════════════
+
+
+def download_etf_adj_factor(db_path: Optional[str] = None,
+                            start_date: str = '20200101',
+                            end_date: Optional[str] = None,
+                            progress_callback: Optional[Callable] = None) -> dict:
+    """
+    下载 ETF 复权因子数据（Tushare fund_adj 接口）
+
+    按日期遍历（每次获取全市场 ETF），存入 adj_factor 表（与股票共用）。
+
+    ETF 每年分红/拆分时复权因子会变化，回测需要本地 adj_factor 做复权计算。
+    新增分红时只需增量下载新日期的行，历史行不变。
+
+    Args:
+        db_path: DuckDB 路径
+        start_date: 开始日期 (YYYYMMDD)
+        end_date: 结束日期 (YYYYMMDD)，默认今天
+        progress_callback: 进度回调 callback(current, total, message)
+
+    Returns:
+        {'total_dates': N, 'total_records': M, 'errors': [...]}
+    """
+    if end_date is None:
+        end_date = datetime.now().strftime('%Y%m%d')
+
+    db_path = _get_db_path(db_path)
+    _log(f"下载 ETF 复权因子数据: {start_date} ~ {end_date}")
+
+    pro = _get_pro_api()
+    conn = duckdb.connect(db_path)
+    _ensure_table(conn, 'adj_factor', SQL_CREATE_ADJ_FACTOR)
+
+    # 获取交易日列表
+    trading_dates = _get_trading_dates(pro, start_date, end_date)
+    if not trading_dates:
+        _log("未获取到交易日列表", "ERROR")
+        conn.close()
+        return {'total_dates': 0, 'total_records': 0, 'errors': []}
+
+    # ETF fund_adj 增量：按 ts_code 粒度检测已有最新日期
+    try:
+        existing_map = {}
+        rows = conn.execute(
+            "SELECT ts_code, MAX(trade_date) FROM adj_factor WHERE ts_code LIKE '1%' OR ts_code LIKE '5%' OR ts_code LIKE '15%' OR ts_code LIKE '16%' OR ts_code LIKE '58%' GROUP BY ts_code"
+        ).fetchall()
+        for ts_code, max_date in rows:
+            if max_date:
+                existing_map[ts_code] = pd.Timestamp(max_date).strftime('%Y%m%d')
+    except Exception:
+        existing_map = {}
+
+    total_records = 0
+    errors = []
+    total = len(trading_dates)
+
+    for i, trade_date in enumerate(trading_dates):
+        if progress_callback:
+            progress_callback(i + 1, total, f"下载 ETF 复权因子 {trade_date}")
+
+        # Tushare fund_adj: 按日期拉取全市场 ETF 复权因子
+        # 不传 ts_code 参数则返回当日所有 ETF
+        df = _api_call_with_retry(
+            lambda td=trade_date: pro.fund_adj(trade_date=td),
+            log_label=f"fund_adj[{trade_date}]"
+        )
+
+        if df is not None and not df.empty:
+            # 只保留 adj_factor 表需要的列（丢弃 discount_rate）
+            if 'discount_rate' in df.columns:
+                df = df[['ts_code', 'trade_date', 'adj_factor']]
+            df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+            count = _upsert_by_date(conn, 'adj_factor', df, 'trade_date')
+            total_records += count
+
+        if (i + 1) % 50 == 0 or (i + 1) == total:
+            _log(f"[{i+1}/{total}] 已下载 {total_records:,} 条 ETF 复权因子")
+
+    conn.close()
+    _log(f"ETF 复权因子下载完成: {total_records:,} 条", "OK")
+    return {'total_dates': total, 'total_records': total_records, 'errors': errors}
+
+
+# ═══════════════════════════════════════════════════════════
 # 2. 每日涨跌停价格 stk_limit
 # ═══════════════════════════════════════════════════════════
 
@@ -589,20 +675,24 @@ def download_all_basic(db_path: Optional[str] = None,
     _log("开始下载基础数据（5000分专属）")
     _log("=" * 60)
 
-    # 1. 复权因子
-    _log("\n[1/4] 复权因子")
+    # 1. 股票复权因子
+    _log("\n[1/5] 股票复权因子")
     results['adj_factor'] = download_adj_factor(db_path, start_date, end_date, progress_callback)
 
-    # 2. 涨跌停价格
-    _log("\n[2/4] 涨跌停价格")
+    # 2. ETF 复权因子
+    _log("\n[2/5] ETF 复权因子")
+    results['etf_adj_factor'] = download_etf_adj_factor(db_path, start_date, end_date, progress_callback)
+
+    # 3. 涨跌停价格
+    _log("\n[3/5] 涨跌停价格")
     results['stk_limit'] = download_stk_limit(db_path, start_date, end_date, progress_callback)
 
-    # 3. 停复牌信息
-    _log("\n[3/4] 停复牌信息")
+    # 4. 停复牌信息
+    _log("\n[4/5] 停复牌信息")
     results['suspend'] = download_suspend(db_path, start_date, end_date, progress_callback)
 
-    # 4. 申万行业
-    _log("\n[4/4] 申万行业分类")
+    # 5. 申万行业
+    _log("\n[5/5] 申万行业分类")
     results['sw_industry'] = download_sw_industry(db_path, progress_callback)
 
     _log("\n" + "=" * 60)

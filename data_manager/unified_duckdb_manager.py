@@ -530,8 +530,12 @@ class UnifiedDuckDBManager:
             # 不复权数据：从DuckDB读取
             return self._get_data_from_duckdb(symbols, start_date, end_date, period)
         else:
-            # 复权数据：从QMT API实时获取
-            logger.info(f"获取{adjust_type}复权数据（从QMT API实时计算）...")
+            # 复权数据：优先本地 adj_factor 表计算（毫秒级），失败再降级 QMT API
+            logger.info(f"获取{adjust_type}复权数据（优先本地 adj_factor 计算）...")
+            local_result = self._get_adjusted_data_from_local(symbols, start_date, end_date, period, adjust_type)
+            if not local_result.empty:
+                return local_result
+            logger.info(f"本地 adj_factor 不足，降级到 QMT API...")
             return self._get_adjusted_data_from_qmt(symbols, start_date, end_date, period, adjust_type)
 
     def _get_data_from_duckdb(self, symbols: Union[str, List[str]] = None,
@@ -574,6 +578,87 @@ class UnifiedDuckDBManager:
             return df
         except Exception as e:
             logger.error(f"查询失败: {e}")
+            return pd.DataFrame()
+
+    def _get_adjusted_data_from_local(self, symbols: Union[str, List[str]],
+                                       start_date: str, end_date: str,
+                                       period: str, adjust_type: str) -> pd.DataFrame:
+        """优先方案：DuckDB 本地 adj_factor 表 JOIN 计算复权价格（毫秒级）
+
+        后复权公式: adj_price = close / factor_today * factor_latest
+        前复权公式: adj_price = close / factor_today * factor_earliest
+
+        无需任何外部 API 调用，本地 DuckDB JOIN 即可完成。
+        """
+        try:
+            # 检查 adj_factor 表是否存在
+            table_exists = self.conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'adj_factor'"
+            ).fetchone()[0] > 0
+
+            if not table_exists:
+                logger.info("adj_factor 表不存在，跳过本地复权")
+                return pd.DataFrame()
+
+            if isinstance(symbols, str):
+                symbols = [symbols]
+
+            conditions = [f"s.period = '{period}'", "s.close > 0"]
+            if symbols:
+                symbol_list = "', '".join(symbols)
+                conditions.append(f"s.symbol IN ('{symbol_list}')")
+            if start_date:
+                conditions.append(f"s.date >= '{start_date}'")
+            if end_date:
+                conditions.append(f"s.date <= '{end_date}'")
+
+            where_clause = " AND ".join(conditions)
+
+            # 后复权: adj_price = close / factor_today * factor_latest
+            # 前复权: adj_price = close / factor_today * factor_earliest
+            if adjust_type in ('hfq', 'back', 'geometric_back'):
+                base_factor_expr = "COALESCE(f_latest.adj_factor, 1.0)"
+            else:
+                base_factor_expr = "COALESCE(f_earliest.adj_factor, 1.0)"
+
+            query = f"""
+                SELECT s.symbol, s.date, s.period,
+                       s.open / COALESCE(f_today.adj_factor, 1.0) * {base_factor_expr} AS open,
+                       s.high / COALESCE(f_today.adj_factor, 1.0) * {base_factor_expr} AS high,
+                       s.low / COALESCE(f_today.adj_factor, 1.0) * {base_factor_expr} AS low,
+                       s.close / COALESCE(f_today.adj_factor, 1.0) * {base_factor_expr} AS close,
+                       s.volume, s.amount,
+                       s.turnover, s.pe_ratio, s.pb_ratio,
+                       s.market_cap, s.circulating_cap
+                FROM stock_data s
+                LEFT JOIN adj_factor f_today
+                  ON s.symbol = f_today.ts_code AND s.date = f_today.trade_date
+                LEFT JOIN (
+                    SELECT ts_code, adj_factor FROM (
+                        SELECT ts_code, adj_factor,
+                               ROW_NUMBER() OVER (PARTITION BY ts_code ORDER BY trade_date DESC) AS rn
+                        FROM adj_factor
+                    ) sub WHERE rn = 1
+                ) f_latest ON s.symbol = f_latest.ts_code
+                LEFT JOIN (
+                    SELECT ts_code, adj_factor FROM (
+                        SELECT ts_code, adj_factor,
+                               ROW_NUMBER() OVER (PARTITION BY ts_code ORDER BY trade_date ASC) AS rn
+                        FROM adj_factor
+                    ) sub WHERE rn = 1
+                ) f_earliest ON s.symbol = f_earliest.ts_code
+                WHERE {where_clause}
+                ORDER BY s.symbol, s.date
+            """
+
+            df = self.conn.execute(query).fetchdf()
+            if df is not None and not df.empty:
+                logger.info(f"本地 adj_factor 复权成功: {len(df)} 条 [{adjust_type}]")
+                return df
+            return pd.DataFrame()
+
+        except Exception as e:
+            logger.info(f"本地 adj_factor 复权失败（将降级到 QMT API）: {e}")
             return pd.DataFrame()
 
     def _get_adjusted_data_from_qmt(self, symbols: Union[str, List[str]],

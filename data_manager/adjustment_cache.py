@@ -50,11 +50,14 @@ ADJUST_TO_QMT_DIVIDEND_TYPE = {
 
 class AdjustmentCache:
     """
-    复权查询管理器（QMT API方案）
+    复权查询管理器（本地 adj_factor 优先方案）
 
     功能：
-    1. 不复权：从DuckDB读取原始数据
-    2. 需要复权：直接调用QMT API获取
+    1. 不复权：从 DuckDB 读取原始数据
+    2. 需要复权：优先用本地 adj_factor 表计算（毫秒级），失败再降级到 QMT/Tushare API
+
+    仅可转债（CB）跳过复权——可转债价格是市场连续交易价格，不存在除权除息跳空。
+    ETF 需要复权：ETF 每年分红会产生价格跳空，与股票一样需要 adj_factor 校正。
     """
 
     def __init__(self, duckdb_path: str):
@@ -97,28 +100,18 @@ class AdjustmentCache:
         Returns:
             复权后的数据
         """
-        # 检测是否为可转债或基金（这两类都不需要复权）
+        # 检测是否为可转债（可转债价格不存在除权除息跳空，无需复权）
         # 可转债代码格式：
         # - 上海：11xxxxx.SH, 12xxxxx.SH
         # - 深圳：12xxxxx.SZ, 123xxx.SZ
-        # 基金代码格式：
-        # - ETF：15xxxxx.SZ, 16xxxxx.SZ, 50xxxxx.SH, 56xxxxx.SH, 58xxxxx.SH
-        # - LOF：16xxxxx.SZ, 50xxxxx.SH
-        is_skip_adjust = (
-            # 可转债
-            stock_code.startswith('11') or  # 上海转债
-            stock_code.startswith('12') or  # 上海/深圳转债
-            stock_code.startswith('123') or  # 深圳创业板转债
-            # 基金（ETF/LOF等）
-            stock_code.startswith('15') or  # 深圳ETF
-            stock_code.startswith('16') or  # 深圳LOF
-            stock_code.startswith('50') or  # 上海ETF/LOF
-            stock_code.startswith('56') or  # 上海ETF
-            stock_code.startswith('58')      # 上海基金
+        is_cb = (
+            stock_code.startswith('11') or
+            stock_code.startswith('12') or
+            stock_code.startswith('123')
         )
 
-        # 可转债和基金跳过复权处理
-        if is_skip_adjust:
+        # ETF 需要复权（每年分红会产生价格跳空），不再跳过
+        if is_cb:
             logger.info(f"  [INFO] 检测到可转债 {stock_code}，跳过复权处理")
             return self._get_raw_data(stock_code, start_date, end_date, con)
 
