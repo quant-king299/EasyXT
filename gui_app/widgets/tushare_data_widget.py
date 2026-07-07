@@ -3940,17 +3940,17 @@ class TushareDataWidget(QWidget):
 
         btn_1y = QPushButton("近1年")
         btn_1y.clicked.connect(lambda: self._set_basic_date_range(
-            QDate.currentDate().year - 1, 1, 1))
+            QDate.currentDate().year() - 1, 1, 1))
         quick_layout.addWidget(btn_1y)
 
         btn_3y = QPushButton("近3年")
         btn_3y.clicked.connect(lambda: self._set_basic_date_range(
-            QDate.currentDate().year - 3, 1, 1))
+            QDate.currentDate().year() - 3, 1, 1))
         quick_layout.addWidget(btn_3y)
 
         btn_5y = QPushButton("近5年")
         btn_5y.clicked.connect(lambda: self._set_basic_date_range(
-            QDate.currentDate().year - 5, 1, 1))
+            QDate.currentDate().year() - 5, 1, 1))
         quick_layout.addWidget(btn_5y)
 
         btn_2020 = QPushButton("2020至今")
