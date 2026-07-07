@@ -285,9 +285,10 @@ class SimpleFunctionAdapter(StrategyBase):
 
             self._category_data = df
 
-            # ── CB 强赎过滤：排除处于强赎危险区的可转债 ──
+            # ── CB 强赎过滤 + 下修标记 ──
             if self.category == 'cb' and not df.empty:
                 self._category_data = self._filter_redemption_risk(df)
+                self._category_data = self._mark_down_revise(self._category_data)
 
         except Exception as e:
 
@@ -1130,6 +1131,69 @@ class SimpleFunctionAdapter(StrategyBase):
             return df
         except Exception as e:
             logger.warning(f"[CB] 强赎过滤异常，降级为不过滤: {e}")
+            return df
+
+    def _mark_down_revise(self, df: pd.DataFrame) -> pd.DataFrame:
+        """标记可转债下修事件，增加 'days_since_down_revise' 列
+
+        NaN: 从未下修；0: 当天发生下修；N: 最近一次下修是 N 天前。
+        策略可用此列过滤：下修后转股价值跳升，短期可能有机会。
+        """
+        import duckdb
+        try:
+            db_path = 'D:/StockData/stock_data.ddb'
+            con = duckdb.connect(db_path, read_only=True)
+            exists = con.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_share'"
+            ).fetchone()[0] > 0
+            if not exists:
+                con.close()
+                df = df.copy()
+                df['days_since_down_revise'] = float('nan')
+                return df
+
+            down = con.execute("""
+                SELECT ts_code, publish_date
+                FROM (
+                    SELECT ts_code, publish_date, convert_price,
+                           LAG(convert_price) OVER (PARTITION BY ts_code ORDER BY publish_date) AS prev_price
+                    FROM cb_share
+                ) sub
+                WHERE convert_price < prev_price
+                ORDER BY ts_code, publish_date
+            """).fetchdf()
+            con.close()
+
+            df = df.copy()
+            df['days_since_down_revise'] = float('nan')
+
+            if down.empty:
+                return df
+
+            down['publish_date'] = pd.to_datetime(down['publish_date'])
+            revise_dates = down.groupby('ts_code')['publish_date'].apply(list).to_dict()
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+
+            for ts_code, dates in revise_dates.items():
+                mask = df['ts_code'] == ts_code
+                if not mask.any():
+                    continue
+                for trade_dt in df.loc[mask, 'trade_date'].unique():
+                    prior = [d for d in dates if d <= trade_dt]
+                    if prior:
+                        days = (trade_dt - max(prior)).days
+                        sub_mask = (df['ts_code'] == ts_code) & (df['trade_date'] == trade_dt)
+                        df.loc[sub_mask, 'days_since_down_revise'] = days
+
+            marked = df['days_since_down_revise'].notna().sum()
+            if marked > 0:
+                logger.info(f"[CB] 下修标记: {marked} 行 ({len(revise_dates)} 只转债有过下修)")
+
+            return df
+        except Exception as e:
+            logger.warning(f"[CB] 下修标记异常: {e}")
+            df = df.copy()
+            df['days_since_down_revise'] = float('nan')
             return df
 
 

@@ -217,9 +217,10 @@ class VectorizedBacktestEngine:
 
         df.sort_values(['trade_date', code_col], inplace=True)
 
-        # ── CB 强赎过滤：排除处于强赎危险区的可转债 ──
+        # ── CB 强赎过滤 + 下修标记 ──
         if self.category == 'cb':
             df = self._filter_redemption_risk(df)
+            df = self._mark_down_revise(df)
 
 
 
@@ -590,6 +591,80 @@ class VectorizedBacktestEngine:
         except Exception as e:
             import logging
             logging.getLogger(__name__).warning(f"[CB引擎] 强赎过滤异常，降级为不过滤: {e}")
+            return df
+
+    def _mark_down_revise(self, df: pd.DataFrame) -> pd.DataFrame:
+        """标记可转债下修事件
+
+        从 cb_share 表检测转股价下降日期，在 DataFrame 中增加
+        'days_since_down_revise' 列：
+        - NaN: 从未下修
+        - 0: 当天发生下修
+        - N: 最近一次下修是 N 天前
+
+        策略可通过此列过滤或加权：
+        - 下修后转股价值跳升，短期内可能有机会
+        - 策略可设置阈值如 days_since_down_revise <= 60
+        """
+        import duckdb
+        try:
+            con = duckdb.connect(self.db_path, read_only=True)
+            exists = con.execute(
+                "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_share'"
+            ).fetchone()[0] > 0
+            if not exists:
+                con.close()
+                df['days_since_down_revise'] = float('nan')
+                return df
+
+            # 检测每次 convert_price 下降（下修事件）
+            down = con.execute("""
+                SELECT ts_code, publish_date
+                FROM (
+                    SELECT ts_code, publish_date, convert_price,
+                           LAG(convert_price) OVER (PARTITION BY ts_code ORDER BY publish_date) AS prev_price
+                    FROM cb_share
+                ) sub
+                WHERE convert_price < prev_price
+                ORDER BY ts_code, publish_date
+            """).fetchdf()
+            con.close()
+
+            if down.empty:
+                df['days_since_down_revise'] = float('nan')
+                return df
+
+            # 将下修日期转为 dict: ts_code -> [date1, date2, ...]
+            down['publish_date'] = pd.to_datetime(down['publish_date'])
+            revise_dates = down.groupby('ts_code')['publish_date'].apply(list).to_dict()
+
+            df = df.copy()
+            df['trade_date'] = pd.to_datetime(df['trade_date'])
+            df['days_since_down_revise'] = float('nan')
+
+            for ts_code, dates in revise_dates.items():
+                mask = df['ts_code'] == ts_code
+                if not mask.any():
+                    continue
+                code_df = df.loc[mask]
+                # 对每个交易日，找最近的下修日期
+                for trade_dt in code_df['trade_date'].unique():
+                    prior_revises = [d for d in dates if d <= trade_dt]
+                    if prior_revises:
+                        days = (trade_dt - max(prior_revises)).days
+                        df.loc[(df['ts_code'] == ts_code) & (df['trade_date'] == trade_dt),
+                               'days_since_down_revise'] = days
+
+            marked = df['days_since_down_revise'].notna().sum()
+            if marked > 0:
+                print(f"[CB引擎] 下修标记: {marked} 行已标记 ({len(revise_dates)} 只转债有过下修)")
+
+            return df
+
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"[CB引擎] 下修标记异常，降级为不标记: {e}")
+            df['days_since_down_revise'] = float('nan')
             return df
 
 
