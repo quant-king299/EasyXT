@@ -267,17 +267,20 @@ def download_etf_adj_factor(db_path: Optional[str] = None,
         conn.close()
         return {'total_dates': 0, 'total_records': 0, 'errors': []}
 
-    # ETF fund_adj 增量：按 ts_code 粒度检测已有最新日期
+    # ETF fund_adj 增量：跳过已下载到最新日期的数据
     try:
-        existing_map = {}
-        rows = conn.execute(
-            "SELECT ts_code, MAX(trade_date) FROM adj_factor WHERE ts_code LIKE '1%' OR ts_code LIKE '5%' OR ts_code LIKE '15%' OR ts_code LIKE '16%' OR ts_code LIKE '58%' GROUP BY ts_code"
-        ).fetchall()
-        for ts_code, max_date in rows:
-            if max_date:
-                existing_map[ts_code] = pd.Timestamp(max_date).strftime('%Y%m%d')
+        existing_max = conn.execute(
+            "SELECT MAX(trade_date) FROM adj_factor WHERE ts_code LIKE '5%' OR ts_code LIKE '15%' OR ts_code LIKE '16%' OR ts_code LIKE '58%'"
+        ).fetchone()[0]
+        if existing_max:
+            existing_str = pd.Timestamp(existing_max).strftime('%Y%m%d')
+            filtered = [d for d in trading_dates if d > existing_str]
+            skipped = len(trading_dates) - len(filtered)
+            if skipped > 0:
+                _log(f"增量下载：跳过已有 {skipped} 天，还需下载 {len(filtered)} 天")
+            trading_dates = filtered
     except Exception:
-        existing_map = {}
+        pass
 
     total_records = 0
     errors = []
@@ -693,6 +696,21 @@ def download_cb_call(db_path: Optional[str] = None,
     total_records = 0
     errors = []
 
+    # 增量检查：跳过已下载的日期范围
+    try:
+        existing_max = conn.execute("SELECT MAX(ann_date) FROM cb_call").fetchone()[0]
+        if existing_max:
+            existing_str = pd.Timestamp(existing_max).strftime('%Y%m%d')
+            if existing_str >= end_date:
+                _log(f"增量下载：数据已是最新 ({existing_str})，无需下载")
+                conn.close()
+                return {'total_records': 0, 'errors': []}
+            # 从已下载的下一天开始
+            start_date = (pd.Timestamp(existing_max) + timedelta(days=1)).strftime('%Y%m%d')
+            _log(f"增量下载：从 {start_date} 开始")
+    except Exception:
+        pass
+
     # cb_call 数据量小（~2000条），按年分段下载即可
     current = datetime.strptime(start_date, '%Y%m%d')
     end_dt = datetime.strptime(end_date, '%Y%m%d')
@@ -793,19 +811,40 @@ def download_cb_share(db_path: Optional[str] = None,
         conn.close()
         return {'total_cb': 0, 'total_records': 0, 'errors': []}
 
-    _log(f"共 {len(codes)} 只可转债")
+    # 增量检查：跳过已有最新数据的 CB（30天内更新过）
+    try:
+        existing = {}
+        rows = conn.execute(
+            "SELECT ts_code, MAX(publish_date) FROM cb_share GROUP BY ts_code"
+        ).fetchall()
+        cutoff = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        for ts_code, max_date in rows:
+            if max_date and str(max_date) >= cutoff:
+                existing[ts_code] = True
+    except Exception:
+        existing = {}
+
+    need_download = [c for c in codes if c not in existing]
+    skipped = len(codes) - len(need_download)
+    if skipped > 0:
+        _log(f"增量下载：跳过已有 {skipped} 只，还需下载 {len(need_download)} 只")
+    codes = need_download
+
+    if not codes:
+        _log("所有可转债转股数据已是最新，无需下载", "OK")
+        conn.close()
+        return {'total_cb': 0, 'total_records': 0, 'errors': []}
 
     total_records = 0
     errors = []
     total = len(codes)
     last_request_time = 0
-    request_interval = 0.06  # ~1000次/分钟（5000积分）
+    request_interval = 0.06
 
     for i, ts_code in enumerate(codes):
         if progress_callback:
             progress_callback(i + 1, total, f"下载 {ts_code} 转股进度")
 
-        # 限流
         elapsed = time.time() - last_request_time
         if elapsed < request_interval:
             time.sleep(request_interval - elapsed)

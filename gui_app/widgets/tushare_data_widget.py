@@ -3975,26 +3975,32 @@ class TushareDataWidget(QWidget):
         etf_adj_btn = QPushButton("📊 ETF复权因子")
         etf_adj_btn.setFont(_btn_font)
         etf_adj_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #388E3C; } QPushButton:hover { background-color: #2E7D32; }")
+        etf_adj_btn.clicked.connect(self.start_download_etf_adj_factor)
 
         limit_btn = QPushButton("🚫 涨跌停价格")
         limit_btn.setFont(_btn_font)
         limit_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #E65100; } QPushButton:hover { background-color: #BF360C; }")
+        limit_btn.clicked.connect(self.start_download_stk_limit)
 
         suspend_btn = QPushButton("⏸️ 停复牌信息")
         suspend_btn.setFont(_btn_font)
         suspend_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #6A1B9A; } QPushButton:hover { background-color: #4A148C; }")
+        suspend_btn.clicked.connect(self.start_download_suspend_info)
 
         cb_call_btn = QPushButton("🔔 强赎公告")
         cb_call_btn.setFont(_btn_font)
         cb_call_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #C62828; } QPushButton:hover { background-color: #B71C1C; }")
+        cb_call_btn.clicked.connect(self.start_download_cb_call)
 
         cb_share_btn = QPushButton("📉 转股进度")
         cb_share_btn.setFont(_btn_font)
         cb_share_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #AD1457; } QPushButton:hover { background-color: #880E4F; }")
+        cb_share_btn.clicked.connect(self.start_download_cb_share)
 
         sw_btn = QPushButton("🏷️ 申万行业分类")
         sw_btn.setFont(_btn_font)
         sw_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #00695C; } QPushButton:hover { background-color: #004D40; }")
+        sw_btn.clicked.connect(self.start_download_sw_industry)
 
         btns = [adj_btn, etf_adj_btn, limit_btn, suspend_btn, cb_call_btn, cb_share_btn, sw_btn]
         for b in btns:
