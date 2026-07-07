@@ -3959,88 +3959,51 @@ class TushareDataWidget(QWidget):
 
         layout.addWidget(quick_group)
 
-        # 下载按钮区 — 按类别分组
+        # 下载按钮区 — 全部横排，自动换行
         btn_group = QGroupBox("📥 单独下载")
-        btn_group_layout = QVBoxLayout(btn_group)
-        btn_group_layout.setSpacing(8)
+        btn_grid = QGridLayout(btn_group)
+        btn_grid.setSpacing(6)
 
-        # ── 复权因子 ──
-        adj_group = QGroupBox("复权因子")
-        adj_grid = QGridLayout(adj_group)
+        _btn_style = "QPushButton { padding: 8px 14px; border-radius: 5px; color: white; font-size: 12px; }"
+        _btn_font = QFont("Microsoft YaHei", 9)
 
-        adj_btn = QPushButton("🔧 下载股票复权因子")
-        adj_btn.setFont(QFont("Microsoft YaHei", 9))
-        adj_btn.setStyleSheet("QPushButton { background-color: #1976D2; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #1565C0; }")
+        adj_btn = QPushButton("🔧 股票复权因子")
+        adj_btn.setFont(_btn_font)
+        adj_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #1976D2; } QPushButton:hover { background-color: #1565C0; }")
         adj_btn.clicked.connect(self.start_download_adj_factor)
-        adj_grid.addWidget(adj_btn, 0, 0)
 
-        etf_adj_btn = QPushButton("📊 下载ETF复权因子")
-        etf_adj_btn.setFont(QFont("Microsoft YaHei", 9))
-        etf_adj_btn.setStyleSheet("QPushButton { background-color: #388E3C; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #2E7D32; }")
-        etf_adj_btn.clicked.connect(self.start_download_etf_adj_factor)
-        adj_grid.addWidget(etf_adj_btn, 0, 1)
+        etf_adj_btn = QPushButton("📊 ETF复权因子")
+        etf_adj_btn.setFont(_btn_font)
+        etf_adj_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #388E3C; } QPushButton:hover { background-color: #2E7D32; }")
 
-        adj_desc = QLabel("股票+ETF复权因子\n回测更准确，无需QMT在线")
-        adj_desc.setStyleSheet("color: #666; font-size: 10px; padding: 4px;")
-        adj_grid.addWidget(adj_desc, 0, 2)
-        btn_group_layout.addWidget(adj_group)
+        limit_btn = QPushButton("🚫 涨跌停价格")
+        limit_btn.setFont(_btn_font)
+        limit_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #E65100; } QPushButton:hover { background-color: #BF360C; }")
 
-        # ── 股票数据 ──
-        stock_group = QGroupBox("股票基础数据")
-        stock_grid = QGridLayout(stock_group)
+        suspend_btn = QPushButton("⏸️ 停复牌信息")
+        suspend_btn.setFont(_btn_font)
+        suspend_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #6A1B9A; } QPushButton:hover { background-color: #4A148C; }")
 
-        limit_btn = QPushButton("🚫 下载涨跌停价格")
-        limit_btn.setFont(QFont("Microsoft YaHei", 9))
-        limit_btn.setStyleSheet("QPushButton { background-color: #E65100; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #BF360C; }")
-        limit_btn.clicked.connect(self.start_download_stk_limit)
-        stock_grid.addWidget(limit_btn, 0, 0)
+        cb_call_btn = QPushButton("🔔 强赎公告")
+        cb_call_btn.setFont(_btn_font)
+        cb_call_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #C62828; } QPushButton:hover { background-color: #B71C1C; }")
 
-        suspend_btn = QPushButton("⏸️ 下载停复牌信息")
-        suspend_btn.setFont(QFont("Microsoft YaHei", 9))
-        suspend_btn.setStyleSheet("QPushButton { background-color: #6A1B9A; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #4A148C; }")
-        suspend_btn.clicked.connect(self.start_download_suspend_info)
-        stock_grid.addWidget(suspend_btn, 0, 1)
+        cb_share_btn = QPushButton("📉 转股进度")
+        cb_share_btn.setFont(_btn_font)
+        cb_share_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #AD1457; } QPushButton:hover { background-color: #880E4F; }")
 
-        stock_desc = QLabel("打板策略 + 停牌过滤")
-        stock_desc.setStyleSheet("color: #666; font-size: 10px; padding: 4px;")
-        stock_grid.addWidget(stock_desc, 0, 2)
-        btn_group_layout.addWidget(stock_group)
+        sw_btn = QPushButton("🏷️ 申万行业分类")
+        sw_btn.setFont(_btn_font)
+        sw_btn.setStyleSheet(_btn_style + "QPushButton { background-color: #00695C; } QPushButton:hover { background-color: #004D40; }")
 
-        # ── 可转债 ──
-        cb_group = QGroupBox("可转债数据")
-        cb_grid = QGridLayout(cb_group)
+        btns = [adj_btn, etf_adj_btn, limit_btn, suspend_btn, cb_call_btn, cb_share_btn, sw_btn]
+        for b in btns:
+            b.setMinimumWidth(120)
 
-        cb_call_btn = QPushButton("🔔 下载强赎公告")
-        cb_call_btn.setFont(QFont("Microsoft YaHei", 9))
-        cb_call_btn.setStyleSheet("QPushButton { background-color: #C62828; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #B71C1C; }")
-        cb_call_btn.clicked.connect(self.start_download_cb_call)
-        cb_grid.addWidget(cb_call_btn, 0, 0)
-
-        cb_share_btn = QPushButton("📉 下载转股进度")
-        cb_share_btn.setFont(QFont("Microsoft YaHei", 9))
-        cb_share_btn.setStyleSheet("QPushButton { background-color: #AD1457; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #880E4F; }")
-        cb_share_btn.clicked.connect(self.start_download_cb_share)
-        cb_grid.addWidget(cb_share_btn, 0, 1)
-
-        cb_desc = QLabel("排除强赎标的 + 检测下修事件\n回测更准确（逐只下载，需几分钟）")
-        cb_desc.setStyleSheet("color: #666; font-size: 10px; padding: 4px;")
-        cb_grid.addWidget(cb_desc, 0, 2)
-        btn_group_layout.addWidget(cb_group)
-
-        # ── 行业分类 ──
-        sw_group = QGroupBox("行业分类")
-        sw_grid = QGridLayout(sw_group)
-
-        sw_btn = QPushButton("🏷️ 下载申万行业分类")
-        sw_btn.setFont(QFont("Microsoft YaHei", 9))
-        sw_btn.setStyleSheet("QPushButton { background-color: #00695C; color: white; padding: 8px; border-radius: 4px; } QPushButton:hover { background-color: #004D40; }")
-        sw_btn.clicked.connect(self.start_download_sw_industry)
-        sw_grid.addWidget(sw_btn, 0, 0)
-
-        sw_desc = QLabel("L1/L2行业+成分股（无需选日期）")
-        sw_desc.setStyleSheet("color: #666; font-size: 10px; padding: 4px;")
-        sw_grid.addWidget(sw_desc, 0, 1)
-        btn_group_layout.addWidget(sw_group)
+        # 一行 4 个，共 2 行
+        cols = 4
+        for i, b in enumerate(btns):
+            btn_grid.addWidget(b, i // cols, i % cols)
 
         layout.addWidget(btn_group)
 

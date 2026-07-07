@@ -408,10 +408,10 @@ def download_stk_limit(db_path: Optional[str] = None,
 SQL_CREATE_SUSPEND = """
 CREATE TABLE IF NOT EXISTS suspend_info (
     ts_code VARCHAR,
-    suspend_date DATE,
-    resume_date DATE,
-    suspend_reason VARCHAR,
-    PRIMARY KEY (ts_code, suspend_date)
+    trade_date DATE,
+    suspend_type VARCHAR,
+    suspend_timing VARCHAR,
+    PRIMARY KEY (ts_code, trade_date)
 )
 """
 
@@ -421,7 +421,7 @@ def download_suspend(db_path: Optional[str] = None,
                      end_date: Optional[str] = None,
                      progress_callback: Optional[Callable] = None) -> dict:
     """
-    下载停复牌信息
+    下载停复牌信息（Tushare suspend_d 接口）
 
     按日期遍历（每次获取当日停牌股票）。
 
@@ -452,7 +452,7 @@ def download_suspend(db_path: Optional[str] = None,
 
     # 增量检查
     try:
-        existing_max = conn.execute("SELECT MAX(suspend_date) FROM suspend_info").fetchone()[0]
+        existing_max = conn.execute("SELECT MAX(trade_date) FROM suspend_info").fetchone()[0]
         if existing_max:
             existing_str = pd.Timestamp(existing_max).strftime('%Y%m%d')
             filtered = [d for d in trading_dates if d > existing_str]
@@ -472,31 +472,21 @@ def download_suspend(db_path: Optional[str] = None,
             progress_callback(i + 1, total, f"下载停复牌信息 {trade_date}")
 
         df = _api_call_with_retry(
-            lambda td=trade_date: pro.suspend_d(trade_date=td, fields='ts_code,suspend_date,resume_date,resume_reason'),
+            lambda td=trade_date: pro.suspend_d(trade_date=td),
             log_label=f"suspend_d[{trade_date}]"
         )
 
         if df is not None and not df.empty:
-            # 重命名列以匹配表结构
-            if 'resume_reason' in df.columns:
-                df = df.rename(columns={'resume_reason': 'suspend_reason'})
-            # 确保有所需的列
-            for col in ['suspend_date', 'resume_date']:
-                if col in df.columns:
-                    df[col] = pd.to_datetime(df[col], format='%Y%m%d', errors='coerce')
-
-            # 只保留需要的列
-            cols = [c for c in ['ts_code', 'suspend_date', 'resume_date', 'suspend_reason'] if c in df.columns]
-            df = df[cols].dropna(subset=['suspend_date'])
+            # API 返回: ts_code, trade_date, suspend_timing, suspend_type
+            if 'trade_date' in df.columns:
+                df['trade_date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d', errors='coerce')
+            df = df.dropna(subset=['trade_date'])
 
             if not df.empty:
-                # 删除已存在的记录
-                for _, row in df.iterrows():
-                    sd = row['suspend_date']
-                    tc = row['ts_code']
-                    conn.execute(f"DELETE FROM suspend_info WHERE ts_code = '{tc}' AND suspend_date = '{sd}'")
-
-                conn.execute("INSERT INTO suspend_info SELECT * FROM df")
+                # 只保留需要的列
+                cols = [c for c in ['ts_code', 'trade_date', 'suspend_type', 'suspend_timing'] if c in df.columns]
+                df = df[cols]
+                _upsert_by_date(conn, 'suspend_info', df, 'trade_date')
                 total_records += len(df)
 
         if (i + 1) % 50 == 0 or (i + 1) == total:
