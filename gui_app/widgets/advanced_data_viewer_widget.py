@@ -569,10 +569,18 @@ class AdvancedDataViewerWidget(QWidget):
         self.load_btn.setText("加载中...")
 
         # 在线程中加载数据
-        self.load_thread = DataLoadThread(self.current_stock, start_date, end_date, adjust_type)
-        self.load_thread.data_ready.connect(self.on_data_loaded)
-        self.load_thread.error_occurred.connect(self.on_load_error)
-        self.load_thread.start()
+        try:
+            self.load_thread = DataLoadThread(self.current_stock, start_date, end_date, adjust_type)
+            self.load_thread.data_ready.connect(self.on_data_loaded)
+            self.load_thread.error_occurred.connect(self.on_load_error)
+            self.load_thread.start()
+        except Exception as e:
+            # 恢复按钮状态
+            self.load_btn.setEnabled(True)
+            self.load_btn.setText("📥 加载数据")
+            # 显示错误信息
+            QMessageBox.critical(self, "错误", f"创建数据加载线程失败:\n{str(e)}")
+            return
 
     def on_data_loaded(self, df: pd.DataFrame, stock_code: str):
         """数据加载完成"""
