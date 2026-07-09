@@ -1518,6 +1518,33 @@ class DataAPI:
             
 
             if all_empty:
+                print("\n" + "="*60)
+                print("⚠️  无法获取股票数据 - QMT本地没有历史数据")
+                print("="*60)
+                print()
+                print("📌 原因：QMT是本地数据源，需要先下载历史数据才能使用")
+                print()
+                print("🔧 解决方案（任选一种）：")
+                print()
+                print("  【方案1】使用一键下载脚本（推荐）")
+                print("    python tools/download_all_stocks.py")
+                print()
+                print("  【方案2】使用GUI下载（无需命令行）")
+                print("    1. 运行: python run_gui.py")
+                print("    2. 切换到「数据管理」标签页")
+                print("    3. 点击「下载股票数据」")
+                print()
+                print("  【方案3】QMT客户端手动下载")
+                print("    1. 打开QMT客户端")
+                print("    2. 点击「终端」→「品种管理」")
+                print("    3. 选择股票 → 点击「下载历史数据」")
+                print()
+                print("  【方案4】使用免费在线数据源（无需QMT）")
+                print("    pip install pytdx")
+                print("    # 安装后会自动使用通达信在线数据")
+                print()
+                print("="*60)
+                print()
 
                 raise DataError(
 
@@ -1660,6 +1687,33 @@ class DataAPI:
                 
 
                 if not has_data:
+                    print("\n" + "="*60)
+                    print("⚠️  无法获取股票数据 - QMT本地没有历史数据")
+                    print("="*60)
+                    print()
+                    print("📌 原因：QMT是本地数据源，需要先下载历史数据才能使用")
+                    print()
+                    print("🔧 解决方案（任选一种）：")
+                    print()
+                    print("  【方案1】使用一键下载脚本（推荐）")
+                    print("    python tools/download_all_stocks.py")
+                    print()
+                    print("  【方案2】使用GUI下载（无需命令行）")
+                    print("    1. 运行: python run_gui.py")
+                    print("    2. 切换到「数据管理」标签页")
+                    print("    3. 点击「下载股票数据」")
+                    print()
+                    print("  【方案3】QMT客户端手动下载")
+                    print("    1. 打开QMT客户端")
+                    print("    2. 点击「终端」→「品种管理」")
+                    print("    3. 选择股票 → 点击「下载历史数据」")
+                    print()
+                    print("  【方案4】使用免费在线数据源（无需QMT）")
+                    print("    pip install pytdx")
+                    print("    # 安装后会自动使用通达信在线数据")
+                    print()
+                    print("="*60)
+                    print()
 
                     raise DataError(
 
@@ -3836,8 +3890,43 @@ class DataAPI:
                     
 
                     if not has_data:
+                        print("\n" + "="*60)
+                        print("⚠️  无法获取股票数据 - QMT本地没有历史数据")
+                        print("="*60)
+                        print()
+                        print("📌 原因：QMT是本地数据源，需要先下载历史数据才能使用")
+                        print()
+                        print("🔧 解决方案（任选一种）：")
+                        print()
+                        print("  【方案1】使用一键下载脚本（推荐）")
+                        print("    python tools/download_all_stocks.py")
+                        print()
+                        print("  【方案2】使用GUI下载（无需命令行）")
+                        print("    1. 运行: python run_gui.py")
+                        print("    2. 切换到「数据管理」标签页")
+                        print("    3. 点击「下载股票数据」")
+                        print()
+                        print("  【方案3】QMT客户端手动下载")
+                        print("    1. 打开QMT客户端")
+                        print("    2. 点击「终端」→「品种管理」")
+                        print("    3. 选择股票 → 点击「下载历史数据」")
+                        print()
+                        print("  【方案4】使用免费在线数据源（无需QMT）")
+                        print("    pip install pytdx")
+                        print("    # 安装后会自动使用通达信在线数据")
+                        print()
+                        print("="*60)
+                        print()
 
-                        raise DataError(f"无法获取股票 {codes} 的数据。建议使用推荐股票: {get_recommended_stocks()}")
+                        raise DataError(
+                            f"无法获取股票 {codes} 的数据 - QMT本地没有历史数据。\\n\\n"
+                            f"💡 QMT是本地运行的，需要先下载历史数据。\\n\\n"
+                            f"🔧 快速解决方案（推荐）：\\n"
+                            f"   python tools/download_all_stocks.py\\n\\n"
+                            f"或使用GUI下载：python run_gui.py → 数据管理 → 下载股票数据\\n\\n"
+                            f"或安装免费在线数据源（无需QMT）：pip install pytdx\\n\\n"
+                            f"详细说明：docs/assets/TROUBLESHOOTING.md 第3节"
+                        )
 
                     
 
