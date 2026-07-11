@@ -213,11 +213,14 @@ class TushareSource(BaseDataSource):
             # 重命名列
             df.rename(columns={
                 'trade_date': 'date',
-                'vol': 'volume'
+                'vol': 'volume',
+                'ts_code': 'symbol',
             }, inplace=True)
 
-            # 选择需要的列
-            df = df[['symbol', 'date', 'open', 'high', 'low', 'close', 'volume', 'amount']]
+            # 选择需要的列（兼容不同接口返回的列名差异）
+            expected_columns = ['symbol', 'date', 'open', 'high', 'low', 'close', 'volume', 'amount']
+            available_columns = [c for c in expected_columns if c in df.columns]
+            df = df[available_columns]
 
             # 缓存数据
             cache_key = self.get_cache_key('price', symbol, start_date, end_date)
