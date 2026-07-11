@@ -336,6 +336,17 @@ class QMTSource(BaseDataSource):
         """
         return self.is_connected
 
+    def close(self):
+        """
+        关闭QMT数据源连接
+
+        QMTSource 没有需要关闭的连接对象，但需要显式重置连接状态，
+        避免 BaseSource.close() 因 _connection 为 None 而跳过状态重置。
+        """
+        self.is_connected = False
+        self._last_used = None
+        self._cache.clear()
+
     def get_stock_list(self, market: str = 'stock') -> Optional[List[str]]:
         """
         获取股票列表
