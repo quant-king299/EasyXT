@@ -305,7 +305,11 @@ integration_test_logs/
 logs/
 reports/
 tests/
+.worktrees/
 demo*/
+
+# 保留正式的单元测试目录
+!unit_tests/**/*.py
 
 # Demo图表文件
 demo_*.png
