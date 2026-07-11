@@ -306,10 +306,10 @@ logs/
 reports/
 tests/
 .worktrees/
-demo*/
-
-# 保留正式的单元测试目录
+# 单元测试目录（保持与源码目录结构一致）
+!unit_tests/
 !unit_tests/**/*.py
+demo*/
 
 # Demo图表文件
 demo_*.png
