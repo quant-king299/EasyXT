@@ -181,6 +181,8 @@ xtquant/
 !tushare_manager/download_basic_data.py
 
 *test*.py
+# 允许单元测试目录下的测试文件被版本控制
+!unit_tests/**/*.py
 *debug*.py
 *fix*.py
 create_*.py
@@ -308,6 +310,7 @@ tests/
 # 单元测试目录（保持与源码目录结构一致）
 !unit_tests/
 !unit_tests/**/*.py
+.worktrees/
 demo*/
 
 # Demo图表文件

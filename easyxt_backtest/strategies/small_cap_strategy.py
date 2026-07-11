@@ -1,4 +1,7 @@
 # -*- coding: utf-8 -*-
+import logging
+
+logger = logging.getLogger(__name__)
 """
 小市值策略 - 基于市值选股
 
