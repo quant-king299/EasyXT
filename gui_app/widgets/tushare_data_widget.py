@@ -993,7 +993,8 @@ class TushareDownloadThread(QThread):
         将日线 DataFrame 保存到 stock_daily 表。
 
         设计要点：
-        1. INSERT 列名从 DataFrame 列动态推导，避免 SQL 列名与 DataFrame 列顺序硬耦合。
+        1. INSERT 列名使用预定义白名单 data_cols，并通过 df[data_cols] 对齐列顺序，
+           避免依赖 DataFrame 原始列顺序。
         2. created_at 不写入 INSERT，新建行使用 DEFAULT CURRENT_TIMESTAMP，
            冲突替换时保留原 created_at，仅更新 updated_at。
 

@@ -644,12 +644,12 @@ class DataDownloadThread(QThread):
                                         INSERT OR REPLACE INTO stock_daily (
                                             stock_code, symbol_type, date, period,
                                             open, high, low, close, volume, amount,
-                                            adjust_type, created_at, updated_at
+                                            created_at, updated_at
                                         )
                                         SELECT
                                             stock_code, symbol_type, CAST(date AS DATE), period,
                                             open, high, low, close, volume, amount,
-                                            adjust_type, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                                            CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
                                         FROM temp_batch
                                     """)
                                 else:
