@@ -987,6 +987,41 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"批量下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    @staticmethod
+    def _save_daily_dataframe(conn, df):
+        """
+        将日线 DataFrame 保存到 stock_daily 表。
+
+        设计要点：
+        1. INSERT 列名从 DataFrame 列动态推导，避免 SQL 列名与 DataFrame 列顺序硬耦合。
+        2. created_at 不写入 INSERT，新建行使用 DEFAULT CURRENT_TIMESTAMP，
+           冲突替换时保留原 created_at，仅更新 updated_at。
+
+        Args:
+            conn: DuckDB 连接
+            df: 日线数据 DataFrame，必须包含数据列（stock_code, symbol_type, date,
+                period, open, high, low, close, volume, amount）
+        """
+        data_cols = ['stock_code', 'symbol_type', 'date', 'period',
+                     'open', 'high', 'low', 'close', 'volume', 'amount']
+
+        # 只保留数据列，避免 DataFrame 中其他列干扰
+        df_insert = df[data_cols].copy()
+        df_insert['updated_at'] = pd.Timestamp.now()
+
+        insert_cols = data_cols + ['updated_at']
+        cols_sql = ', '.join(insert_cols)
+
+        conn.register('_tmp_daily', df_insert)
+        try:
+            conn.execute(f"""
+                INSERT OR REPLACE INTO stock_daily
+                ({cols_sql})
+                SELECT {cols_sql} FROM _tmp_daily
+            """)
+        finally:
+            conn.unregister('_tmp_daily')
+
     def _download_daily(self):
         """下载日线行情数据（使用Tushare，无需QMT）"""
         import os
@@ -1114,21 +1149,8 @@ class TushareDownloadThread(QThread):
                         df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
                         df['symbol_type'] = 'stock'
                         df['period'] = '1d'
-                        df['created_at'] = pd.Timestamp.now()
-                        df['updated_at'] = pd.Timestamp.now()
 
-                        cols = ['stock_code', 'symbol_type', 'date', 'period',
-                                'open', 'high', 'low', 'close', 'volume', 'amount',
-                                'created_at', 'updated_at']
-                        df = df[cols]
-
-                        conn.register('_tmp_daily', df)
-                        conn.execute("""
-                            INSERT OR REPLACE INTO stock_daily
-                            (stock_code, symbol_type, date, period, open, high, low, close, volume, amount, created_at, updated_at)
-                            SELECT * FROM _tmp_daily
-                        """)
-                        conn.unregister('_tmp_daily')
+                        self._save_daily_dataframe(conn, df)
 
                         total_inserted += len(df)
                         success_count += 1
