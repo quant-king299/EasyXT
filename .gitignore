@@ -305,6 +305,7 @@ integration_test_logs/
 logs/
 reports/
 tests/
+.worktrees/
 demo*/
 
 # Demo图表文件
