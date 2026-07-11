@@ -218,9 +218,13 @@ class TushareSource(BaseDataSource):
             }, inplace=True)
 
             # 选择需要的列（兼容不同接口返回的列名差异）
-            expected_columns = ['symbol', 'date', 'open', 'high', 'low', 'close', 'volume', 'amount']
-            available_columns = [c for c in expected_columns if c in df.columns]
-            df = df[available_columns]
+            required_columns = ['symbol', 'date']
+            optional_columns = ['open', 'high', 'low', 'close', 'volume', 'amount']
+            missing_required = [c for c in required_columns if c not in df.columns]
+            if missing_required:
+                logger.info(f"[TushareSource] 返回数据缺少必要列 {missing_required}，实际列: {list(df.columns)}")
+                return None
+            df = df[required_columns + [c for c in optional_columns if c in df.columns]]
 
             # 缓存数据
             cache_key = self.get_cache_key('price', symbol, start_date, end_date)
