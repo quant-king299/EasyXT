@@ -1026,11 +1026,9 @@ class TushareDownloadThread(QThread):
                         close DOUBLE,
                         volume BIGINT,
                         amount DOUBLE,
-                        adjust_type VARCHAR DEFAULT 'none',
-                        factor DOUBLE DEFAULT 1.0,
                         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                        PRIMARY KEY (stock_code, date, period, adjust_type)
+                        PRIMARY KEY (stock_code, date, period)
                     )
                 """)
                 self.log_signal.emit("已创建 stock_daily 表")
@@ -1125,7 +1123,11 @@ class TushareDownloadThread(QThread):
                         df = df[cols]
 
                         conn.register('_tmp_daily', df)
-                        conn.execute("INSERT OR REPLACE INTO stock_daily SELECT * FROM _tmp_daily")
+                        conn.execute("""
+                            INSERT OR REPLACE INTO stock_daily
+                            (stock_code, symbol_type, date, period, open, high, low, close, volume, amount, created_at, updated_at)
+                            SELECT * FROM _tmp_daily
+                        """)
                         conn.unregister('_tmp_daily')
 
                         total_inserted += len(df)
