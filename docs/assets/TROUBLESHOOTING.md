@@ -1740,9 +1740,38 @@ ConnectionError: 无法连接到交易账户
 
 ---
 
+### 16. GUI 文件选择对话框崩溃 / OleInitialize 报错
+
+#### 症状
+
+启动 GUI 后，点击"加载配置"或打开文件选择对话框时程序闪退，控制台出现以下错误：
+
+```
+QWindowsContext: OleInitialize() failed: "COM error 0xffffffff80010106 RPC_E_CHANGED_MODE"
+OleSetClipboard: Failed to set mime data (text/plain) on clipboard: COM error CO_E_NOTINITIALIZED
+```
+
+#### 原因
+
+QMT (xtquant) 连接时把 Windows COM 初始化成了多线程模式 (MTA)，而 Qt 的文件对话框依赖单线程模式 (STA)。COM 只能初始化一次，第二次的模式冲突导致原生文件对话框崩溃。
+
+#### 解决方案
+
+在 `.env` 文件中加一行：
+
+```
+QT_NO_NATIVE_DIALOG=1
+```
+
+设置后 Qt 文件对话框会切换到自带的跨平台版本（非 Windows 原生），不再依赖 COM，功能完全一样。
+
+> **注意**：此问题只在部分机器上出现，取决于 DLL 加载顺序和 Windows 版本。如果没遇到崩溃，不需要设置此项。
+
+---
+
 ## 性能相关
 
-### 16. 回测速度慢
+### 17. 回测速度慢
 
 #### 性能对比
 

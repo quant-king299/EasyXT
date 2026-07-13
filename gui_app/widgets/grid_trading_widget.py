@@ -553,11 +553,16 @@ class GridTradingWidget(QWidget):
 
     def load_config(self):
         """加载配置文件"""
+        # 部分机器上 QMT (xtquant) 先占 COM 多线程模式, 导致 Windows 原生
+        # 文件对话框崩溃; 在 .env 中设 QT_NO_NATIVE_DIALOG=1 可切换 Qt 自带对话框
+        opts = QFileDialog.DontUseNativeDialog if _read_env('QT_NO_NATIVE_DIALOG') == '1' \
+               else QFileDialog.Options()
         config_file, _ = QFileDialog.getOpenFileName(
             self,
             "选择配置文件",
             os.path.join(os.path.dirname(__file__), '..', '..', 'strategies', 'grid_trading'),
-            "JSON文件 (*.json)"
+            "JSON文件 (*.json)",
+            options=opts
         )
 
         if config_file:
