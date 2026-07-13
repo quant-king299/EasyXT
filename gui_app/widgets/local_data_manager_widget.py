@@ -1189,10 +1189,23 @@ class VerifyDataThread(QThread):
     def run(self):
         """运行验证任务"""
         try:
-            import duckdb
+            import duckdb, os
 
             db_path = get_default_db_path()
-            con = duckdb.connect(db_path, read_only=False)
+            self.log_signal.emit(f"数据库路径: {db_path}")
+
+            if not os.path.exists(db_path):
+                self.log_signal.emit(f"⚠ 数据库文件不存在: {db_path}")
+                self.finished_signal.emit({
+                    'stock': self.stock_code,
+                    'has_daily': False, 'has_1min': False, 'has_tick': False,
+                    'records_daily': 0, 'records_1min': 0, 'records_tick': 0,
+                    'start_daily': '', 'end_daily': '', 'start_1min': '', 'end_1min': '',
+                    'start_tick': '', 'end_tick': '',
+                })
+                return
+
+            con = duckdb.connect(db_path, read_only=True)
 
             # 检查1分钟数据
             has_1min = False
@@ -2684,6 +2697,8 @@ class LocalDataManagerWidget(QWidget):
 
     def update_progress(self, current, total):
         """更新进度"""
+        current = int(current)
+        total = int(total)
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         pct = (current / total) * 100 if total > 0 else 0
@@ -2805,7 +2820,19 @@ class LocalDataManagerWidget(QWidget):
         if has_1min or has_daily or has_tick:
             QMessageBox.information(self, "验证完成", msg)
         else:
-            QMessageBox.warning(self, "验证完成", msg + "\n⚠️ 该股票没有本地数据，请先下载")
+            # 诊断：库存在但找不到该股票，统计总数据量
+            diag = ""
+            try:
+                import duckdb
+                db_path = get_default_db_path()
+                con = duckdb.connect(db_path, read_only=True)
+                total = con.execute("SELECT COUNT(DISTINCT stock_code) FROM stock_daily").fetchone()[0]
+                if total > 0:
+                    diag = f"\n\n💡 数据库中已有 {total} 只股票的日线数据，但未找到 {stock}。\n请确认股票代码格式正确（如 600000.SH）。"
+                con.close()
+            except Exception:
+                pass
+            QMessageBox.warning(self, "验证完成", msg + diag)
 
 
 class DataViewerDialog(QDialog):
