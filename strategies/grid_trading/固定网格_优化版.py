@@ -336,7 +336,7 @@ class 固定网格策略优化版:
             if asset_dict is None:
                 return False
 
-            available_cash = asset_dict.get('可用金额', 0)
+            available_cash = asset_dict.get('cash', 0)
             required_cash = quantity * price
             commission = required_cash * 0.0001
 

@@ -154,15 +154,15 @@ def check_account_status(api, account_id):
         asset = api.trade.get_account_asset(account_id)
 
         if asset:
-            total_asset = asset.get('总资产', 0)
-            cash = asset.get('可用资金', 0)
-            market_value = asset.get('证券市值', 0)
-            position_pnl = asset.get('持仓盈亏', 0)
+            total_asset = asset.get('total_asset', 0)
+            cash = asset.get('cash', 0)
+            market_value = asset.get('market_value', 0)
+            frozen_cash = asset.get('frozen_cash', 0)
 
             logger.info(f"总资产: {total_asset:,.2f} 元")
             logger.info(f"可用资金: {cash:,.2f} 元")
             logger.info(f"证券市值: {market_value:,.2f} 元")
-            logger.info(f"持仓盈亏: {position_pnl:,.2f} 元")
+            logger.info(f"冻结资金: {frozen_cash:,.2f} 元")
         else:
             logger.info("⚠ 无法获取账户信息")
 

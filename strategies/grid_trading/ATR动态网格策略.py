@@ -346,7 +346,9 @@ class ATR动态网格策略:
         """获取可用资金"""
         try:
             account = self.api.trade.get_account_asset(self.account_id)
-            return account.get('可用资金', 0)
+            if account is None:
+                return 0
+            return account.get('cash', 0)
         except Exception as e:
             print(f"  ✗ 获取资金失败: {str(e)}")
         return 0
