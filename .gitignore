@@ -471,3 +471,6 @@ down_queue_*
 PYPlugins/TdxQuant_量化平台文档.md
 minimqt关闭.txt
 userswukunappdatalocaltempeasyxt_test/
+
+# EasyXT 文档生成工作区（gen_*.py + 截图 + RAR 不提交）
+docs/manual/

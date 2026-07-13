@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyXT 回测系统文档</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+
+  @page { size: A4; margin: 20mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    font-size: 11pt; line-height: 1.8; color: #1a1a1a; background: #fff;
+  }
+
+  .cover {
+    page-break-after: always; height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    align-items: center; text-align: center; position: relative; padding: 60px 40px;
+  }
+  .cover::before {
+    content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px;
+    background: linear-gradient(90deg, #c0392b, #e74c3c, #c0392b);
+  }
+  .cover-title {
+    font-family: 'Noto Serif SC', serif; font-size: 32pt;
+    font-weight: 700; color: #1a1a1a; letter-spacing: 0.08em; margin-bottom: 8px;
+  }
+  .cover-subtitle { font-size: 14pt; color: #555; margin-bottom: 48px; letter-spacing: 0.05em; }
+  .cover-divider { width: 80px; height: 2px; background: #c0392b; margin: 0 auto 48px; }
+  .cover-info { text-align: left; width: 360px; font-size: 11pt; color: #444; }
+  .cover-info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .cover-info-label { color: #888; min-width: 100px; }
+  .cover-info-value { font-weight: 500; color: #1a1a1a; }
+  .cover-footer { position: absolute; bottom: 40px; font-size: 9pt; color: #aaa; }
+
+  .toc { page-break-after: always; padding-top: 40px; }
+  .toc h2 { font-family: 'Noto Serif SC', serif; font-size: 18pt; color: #1a1a1a; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 2px solid #c0392b; }
+  .toc-list { list-style: none; padding: 0; }
+  .toc-list li { padding: 10px 0; border-bottom: 1px dotted #ddd; display: flex; justify-content: space-between; font-size: 11pt; }
+  .toc-list li.main { font-weight: 600; font-size: 12pt; color: #1a1a1a; border-bottom: 1px solid #ccc; margin-top: 8px; }
+  .toc-list li.sub { padding-left: 24px; color: #444; font-size: 10.5pt; }
+
+  .section { page-break-before: always; padding-top: 20px; }
+  .section:first-of-type { page-break-before: auto; }
+
+  h2.section-title { font-family: 'Noto Serif SC', serif; font-size: 16pt; color: #1a1a1a; margin-bottom: 6px; padding-bottom: 10px; border-bottom: 2px solid #c0392b; page-break-after: avoid; }
+  .section-number { color: #c0392b; font-weight: 700; margin-right: 8px; }
+
+  h3 { font-size: 12pt; font-weight: 600; color: #2c3e50; margin: 24px 0 10px; padding-left: 12px; border-left: 3px solid #c0392b; page-break-after: avoid; }
+  h4 { font-size: 11pt; font-weight: 600; color: #444; margin: 16px 0 8px; page-break-after: avoid; }
+  p { margin-bottom: 10px; text-align: justify; }
+  ul, ol { margin: 8px 0 12px 20px; }
+  li { margin-bottom: 4px; }
+
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px 18px; border-radius: 6px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; line-height: 1.6; overflow-x: auto; margin: 12px 0; page-break-inside: avoid; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; }
+  pre code { background: none; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 10pt; }
+  th { background: #f5f5f5; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #ddd; color: #333; }
+  td { padding: 8px 12px; border: 1px solid #ddd; color: #444; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  .callout { padding: 14px 18px; border-radius: 4px; margin: 16px 0; font-size: 10.5pt; page-break-inside: avoid; }
+  .callout-red { background: #fdf2f2; border-left: 3px solid #c0392b; }
+  .callout-blue { background: #eef6ff; border-left: 3px solid #2980b9; }
+  .callout-green { background: #f0faf0; border-left: 3px solid #27ae60; }
+  .callout-yellow { background: #fffdf0; border-left: 3px solid #f39c12; }
+
+  .arch-box { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; margin: 16px 0; }
+  .arch-layer { text-align: center; margin-bottom: 10px; }
+  .arch-layer-label { font-size: 9pt; color: #888; margin-bottom: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .arch-nodes { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .arch-node { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 5px 12px; font-size: 9.5pt; font-weight: 500; color: #333; }
+  .arch-node.accent { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .arch-arrow { text-align: center; color: #ccc; font-size: 14pt; margin: 2px 0; }
+
+  .api-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px 24px; margin: 16px 0; page-break-inside: avoid; }
+  .api-card h4 { margin-top: 0; font-family: 'Consolas','Courier New',monospace; font-size: 12pt; color: #c0392b; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+
+  @media print { body { font-size: 10.5pt; } .section { page-break-before: always; } .api-card,.callout,pre,table { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<!-- ==================== COVER ==================== -->
+<div class="cover">
+  <div class="cover-title">EasyXT</div>
+  <div class="cover-subtitle">回测系统文档 &middot; 从数据到绩效分析</div>
+  <div class="cover-divider"></div>
+  <div class="cover-info">
+    <div class="cover-info-row"><span class="cover-info-label">作者</span><span class="cover-info-value">王者quant</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">版本</span><span class="cover-info-value">V1.0</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">依赖</span><span class="cover-info-value">DuckDB + easyxt_backtest</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">更新时间</span><span class="cover-info-value">2026 年 7 月</span></div>
+  </div>
+  <div class="cover-footer">数据驱动 · 因子分析 · 策略验证 · 绩效归因</div>
+</div>
+
+<!-- ==================== TOC ==================== -->
+<div class="toc">
+  <h2>目 录</h2>
+  <ul class="toc-list">
+    <li class="main"><span>一、回测系统概述</span></li>
+    <li class="sub"><span>1.1 系统架构</span></li>
+    <li class="sub"><span>1.2 核心组件</span></li>
+    <li class="main"><span>二、数据准备</span></li>
+    <li class="sub"><span>2.1 DuckDB 数据下载</span></li>
+    <li class="sub"><span>2.2 DataManager 初始化</span></li>
+    <li class="sub"><span>2.3 数据源降级</span></li>
+    <li class="main"><span>三、编写策略</span></li>
+    <li class="sub"><span>3.1 策略基类</span></li>
+    <li class="sub"><span>3.2 MA 双均线策略示例</span></li>
+    <li class="sub"><span>3.3 红利低波策略示例</span></li>
+    <li class="main"><span>四、运行回测</span></li>
+    <li class="sub"><span>4.1 BacktestEngine 参数</span></li>
+    <li class="sub"><span>4.2 回测配置详解</span></li>
+    <li class="sub"><span>4.3 调仓与再平衡</span></li>
+    <li class="main"><span>五、绩效分析</span></li>
+    <li class="sub"><span>5.1 核心指标</span></li>
+    <li class="sub"><span>5.2 可视化输出</span></li>
+    <li class="sub"><span>5.3 基准对比</span></li>
+    <li class="main"><span>六、101 因子平台</span></li>
+    <li class="sub"><span>6.1 平台启动</span></li>
+    <li class="sub"><span>6.2 因子分析流程</span></li>
+    <li class="sub"><span>6.3 因子中性化</span></li>
+    <li class="main"><span>七、进阶主题</span></li>
+    <li class="sub"><span>7.1 多因子模型</span></li>
+    <li class="sub"><span>7.2 ML 选股集成</span></li>
+    <li class="sub"><span>7.3 行业/市值中性化</span></li>
+  </ul>
+</div>
+
+<!-- ==================== 1 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">一</span>回测系统概述</h2>
+
+  <h3>1.1 系统架构</h3>
+
+  <div class="arch-box">
+    <div class="arch-layer">
+      <div class="arch-layer-label">输入层</div>
+      <div class="arch-nodes">
+        <div class="arch-node">策略函数 (用户编写)</div>
+        <div class="arch-node">回测参数 (日期/资金/费率)</div>
+        <div class="arch-node">股票池 (板块/自定义)</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">数据层</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">DuckDB (主)</div>
+        <div class="arch-node">QMT xtdata (降级)</div>
+        <div class="arch-node">Tushare (备用)</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">引擎层</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">BacktestEngine</div>
+        <div class="arch-node">调仓调度</div>
+        <div class="arch-node">订单模拟</div>
+        <div class="arch-node">成本计算</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">输出层</div>
+      <div class="arch-nodes">
+        <div class="arch-node">累计收益曲线</div>
+        <div class="arch-node">年化收益率</div>
+        <div class="arch-node">最大回撤</div>
+        <div class="arch-node">夏普比率</div>
+        <div class="arch-node">换手率</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>1.2 核心组件</h3>
+
+  <table>
+    <tr><th>组件</th><th>模块</th><th>职责</th></tr>
+    <tr><td><strong>DataManager</strong></td><td><code>easyxt_backtest.core</code></td><td>数据加载、DuckDB 连接、股票池管理</td></tr>
+    <tr><td><strong>BacktestEngine</strong></td><td><code>easyxt_backtest.core</code></td><td>回测主循环、订单执行、绩效计算</td></tr>
+    <tr><td><strong>Portfolio</strong></td><td><code>easyxt_backtest.portfolio</code></td><td>组合构建、权重分配、再平衡</td></tr>
+    <tr><td><strong>Factors</strong></td><td><code>easyxt_backtest.factors</code></td><td>因子计算引擎、191 个 Alpha 因子</td></tr>
+    <tr><td><strong>Filters</strong></td><td><code>easyxt_backtest.filters</code></td><td>股票筛选（ST 排除、次新股、停牌等）</td></tr>
+    <tr><td><strong>Scoring</strong></td><td><code>easyxt_backtest.scoring</code></td><td>多因子打分、排名加权</td></tr>
+    <tr><td><strong>Analysis</strong></td><td><code>easyxt_backtest.analysis</code></td><td>绩效分析、可视化、基准对比</td></tr>
+    <tr><td><strong>ML</strong></td><td><code>easyxt_backtest.ml</code></td><td>机器学习选股（随机森林、XGBoost 等）</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 2 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">二</span>数据准备</h2>
+
+  <h3>2.1 DuckDB 数据下载</h3>
+  <p>回测系统依赖 DuckDB 中的历史行情数据。数据下载方式：</p>
+
+  <ol>
+    <li><strong>GUI 下载（推荐）</strong>：<code>python run_gui.py</code> → "数据管理" → "下载A股数据"</li>
+    <li><strong>Tushare 下载</strong>：GUI "Tushare下载" 标签页，选"日线行情"批量下载</li>
+    <li><strong>大 QMT 导入</strong>：先在 QMT 客户端补充数据，再"从大QMT导入"</li>
+  </ol>
+
+  <p>数据文件默认路径：<code>D:/StockData/stock_data.ddb</code></p>
+
+  <div class="callout callout-blue">
+    <strong>数据覆盖建议：</strong>回测需要覆盖完整的回测区间。如果要回测 2020-2025 年，确保 DuckDB 中 <code>stock_daily</code> 表的日期范围包含 2019-01-01（需要至少 1 年预热数据用于计算均线等技术指标）。
+  </div>
+
+  <h3>2.2 DataManager 初始化</h3>
+
+  <pre><code>from easyxt_backtest import DataManager
+
+# 自动检测 DuckDB 路径（D盘 → C盘 → E盘）
+dm = DataManager()
+
+# 手动指定路径
+dm = DataManager(duckdb_path='D:/StockData/stock_data.ddb')
+
+# 查看数据概况
+print(f"股票数: {dm.stock_count}")
+print(f"日期范围: {dm.date_range}")
+print(f"数据记录: {dm.total_records:,}")</code></pre>
+
+  <h3>2.3 数据源降级</h3>
+  <p>当 DuckDB 数据不足时，回测系统会自动降级：</p>
+
+  <table>
+    <tr><th>优先级</th><th>数据源</th><th>速度</th><th>条件</th></tr>
+    <tr><td>1</td><td>DuckDB</td><td>毫秒级</td><td>已下载历史数据</td></tr>
+    <tr><td>2</td><td>QMT xtdata</td><td>秒级</td><td>QMT 已启动且本地有缓存</td></tr>
+    <tr><td>3</td><td>Tushare</td><td>分钟级</td><td>有 Token 且有积分</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 3 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">三</span>编写策略</h2>
+
+  <h3>3.1 策略函数接口</h3>
+  <p>回测引擎要求策略是一个<strong>函数</strong>，签名为：</p>
+
+  <div class="api-card">
+    <h4>strategy_func(trade_date, data_manager, current_positions) → dict</h4>
+
+    <table>
+      <tr><th>参数</th><th>类型</th><th>说明</th></tr>
+      <tr><td class="param-name">trade_date</td><td><code>str</code></td><td>当前调仓日期，格式 <code>'YYYYMMDD'</code></td></tr>
+      <tr><td class="param-name">data_manager</td><td><code>DataManager</code></td><td>数据管理器，提供 <code>get_price()</code> 等方法</td></tr>
+      <tr><td class="param-name">current_positions</td><td><code>Dict[str, int]</code></td><td>当前持仓 <code>{code: shares}</code></td></tr>
+    </table>
+
+    <p><strong>返回值：</strong><code>Dict[str, float]</code>，目标权重 <code>{code: weight}</code>，权重之和应为 1.0。</p>
+    <p>返回空字典 <code>{}</code> 表示清仓（全部卖出）。</p>
+  </div>
+
+  <h3>3.2 MA 双均线策略示例</h3>
+  <p>经典的 MA5 上穿 MA20 买入，持有至死叉卖出：</p>
+
+  <pre><code>def ma_cross_strategy(trade_date, data_manager, current_positions):
+    """MA5 上穿 MA20 买入，下穿卖出"""
+    import pandas as pd
+
+    # 从股票池中选择
+    stock_pool = ['000001.SZ', '600519.SH', '000858.SZ', '601318.SH', '000333.SZ']
+
+    buy_list = []
+    for code in stock_pool:
+        # 获取最近 60 天数据（足够算均线）
+        df = data_manager.get_price([code],
+            start=(pd.Timestamp(trade_date) - pd.Timedelta(days=120)).strftime('%Y%m%d'),
+            end=trade_date, period='1d', adjust='front_ratio')
+
+        if len(df) < 20:
+            continue
+
+        close = df['close']
+        ma5 = close.rolling(5).mean().iloc[-1]
+        ma20 = close.rolling(20).mean().iloc[-1]
+        prev_ma5 = close.rolling(5).mean().iloc[-2]
+        prev_ma20 = close.rolling(20).mean().iloc[-2]
+
+        # 金叉买入
+        if prev_ma5 <= prev_ma20 and ma5 > ma20:
+            buy_list.append(code)
+
+    # 等权分配
+    if buy_list:
+        weight = 1.0 / len(buy_list)
+        return {code: weight for code in buy_list}
+
+    return {}  # 无信号，清仓</code></pre>
+
+  <h3>3.3 红利低波策略示例</h3>
+  <p>完整示例见项目内置策略 <code>strategies/quant_strategies/dividend_lowvol.py</code>，核心思路：DuckDB 读分红数据 → 计算股息率 → 60 日波动率筛选 → 排名打分 → 买入前 N。</p>
+
+  <pre><code>def dividend_lowvol_strategy(trade_date, data_manager, current_positions):
+    # 1. 获取全市场股票
+    all_stocks = data_manager.get_stock_list()
+
+    # 2. 获取分红数据（从 DuckDB dividend_data 表）
+    div_data = data_manager.get_dividend_data()
+
+    # 3. 计算股息率 + 波动率，排名筛选
+    # ... (完整逻辑见 dividend_lowvol.py)
+
+    # 4. 返回目标权重
+    return {code: 1.0/top_n for code in selected}</code></pre>
+</div>
+
+<!-- ==================== 4 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">四</span>运行回测</h2>
+
+  <h3>4.1 BacktestEngine 参数</h3>
+
+  <div class="api-card">
+    <h4>BacktestEngine(initial_cash, data_manager, commission, slippage, benchmark)</h4>
+
+    <table>
+      <tr><th>参数</th><th>类型</th><th>默认值</th><th>说明</th></tr>
+      <tr><td class="param-name">initial_cash</td><td><code>float</code></td><td>必填</td><td>初始资金（元），如 <code>1000000</code></td></tr>
+      <tr><td class="param-name">data_manager</td><td><code>DataManager</code></td><td>必填</td><td>数据管理器实例</td></tr>
+      <tr><td class="param-name">commission</td><td><code>float</code></td><td><code>0.00025</code></td><td>手续费率，默认万 2.5</td></tr>
+      <tr><td class="param-name">slippage</td><td><code>float</code></td><td><code>0.001</code></td><td>滑点，默认 0.1%</td></tr>
+      <tr><td class="param-name">benchmark</td><td><code>str</code></td><td><code>'000300.SH'</code></td><td>基准指数代码</td></tr>
+    </table>
+  </div>
+
+  <h3>4.2 回测配置详解</h3>
+
+  <pre><code>from easyxt_backtest import DataManager, BacktestEngine
+
+# 1. 准备数据
+dm = DataManager()
+
+# 2. 创建引擎
+engine = BacktestEngine(
+    initial_cash=1000000,      # 100 万初始资金
+    data_manager=dm,
+    commission=0.00025,        # 万 2.5 手续费
+    slippage=0.001,            # 0.1% 滑点
+    benchmark='000300.SH'      # 沪深 300 基准
+)
+
+# 3. 运行回测
+result = engine.run_backtest(
+    strategy=ma_cross_strategy,
+    start_date='2024-01-01',
+    end_date='2024-12-31',
+    rebalance_freq='monthly',  # 月度调仓
+    stock_pool=['000001.SZ', '600519.SH', '000858.SZ', '601318.SH', '000333.SZ']
+)
+
+# 4. 查看结果
+result.print_summary()
+result.plot_equity_curve()</code></pre>
+
+  <h3>4.3 调仓与再平衡</h3>
+
+  <table>
+    <tr><th>参数值</th><th>说明</th><th>适用场景</th></tr>
+    <tr><td><code>'daily'</code></td><td>每日调仓</td><td>高频策略、日内信号</td></tr>
+    <tr><td><code>'weekly'</code></td><td>每周调仓</td><td>中频轮动</td></tr>
+    <tr><td><code>'monthly'</code></td><td>每月调仓（推荐）</td><td>大多数因子策略</td></tr>
+    <tr><td><code>'quarterly'</code></td><td>每季调仓</td><td>低频价值策略</td></tr>
+  </table>
+
+  <div class="callout callout-green">
+    <strong>调仓频率与换手率的关系：</strong>更高频的调仓会增加换手率和交易成本。月度调仓是 A 股因子策略的最佳平衡点——既能及时捕捉因子 alpha，又不会产生过高交易成本。
+  </div>
+</div>
+
+<!-- ==================== 5 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">五</span>绩效分析</h2>
+
+  <h3>5.1 核心指标</h3>
+  <p>回测完成后，<code>result</code> 对象提供以下关键绩效指标：</p>
+
+  <table>
+    <tr><th>指标</th><th>英文</th><th>计算公式</th><th>说明</th></tr>
+    <tr><td><strong>累计收益率</strong></td><td>Total Return</td><td><code>(最终净值 - 1) × 100%</code></td><td>回测期间的总收益</td></tr>
+    <tr><td><strong>年化收益率</strong></td><td>CAGR</td><td><code>(最终净值)^(252/交易日数) - 1</code></td><td>年化复合增长率</td></tr>
+    <tr><td><strong>年化波动率</strong></td><td>Volatility</td><td><code>日收益标准差 × sqrt(252)</code></td><td>风险度量</td></tr>
+    <tr><td><strong>夏普比率</strong></td><td>Sharpe Ratio</td><td><code>(年化收益 - 无风险利率) / 年化波动率</code></td><td>风险调整后收益，>1 为良好</td></tr>
+    <tr><td><strong>最大回撤</strong></td><td>Max Drawdown</td><td><code>max(峰值 - 谷值) / 峰值</code></td><td>历史最大亏损幅度</td></tr>
+    <tr><td><strong>胜率</strong></td><td>Win Rate</td><td><code>盈利调仓次数 / 总调仓次数</code></td><td>每次调仓的盈利概率</td></tr>
+    <tr><td><strong>盈亏比</strong></td><td>Profit/Loss Ratio</td><td><code>平均盈利 / 平均亏损</code></td><td>大于 1 说明盈亏结构良好</td></tr>
+    <tr><td><strong>换手率</strong></td><td>Turnover</td><td>每次调仓的买卖金额占比</td><td>过高则交易成本侵蚀收益</td></tr>
+    <tr><td><strong>信息比率</strong></td><td>IR</td><td><code>超额收益 / 跟踪误差</code></td><td>相对基准的超额稳定性</td></tr>
+  </table>
+
+  <h3>5.2 可视化输出</h3>
+
+  <pre><code># 打印摘要
+result.print_summary()
+
+# 绘制净值曲线（策略 vs 基准）
+result.plot_equity_curve()
+
+# 绘制月度收益热力图
+result.plot_monthly_returns()
+
+# 绘制回撤曲线
+result.plot_drawdown()
+
+# 导出详细报告
+result.export_report('backtest_report.html')</code></pre>
+
+  <h3>5.3 基准对比</h3>
+  <p>回测引擎自动计算相对基准的超额收益：</p>
+
+  <table>
+    <tr><th>基准代码</th><th>指数名称</th><th>代表</th></tr>
+    <tr><td><code>'000300.SH'</code></td><td>沪深 300</td><td>大盘蓝筹</td></tr>
+    <tr><td><code>'000905.SH'</code></td><td>中证 500</td><td>中盘成长</td></tr>
+    <tr><td><code>'000852.SH'</code></td><td>中证 1000</td><td>小盘</td></tr>
+    <tr><td><code>'399006.SZ'</code></td><td>创业板指</td><td>创业板</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 6 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">六</span>101 因子平台</h2>
+
+  <h3>6.1 平台启动</h3>
+  <p>101 因子分析平台是基于 Streamlit 的独立 Web 应用：</p>
+
+  <pre><code>cd EasyXT/101因子/101因子分析平台
+streamlit run main_app.py</code></pre>
+
+  <p>或者从项目根目录：</p>
+  <pre><code>streamlit run 101因子/101因子分析平台/main_app.py</code></pre>
+
+  <p>启动后浏览器自动打开，界面分为以下模块：</p>
+
+  <table>
+    <tr><th>模块</th><th>功能</th></tr>
+    <tr><td><strong>📊 因子分析</strong></td><td>选择因子 → IC 分析 → 分层回测 → 因子分布可视化</td></tr>
+    <tr><td><strong>⚡ 信号生成</strong></td><td>多因子组合 → 加权/排名融合 → 生成交易信号</td></tr>
+    <tr><td><strong>🎯 组合构建</strong></td><td>等权/市值加权/因子加权 → 行业偏离约束</td></tr>
+    <tr><td><strong>📈 回测验证</strong></td><td>参数设置 → 运行回测 → 绩效报告</td></tr>
+  </table>
+
+  <h3>6.2 因子分析流程</h3>
+
+  <div class="arch-box">
+    <div class="arch-layer">
+      <div class="arch-layer-label">Step 1: 选择股票池</div>
+      <div class="arch-nodes">
+        <div class="arch-node">沪深 300</div>
+        <div class="arch-node">中证 500</div>
+        <div class="arch-node">中证 1000</div>
+        <div class="arch-node">全 A 股</div>
+        <div class="arch-node">自定义</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">Step 2: 选择因子</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">191 个 Alpha 因子</div>
+        <div class="arch-node">基本面因子</div>
+        <div class="arch-node">量价因子</div>
+        <div class="arch-node">自定义因子</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">Step 3: 因子分析</div>
+      <div class="arch-nodes">
+        <div class="arch-node">IC 分析</div>
+        <div class="arch-node">Rank IC</div>
+        <div class="arch-node">分层回测</div>
+        <div class="arch-node">因子分布</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer">
+      <div class="arch-layer-label">Step 4: 信号 &amp; 组合 &amp; 回测</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">多因子信号</div>
+        <div class="arch-node">组合优化</div>
+        <div class="arch-node">绩效评估</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>6.3 因子中性化</h3>
+  <p>在构建多因子模型时，某些因子可能被行业或市值风格所主导。例如"低市盈率"因子可能天然偏向银行行业。中性化处理可以剥离这些干扰：</p>
+
+  <table>
+    <tr><th>中性化方式</th><th>方法</th><th>说明</th></tr>
+    <tr><td><strong>行业中性化</strong></td><td>因子值对行业哑变量回归，取残差</td><td>消除行业偏好</td></tr>
+    <tr><td><strong>市值中性化</strong></td><td>因子值对 log(市值) 回归，取残差</td><td>消除大小盘偏好</td></tr>
+    <tr><td><strong>行业+市值双中性化</strong></td><td>同时对两者回归取残差</td><td>最常用的配置</td></tr>
+  </table>
+
+  <pre><code># 在 101 因子平台中操作：
+# 信号生成 → 勾选 "行业中性化" + "市值中性化" → 生成信号</code></pre>
+</div>
+
+<!-- ==================== 7 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">七</span>进阶主题</h2>
+
+  <h3>7.1 多因子模型</h3>
+  <p>将多个因子组合成一个综合信号：</p>
+
+  <table>
+    <tr><th>组合方式</th><th>方法</th><th>优点</th><th>缺点</th></tr>
+    <tr><td><strong>等权组合</strong></td><td>所有因子权重相同</td><td>简单、稳健</td><td>好因子权重不足</td></tr>
+    <tr><td><strong>IC 加权</strong></td><td>按历史 IC 值分配权重</td><td>给有效因子更高权重</td><td>可能过拟合</td></tr>
+    <tr><td><strong>ICIR 加权</strong></td><td>按 IC 信息比率分配权重</td><td>同时考虑有效性和稳定性</td><td>需要足够长的 IC 序列</td></tr>
+    <tr><td><strong>排名融合</strong></td><td>对每个因子的排名加权求和</td><td>量纲无关、极端值鲁棒</td><td>丢失原始因子值信息</td></tr>
+  </table>
+
+  <h3>7.2 ML 选股集成</h3>
+  <p><code>easyxt_backtest.ml</code> 模块提供了机器学习辅助选股能力：</p>
+
+  <pre><code>from easyxt_backtest.ml import MLStrategy
+
+# 使用随机森林分类器预测下期涨跌
+ml = MLStrategy(
+    model='random_forest',      # 模型：random_forest / xgboost / lgbm
+    factors=['alpha001', 'alpha002', 'alpha006', 'alpha012'],
+    lookback=60,                # 用过去 60 天数据训练
+    retrain_freq='monthly'      # 每月重新训练
+)
+
+# 在回测中使用 ML 策略
+result = engine.run_backtest(strategy=ml.predict, ...)</code></pre>
+
+  <h3>7.3 行业/市值中性化</h3>
+  <p>为什么需要中性化？以市盈率因子为例：</p>
+
+  <table>
+    <tr><th>场景</th><th>中性化前</th><th>中性化后</th></tr>
+    <tr><td>选股结果</td><td>90% 银行股 + 10% 其他</td><td>各行业均衡分布</td></tr>
+    <tr><td>行业集中度</td><td>极高（银行一家独大）</td><td>合理分散</td></tr>
+    <tr><td>回撤风险</td><td>银行板块下跌则策略崩盘</td><td>行业分散降低风险</td></tr>
+    <tr><td>因子纯度</td><td>PE 因子夹杂了行业偏好</td><td>PE 因子更纯</td></tr>
+  </table>
+
+  <div class="callout callout-yellow">
+    <strong>建议：</strong>大多数多因子模型应使用行业+市值双中性化。只有当你确信你的因子与行业/市值无关（如纯粹的量价因子），才无需中性化。
+  </div>
+
+  <p style="margin-top:40px;text-align:center;color:#888;font-size:9pt;">
+    — 文档结束 —<br>
+    EasyXT 量化交易框架 &middot; 回测系统文档<br>
+    王者quant &middot; 2026 年 7 月
+  </p>
+</div>
+
+</body>
+</html>

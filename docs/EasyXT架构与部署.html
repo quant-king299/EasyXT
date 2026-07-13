@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyXT 架构与部署</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+  @page { size: A4; margin: 20mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif; font-size: 11pt; line-height: 1.8; color: #1a1a1a; background: #fff; }
+  .cover { page-break-after: always; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 60px 40px; }
+  .cover::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #c0392b, #e74c3c, #c0392b); }
+  .cover-title { font-family: 'Noto Serif SC',serif; font-size: 32pt; font-weight: 700; color: #1a1a1a; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .cover-subtitle { font-size: 14pt; color: #555; margin-bottom: 48px; }
+  .cover-divider { width: 80px; height: 2px; background: #c0392b; margin: 0 auto 48px; }
+  .cover-info { text-align: left; width: 360px; font-size: 11pt; color: #444; }
+  .cover-info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .cover-info-label { color: #888; min-width: 100px; }
+  .cover-info-value { font-weight: 500; color: #1a1a1a; }
+  .cover-footer { position: absolute; bottom: 40px; font-size: 9pt; color: #aaa; }
+  .toc { page-break-after: always; padding-top: 40px; }
+  .toc h2 { font-family: 'Noto Serif SC',serif; font-size: 18pt; color: #1a1a1a; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 2px solid #c0392b; }
+  .toc-list { list-style: none; padding: 0; }
+  .toc-list li { padding: 10px 0; border-bottom: 1px dotted #ddd; display: flex; justify-content: space-between; font-size: 11pt; }
+  .toc-list li.main { font-weight: 600; font-size: 12pt; color: #1a1a1a; border-bottom: 1px solid #ccc; margin-top: 8px; }
+  .toc-list li.sub { padding-left: 24px; color: #444; font-size: 10.5pt; }
+  .section { page-break-before: always; padding-top: 20px; }
+  .section:first-of-type { page-break-before: auto; }
+  h2.section-title { font-family: 'Noto Serif SC',serif; font-size: 16pt; color: #1a1a1a; margin-bottom: 6px; padding-bottom: 10px; border-bottom: 2px solid #c0392b; page-break-after: avoid; }
+  .section-number { color: #c0392b; font-weight: 700; margin-right: 8px; }
+  h3 { font-size: 12pt; font-weight: 600; color: #2c3e50; margin: 24px 0 10px; padding-left: 12px; border-left: 3px solid #c0392b; page-break-after: avoid; }
+  h4 { font-size: 11pt; font-weight: 600; color: #444; margin: 16px 0 8px; page-break-after: avoid; }
+  p { margin-bottom: 10px; text-align: justify; }
+  ul, ol { margin: 8px 0 12px 20px; }
+  li { margin-bottom: 4px; }
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px 18px; border-radius: 6px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; line-height: 1.6; overflow-x: auto; margin: 12px 0; page-break-inside: avoid; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; }
+  pre code { background: none; padding: 0; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 10pt; }
+  th { background: #f5f5f5; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #ddd; color: #333; }
+  td { padding: 8px 12px; border: 1px solid #ddd; color: #444; }
+  tr:nth-child(even) td { background: #fafafa; }
+  .callout { padding: 14px 18px; border-radius: 4px; margin: 16px 0; font-size: 10.5pt; page-break-inside: avoid; }
+  .callout-red { background: #fdf2f2; border-left: 3px solid #c0392b; }
+  .callout-blue { background: #eef6ff; border-left: 3px solid #2980b9; }
+  .callout-green { background: #f0faf0; border-left: 3px solid #27ae60; }
+  .callout-yellow { background: #fffdf0; border-left: 3px solid #f39c12; }
+  .arch-box { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; margin: 16px 0; }
+  .arch-layer { text-align: center; margin-bottom: 8px; }
+  .arch-layer-label { font-size: 9pt; color: #888; margin-bottom: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .arch-nodes { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .arch-node { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 5px 12px; font-size: 9.5pt; font-weight: 500; color: #333; }
+  .arch-node.accent { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .arch-arrow { text-align: center; color: #ccc; font-size: 14pt; margin: 2px 0; }
+  @media print { body { font-size: 10.5pt; } .section { page-break-before: always; } pre,table,.callout { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-title">EasyXT</div>
+  <div class="cover-subtitle">架构与部署 &middot; 从开发到生产</div>
+  <div class="cover-divider"></div>
+  <div class="cover-info">
+    <div class="cover-info-row"><span class="cover-info-label">作者</span><span class="cover-info-value">王者quant</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">版本</span><span class="cover-info-value">V1.0</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">受众</span><span class="cover-info-value">运维/高级用户</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">更新时间</span><span class="cover-info-value">2026 年 7 月</span></div>
+  </div>
+  <div class="cover-footer">系统架构 · 数据管道 · 自动登录 · 跨平台 · 生产部署</div>
+</div>
+
+<div class="toc">
+  <h2>目 录</h2>
+  <ul class="toc-list">
+    <li class="main"><span>一、系统架构</span></li>
+    <li class="sub"><span>1.1 整体架构图</span></li>
+    <li class="sub"><span>1.2 项目目录结构</span></li>
+    <li class="sub"><span>1.3 模块依赖关系</span></li>
+    <li class="main"><span>二、数据管道</span></li>
+    <li class="sub"><span>2.1 行情数据流</span></li>
+    <li class="sub"><span>2.2 DuckDB 存储引擎</span></li>
+    <li class="sub"><span>2.3 复权数据流</span></li>
+    <li class="main"><span>三、交易链路</span></li>
+    <li class="sub"><span>3.1 QMT 直连模式</span></li>
+    <li class="sub"><span>3.2 大 QMT 信号桥接</span></li>
+    <li class="sub"><span>3.3 订单生命周期</span></li>
+    <li class="main"><span>四、QMT 自动登录</span></li>
+    <li class="main"><span>五、跨平台支持</span></li>
+    <li class="sub"><span>5.1 xqshare 远程连接</span></li>
+    <li class="sub"><span>5.2 Mac/Linux 部署</span></li>
+    <li class="main"><span>六、生产环境部署</span></li>
+    <li class="sub"><span>6.1 服务器选型</span></li>
+    <li class="sub"><span>6.2 进程守护</span></li>
+    <li class="sub"><span>6.3 监控与告警</span></li>
+  </ul>
+</div>
+
+<!-- ==================== 1 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">一</span>系统架构</h2>
+
+  <h3>1.1 整体架构图</h3>
+  <div class="arch-box">
+    <div class="arch-layer"><div class="arch-layer-label">用户界面</div>
+      <div class="arch-nodes">
+        <div class="arch-node">GUI (PyQt5)</div>
+        <div class="arch-node">CLI 命令行</div>
+        <div class="arch-node">Streamlit Web</div>
+        <div class="arch-node">Jupyter Notebook</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer"><div class="arch-layer-label">EasyXT API 层</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">EasyXT (api.py)</div>
+        <div class="arch-node">DataAPI</div>
+        <div class="arch-node">TradeAPI</div>
+        <div class="arch-node">ExtendedAPI</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer"><div class="arch-layer-label">核心引擎</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">FallbackFetcher</div>
+        <div class="arch-node">BacktestEngine</div>
+        <div class="arch-node">Scheduler</div>
+        <div class="arch-node">AutoLogin</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595;</div>
+    <div class="arch-layer"><div class="arch-layer-label">数据 &amp; 交易层</div>
+      <div class="arch-nodes">
+        <div class="arch-node">DuckDB</div>
+        <div class="arch-node">QMT xtquant</div>
+        <div class="arch-node">Tushare</div>
+        <div class="arch-node">TDX pytdx</div>
+        <div class="arch-node">东方财富 HTTP</div>
+        <div class="arch-node">xqshare 远程</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>1.2 项目目录结构</h3>
+  <pre><code>EasyXT/
+├── easy_xt/              # 核心 API 框架 (pip install easyxt)
+│   ├── api.py            # EasyXT 主类
+│   ├── data_api.py       # 数据层，多源降级
+│   ├── trade_api.py      # 交易层，订单管理
+│   ├── fallback_fetcher.py # 行情降级引擎
+│   ├── tdx_client.py     # 通达信客户端
+│   └── ...
+├── easyxt_backtest/      # 回测系统 (pip install -e .)
+├── gui_app/              # PyQt5 GUI 界面
+├── strategies/           # 策略库
+│   ├── quant_strategies/ # 内置策略
+│   ├── grid_trading/     # 网格策略
+│   ├── scheduler/        # 多策略调度器
+│   └── xueqiu_follow/    # 雪球跟单
+├── core/                 # 底层核心模块
+│   ├── auto_login/       # QMT 自动登录
+│   ├── data_manager/     # 数据管理器
+│   └── path_manager.py   # 路径管理
+├── data_manager/         # 数据接口层
+├── 101因子/              # 101 因子分析平台 (Streamlit)
+├── config/               # 全局配置文件
+├── docs/                 # 文档
+├── tools/                # 工具脚本
+└── 学习实例/              # 学习教程</code></pre>
+
+  <h3>1.3 模块依赖关系</h3>
+  <table>
+    <tr><th>模块</th><th>依赖</th><th>可独立使用</th></tr>
+    <tr><td><code>easy_xt</code></td><td>无</td><td>✅ <code>pip install easyxt</code></td></tr>
+    <tr><td><code>easyxt_backtest</code></td><td>easy_xt (可选)</td><td>✅ 可独立安装</td></tr>
+    <tr><td><code>gui_app</code></td><td>easy_xt + PyQt5</td><td>❌ 需完整项目</td></tr>
+    <tr><td><code>strategies</code></td><td>easy_xt + DuckDB</td><td>❌ 需完整项目</td></tr>
+    <tr><td><code>101因子平台</code></td><td>Streamlit</td><td>✅ 完全独立</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 2 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">二</span>数据管道</h2>
+
+  <h3>2.1 行情数据流</h3>
+  <div class="arch-box">
+    <div class="arch-layer"><div class="arch-layer-label">实时行情链路</div>
+      <div class="arch-nodes">
+        <div class="arch-node">QMT xtdata</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node accent">DataAPI.get_price()</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">策略 / GUI</div>
+      </div>
+    </div>
+    <div class="arch-layer" style="margin-top:16px"><div class="arch-layer-label">历史数据链路（回测用）</div>
+      <div class="arch-nodes">
+        <div class="arch-node">Tushare / QMT 下载</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node accent">DuckDB</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">DataManager</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">回测引擎</div>
+      </div>
+    </div>
+    <div class="arch-layer" style="margin-top:16px"><div class="arch-layer-label">降级链（QMT 不可用时）</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">QMT</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">TDX 通达信</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">东方财富</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">兜底空数据</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>2.2 DuckDB 存储引擎</h3>
+  <table>
+    <tr><th>表名</th><th>内容</th><th>数据来源</th></tr>
+    <tr><td><code>stock_daily</code></td><td>A 股日线 OHLCV（不复权）</td><td>QMT 下载 / Tushare</td></tr>
+    <tr><td><code>dividend_data</code></td><td>每股分红历史明细</td><td>Tushare</td></tr>
+    <tr><td><code>cb_basic / cb_daily</code></td><td>可转债基本信息/日行情</td><td>Tushare</td></tr>
+    <tr><td><code>etf_basic / etf_daily</code></td><td>ETF 基本信息/日行情</td><td>Tushare</td></tr>
+    <tr><td><code>stock_market_cap</code></td><td>市值数据</td><td>Tushare</td></tr>
+  </table>
+
+  <div class="callout callout-blue">
+    <strong>为什么只存不复权？</strong>复权数据在每次除权除息后全量变化，预存维护成本高。DuckDB 存原始价格，需要复权时从 QMT API 实时获取，保证准确性。
+  </div>
+
+  <h3>2.3 复权数据流</h3>
+  <table>
+    <tr><th>查询</th><th>数据来源</th><th>说明</th></tr>
+    <tr><td>不复权</td><td>DuckDB <code>stock_daily</code></td><td>直接读取，无需 QMT</td></tr>
+    <tr><td>前/后复权</td><td>QMT <code>get_market_data_ex(dividend_type=...)</code></td><td>QMT 实时计算</td></tr>
+    <tr><td>等比复权</td><td>QMT <code>dividend_type='front_ratio'/'back_ratio'</code></td><td>推荐回测使用</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 3 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">三</span>交易链路</h2>
+
+  <h3>3.1 QMT 直连模式</h3>
+  <p>miniQMT（<code>XtMiniQmt.exe</code>）启动并登录后，EasyXT 通过 xttrader 直连交易服务：</p>
+  <pre><code>api.init_trade(QMT_DATA_DIR, session_id=99)  # 连接 xttrader
+api.add_account(ACCOUNT_ID, 'STOCK')          # 添加账户
+api.trade.buy(...)                             # 下单 → xttrader → QMT 券商柜台</code></pre>
+
+  <h3>3.2 大 QMT 信号桥接</h3>
+  <p>当只有大 QMT（<code>XtItClient.exe</code>）在运行时，EasyXT 自动切换到信号桥接模式：</p>
+  <div class="arch-box">
+    <div class="arch-layer">
+      <div class="arch-nodes">
+        <div class="arch-node">Python 策略</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node accent">信号文件 (JSON)</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">QMT_SIGNAL_DIR</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">大 QMT 接收器</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">下单执行</div>
+      </div>
+    </div>
+  </div>
+  <p>信号文件写入 <code>QMT_SIGNAL_DIR</code>（<code>.env</code> 配置），大 QMT 的接收器每 3 秒扫描一次。</p>
+
+  <h3>3.3 订单生命周期</h3>
+  <table>
+    <tr><th>阶段</th><th>状态</th><th>说明</th></tr>
+    <tr><td>1. 生成</td><td>策略调用 <code>buy()/sell()</code></td><td>参数校验、价格取整</td></tr>
+    <tr><td>2. 提交</td><td>发送至 QMT</td><td>xttrader 或信号桥接</td></tr>
+    <tr><td>3. 待报</td><td>券商柜台处理中</td><td>等待交易所确认</td></tr>
+    <tr><td>4. 部成/已成</td><td>部分或全部成交</td><td><code>get_trades()</code> 查询成交明细</td></tr>
+    <tr><td>5. 废单/已撤</td><td>委托失败或主动撤单</td><td>检查废单原因重新下单</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 4 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">四</span>QMT 自动登录</h2>
+
+  <p>EasyXT 内置自动登录模块（<code>core/auto_login/qmt_login.py</code>），基于 pywinauto 实现。</p>
+
+  <h3>配置</h3>
+  <pre><code># .env
+QMT_EXE_PATH=D:/QMT交易端/bin.x64/XtMiniQmt.exe
+QMT_PASSWORD=你的登录密码
+QMT_EXE_PATH_BIG=D:/QMT交易端/bin.x64/XtItClient.exe   # 可选，大QMT检测用</code></pre>
+
+  <h3>登录流程</h3>
+  <ol>
+    <li><strong>检测大 QMT</strong>：tasklist 快速检查 <code>XtItClient.exe</code> 是否运行（&lt;0.1 秒）</li>
+    <li><strong>大 QMT 已运行</strong>：跳过登录，直接使用（miniQMT 与大 QMT 共享后端）</li>
+    <li><strong>大 QMT 未运行</strong>：启动 miniQMT → 等待窗口 → 填写密码 → 回车登录</li>
+  </ol>
+
+  <div class="callout callout-yellow">
+    <strong>安全提醒：</strong>密码明文存储在 <code>.env</code> 中。建议不要在共享电脑上使用，定期修改密码。
+  </div>
+</div>
+
+<!-- ==================== 5 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">五</span>跨平台支持</h2>
+
+  <h3>5.1 xqshare 远程连接</h3>
+  <p>Mac/Linux 用户通过 xqshare 远程连接 Windows 上的 QMT：</p>
+
+  <div class="arch-box">
+    <div class="arch-layer"><div class="arch-layer-label">Mac / Linux</div>
+      <div class="arch-nodes">
+        <div class="arch-node">EasyXT</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node accent">xqshare 客户端</div>
+      </div>
+    </div>
+    <div class="arch-arrow">&#8595; 网络 &#8595;</div>
+    <div class="arch-layer"><div class="arch-layer-label">Windows（需 QMT + xqshare 服务端）</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">xqshare 服务端</div><div class="arch-arrow" style="display:inline;font-size:12pt">→</div>
+        <div class="arch-node">QMT xtdata/xttrader</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>配置</h3>
+  <pre><code># Mac/Linux 的 .env
+XQSHARE_REMOTE_HOST=192.168.1.100    # Windows 机器 IP
+XQSHARE_REMOTE_PORT=18812            # 默认端口无需修改</code></pre>
+
+  <h3>5.2 Mac/Linux 部署</h3>
+  <table>
+    <tr><th>步骤</th><th>操作</th></tr>
+    <tr><td>1</td><td>Windows 端：<code>pip install xqshare</code> 并启动服务端</td></tr>
+    <tr><td>2</td><td>Windows 端：确保 QMT 已启动并登录</td></tr>
+    <tr><td>3</td><td>Mac/Linux 端：<code>pip install easyxt</code></td></tr>
+    <tr><td>4</td><td>Mac/Linux 端：配置 <code>XQSHARE_REMOTE_HOST</code></td></tr>
+    <tr><td>5</td><td>正常使用 EasyXT API，数据自动走 xqshare 代理</td></tr>
+  </table>
+
+  <div class="callout callout-blue">
+    <strong>性能注意：</strong>xqshare 通过 TCP 连接，延迟取决于网络质量。局域网内延迟 &lt;10ms，远程 VPN 约 50-200ms。对于日频策略完全够用。
+  </div>
+</div>
+
+<!-- ==================== 6 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">六</span>生产环境部署</h2>
+
+  <h3>6.1 服务器选型</h3>
+  <table>
+    <tr><th>要求</th><th>最低</th><th>推荐</th></tr>
+    <tr><td><strong>操作系统</strong></td><td>Windows 10</td><td>Windows Server 2019+</td></tr>
+    <tr><td><strong>CPU</strong></td><td>4 核</td><td>8 核+（回测密集时）</td></tr>
+    <tr><td><strong>内存</strong></td><td>8 GB</td><td>16 GB+（全市场回测）</td></tr>
+    <tr><td><strong>磁盘</strong></td><td>20 GB SSD</td><td>50 GB+ SSD（全市场数据 ~4GB）</td></tr>
+    <tr><td><strong>网络</strong></td><td>稳定内网</td><td>双网卡（交易+管理分离）</td></tr>
+  </table>
+
+  <h3>6.2 进程守护</h3>
+  <p>策略进程需要 24×7 运行，建议用以下方案守护：</p>
+
+  <table>
+    <tr><th>方案</th><th>适用</th><th>命令</th></tr>
+    <tr><td><strong>NSSM</strong></td><td>Windows 服务（推荐）</td><td><code>nssm install EasyXTStrategy</code></td></tr>
+    <tr><td><strong>任务计划程序</strong></td><td>定时触发型策略</td><td>设置每天 09:30 触发</td></tr>
+    <tr><td><strong>systemd</strong></td><td>Linux (xqshare 模式)</td><td><code>systemctl enable easyxt-strategy</code></td></tr>
+    <tr><td><strong>supervisor</strong></td><td>Linux/Mac 通用</td><td>配置 <code>autorestart=true</code></td></tr>
+  </table>
+
+  <div class="callout callout-green">
+    <strong>NSSM 配置示例：</strong>
+    <pre style="margin-top:8px"><code>nssm install EasyXTStrategy
+# Application: C:\Python311\python.exe
+# Arguments: D:\EasyXT\strategies\scheduler\strategy_scheduler.py
+# Working directory: D:\EasyXT
+# 在"Exit actions"标签设置 Restart=Yes, Delay=30000</code></pre>
+  </div>
+
+  <h3>6.3 监控与告警</h3>
+  <p>生产环境建议监控以下指标：</p>
+
+  <table>
+    <tr><th>监控项</th><th>方法</th><th>告警条件</th></tr>
+    <tr><td><strong>进程存活</strong></td><td>NSSM / supervisor 自动重启</td><td>进程退出后 30 秒未恢复</td></tr>
+    <tr><td><strong>QMT 连接</strong></td><td>定时 ping xtdata 数据</td><td>连续 3 次获取失败</td></tr>
+    <tr><td><strong>日志异常</strong></td><td>监控 ERROR 级别日志</td><td>5 分钟内 &gt;10 条 ERROR</td></tr>
+    <tr><td><strong>账户异常</strong></td><td>每日检查 <code>get_account_asset()</code></td><td>总资产日变化 &gt;10%</td></tr>
+    <tr><td><strong>磁盘空间</strong></td><td>系统监控</td><td>磁盘使用 &gt;80%</td></tr>
+  </table>
+
+  <div class="callout callout-red">
+    <strong>交易日前检查清单：</strong>
+    <ol style="margin-bottom:0">
+      <li>QMT 客户端是否正常运行并已登录</li>
+      <li>DuckDB 数据是否已更新到最新交易日</li>
+      <li>策略进程是否正常运行</li>
+      <li>账户资金是否充足（预留足够的保证金）</li>
+      <li>日志中是否有未处理的错误</li>
+    </ol>
+  </div>
+
+  <p style="margin-top:40px;text-align:center;color:#888;font-size:9pt;">
+    — 文档结束 —<br>
+    EasyXT 量化交易框架 &middot; 架构与部署<br>
+    王者quant &middot; 2026 年 7 月
+  </p>
+</div>
+
+</body>
+</html>

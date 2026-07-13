@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>EasyXT 策略开发指南</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;600;700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap');
+  @page { size: A4; margin: 20mm 18mm; }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif; font-size: 11pt; line-height: 1.8; color: #1a1a1a; background: #fff; }
+
+  .cover { page-break-after: always; height: 100vh; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; position: relative; padding: 60px 40px; }
+  .cover::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 6px; background: linear-gradient(90deg, #c0392b, #e74c3c, #c0392b); }
+  .cover-title { font-family: 'Noto Serif SC',serif; font-size: 32pt; font-weight: 700; color: #1a1a1a; letter-spacing: 0.08em; margin-bottom: 8px; }
+  .cover-subtitle { font-size: 14pt; color: #555; margin-bottom: 48px; letter-spacing: 0.05em; }
+  .cover-divider { width: 80px; height: 2px; background: #c0392b; margin: 0 auto 48px; }
+  .cover-info { text-align: left; width: 360px; font-size: 11pt; color: #444; }
+  .cover-info-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .cover-info-label { color: #888; min-width: 100px; }
+  .cover-info-value { font-weight: 500; color: #1a1a1a; }
+  .cover-footer { position: absolute; bottom: 40px; font-size: 9pt; color: #aaa; }
+
+  .toc { page-break-after: always; padding-top: 40px; }
+  .toc h2 { font-family: 'Noto Serif SC',serif; font-size: 18pt; color: #1a1a1a; margin-bottom: 32px; padding-bottom: 12px; border-bottom: 2px solid #c0392b; }
+  .toc-list { list-style: none; padding: 0; }
+  .toc-list li { padding: 10px 0; border-bottom: 1px dotted #ddd; display: flex; justify-content: space-between; font-size: 11pt; }
+  .toc-list li.main { font-weight: 600; font-size: 12pt; color: #1a1a1a; border-bottom: 1px solid #ccc; margin-top: 8px; }
+  .toc-list li.sub { padding-left: 24px; color: #444; font-size: 10.5pt; }
+
+  .section { page-break-before: always; padding-top: 20px; }
+  .section:first-of-type { page-break-before: auto; }
+  h2.section-title { font-family: 'Noto Serif SC',serif; font-size: 16pt; color: #1a1a1a; margin-bottom: 6px; padding-bottom: 10px; border-bottom: 2px solid #c0392b; page-break-after: avoid; }
+  .section-number { color: #c0392b; font-weight: 700; margin-right: 8px; }
+  h3 { font-size: 12pt; font-weight: 600; color: #2c3e50; margin: 24px 0 10px; padding-left: 12px; border-left: 3px solid #c0392b; page-break-after: avoid; }
+  h4 { font-size: 11pt; font-weight: 600; color: #444; margin: 16px 0 8px; page-break-after: avoid; }
+  p { margin-bottom: 10px; text-align: justify; }
+  ul, ol { margin: 8px 0 12px 20px; }
+  li { margin-bottom: 4px; }
+
+  pre { background: #1e1e1e; color: #d4d4d4; padding: 14px 18px; border-radius: 6px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; line-height: 1.6; overflow-x: auto; margin: 12px 0; page-break-inside: avoid; }
+  code { background: #f0f0f0; padding: 2px 6px; border-radius: 3px; font-family: 'Consolas','Courier New',monospace; font-size: 9.5pt; }
+  pre code { background: none; padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 16px; font-size: 10pt; }
+  th { background: #f5f5f5; font-weight: 600; text-align: left; padding: 8px 12px; border: 1px solid #ddd; color: #333; }
+  td { padding: 8px 12px; border: 1px solid #ddd; color: #444; }
+  tr:nth-child(even) td { background: #fafafa; }
+
+  .callout { padding: 14px 18px; border-radius: 4px; margin: 16px 0; font-size: 10.5pt; page-break-inside: avoid; }
+  .callout-red { background: #fdf2f2; border-left: 3px solid #c0392b; }
+  .callout-blue { background: #eef6ff; border-left: 3px solid #2980b9; }
+  .callout-green { background: #f0faf0; border-left: 3px solid #27ae60; }
+  .callout-yellow { background: #fffdf0; border-left: 3px solid #f39c12; }
+
+  .api-card { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 8px; padding: 20px 24px; margin: 16px 0; page-break-inside: avoid; }
+  .api-card h4 { margin-top: 0; font-family: 'Consolas','Courier New',monospace; font-size: 12pt; color: #c0392b; padding-bottom: 8px; border-bottom: 1px solid #eee; }
+
+  .arch-box { background: #fafafa; border: 1px solid #e0e0e0; border-radius: 6px; padding: 20px; margin: 16px 0; }
+  .arch-layer { text-align: center; margin-bottom: 8px; }
+  .arch-layer-label { font-size: 9pt; color: #888; margin-bottom: 4px; letter-spacing: 0.1em; text-transform: uppercase; }
+  .arch-nodes { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+  .arch-node { background: #fff; border: 1px solid #ddd; border-radius: 4px; padding: 5px 12px; font-size: 9.5pt; font-weight: 500; color: #333; }
+  .arch-node.accent { background: #c0392b; color: #fff; border-color: #c0392b; }
+  .arch-arrow { text-align: center; color: #ccc; font-size: 14pt; margin: 2px 0; }
+
+  @media print { body { font-size: 10.5pt; } .section { page-break-before: always; } pre,table,.callout,.api-card { page-break-inside: avoid; } }
+</style>
+</head>
+<body>
+
+<div class="cover">
+  <div class="cover-title">EasyXT</div>
+  <div class="cover-subtitle">策略开发指南 &middot; 从模板到实盘</div>
+  <div class="cover-divider"></div>
+  <div class="cover-info">
+    <div class="cover-info-row"><span class="cover-info-label">作者</span><span class="cover-info-value">王者quant</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">版本</span><span class="cover-info-value">V1.0</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">受众</span><span class="cover-info-value">进阶开发者</span></div>
+    <div class="cover-info-row"><span class="cover-info-label">更新时间</span><span class="cover-info-value">2026 年 7 月</span></div>
+  </div>
+  <div class="cover-footer">策略模板 · QMT 对接 · 实盘部署 · 多策略调度</div>
+</div>
+
+<div class="toc">
+  <h2>目 录</h2>
+  <ul class="toc-list">
+    <li class="main"><span>一、策略开发基础</span></li>
+    <li class="sub"><span>1.1 策略文件结构</span></li>
+    <li class="sub"><span>1.2 最小策略模板</span></li>
+    <li class="sub"><span>1.3 项目策略规范</span></li>
+    <li class="main"><span>二、数据获取</span></li>
+    <li class="sub"><span>2.1 DuckDB 优先策略</span></li>
+    <li class="sub"><span>2.2 QMT 降级模式</span></li>
+    <li class="sub"><span>2.3 分红/财务数据</span></li>
+    <li class="main"><span>三、信号生成</span></li>
+    <li class="sub"><span>3.1 单因子信号</span></li>
+    <li class="sub"><span>3.2 多因子排名融合</span></li>
+    <li class="sub"><span>3.3 技术指标信号</span></li>
+    <li class="main"><span>四、下单执行</span></li>
+    <li class="sub"><span>4.1 限价单与市价单</span></li>
+    <li class="sub"><span>4.2 价格取整</span></li>
+    <li class="sub"><span>4.3 卖出数量安全处理</span></li>
+    <li class="main"><span>五、实盘部署</span></li>
+    <li class="sub"><span>5.1 dry_run 安全模式</span></li>
+    <li class="sub"><span>5.2 .env 配置管理</span></li>
+    <li class="sub"><span>5.3 定时调度</span></li>
+    <li class="main"><span>六、多策略调度</span></li>
+    <li class="sub"><span>6.1 StrategyCoordinator</span></li>
+    <li class="sub"><span>6.2 VirtualBookkeeper</span></li>
+    <li class="sub"><span>6.3 冲突处理</span></li>
+    <li class="main"><span>七、内置策略解析</span></li>
+    <li class="sub"><span>7.1 红利低波</span></li>
+    <li class="sub"><span>7.2 可转债双低/三低</span></li>
+    <li class="sub"><span>7.3 ETF 趋势</span></li>
+  </ul>
+</div>
+
+<!-- ==================== 1 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">一</span>策略开发基础</h2>
+
+  <h3>1.1 策略文件结构</h3>
+  <p>一个标准的 EasyXT 策略由两个文件组成：</p>
+
+  <table>
+    <tr><th>文件</th><th>职责</th><th>示例</th></tr>
+    <tr><td><strong>策略核心</strong></td><td>策略类，包含信号生成、风控逻辑</td><td><code>dividend_lowvol.py</code></td></tr>
+    <tr><td><strong>运行入口</strong></td><td>参数配置、API 初始化、环境读取</td><td><code>run_dividend_lowvol.py</code></td></tr>
+  </table>
+
+  <div class="callout callout-blue">
+    <strong>分离的好处：</strong>核心策略可以独立测试和回测，运行入口专注于参数和部署。同一个策略核心可以被命令行、GUI、调度器三种方式调用。
+  </div>
+
+  <h3>1.2 最小策略模板</h3>
+  <p>核心策略类的最小实现：</p>
+
+  <pre><code>import pandas as pd
+import numpy as np
+from typing import Tuple, Dict, List
+
+class MyStrategy:
+    """我的策略"""
+
+    def __init__(self, api=None, account_id=None, **kwargs):
+        self.api = api
+        self.account_id = account_id
+        self.buy_n = kwargs.get('buy_n', 10)
+        self.positions = None
+
+    def generate_signals(self) -&gt; Tuple[pd.DataFrame, pd.DataFrame]:
+        """生成买卖信号。
+        Returns:
+            buy_list: DataFrame with code, price, ...
+            sell_list: DataFrame with code, price, reason ...
+        """
+        # === 1. 获取数据 ===
+        # === 2. 计算信号 ===
+        # === 3. 返回买卖列表 ===
+        return pd.DataFrame(), pd.DataFrame()
+
+    def run(self, dry_run: bool = True):
+        """运行策略"""
+        buy_list, sell_list = self.generate_signals()
+
+        # 打印信号
+        print(f"买入: {len(buy_list)} 只")
+        print(f"卖出: {len(sell_list)} 只")
+
+        if not dry_run:
+            self._execute_orders(buy_list, sell_list)
+
+    def _get_positions(self) -&gt; pd.DataFrame:
+        """获取当前持仓"""
+        if not self.account_id or not self.api:
+            return pd.DataFrame()
+        return self.api.trade.get_positions(self.account_id)
+
+    def _execute_orders(self, buy_list, sell_list):
+        """执行买卖"""
+        for _, row in sell_list.iterrows():
+            self.api.trade.sell(self.account_id, row['code'],
+                volume=100, price=row['price'], price_type='limit')
+        for _, row in buy_list.iterrows():
+            self.api.trade.buy(self.account_id, row['code'],
+                volume=100, price=row['price'], price_type='limit')</code></pre>
+
+  <p>运行入口：</p>
+
+  <pre><code>import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+from easy_xt import get_api
+from strategies.quant_strategies.my_strategy import MyStrategy
+
+# 读取 .env
+def _env(key, default=''):
+    with open('.env', encoding='utf-8') as f:
+        for line in f:
+            if line.startswith(f'{key}='):
+                return line.split('=',1)[1].strip()
+    return default
+
+PARAMS = {'buy_n': 10}
+dry_run = '--trade' not in sys.argv
+
+api = get_api()
+api.init_data()
+if not dry_run:
+    api.init_trade(_env('QMT_DATA_DIR'), 'my_session')
+    api.add_account(_env('QMT_ACCOUNT_ID'), 'STOCK')
+
+strategy = MyStrategy(api=api, account_id=_env('QMT_ACCOUNT_ID'), **PARAMS)
+strategy.run(dry_run=dry_run)</code></pre>
+
+  <h3>1.3 项目策略规范</h3>
+  <table>
+    <tr><th>规范</th><th>说明</th></tr>
+    <tr><td><strong>文件命名</strong></td><td>策略核心：<code>strategy_name.py</code>；运行入口：<code>run_strategy_name.py</code></td></tr>
+    <tr><td><strong>类命名</strong></td><td>驼峰命名，英文描述，如 <code>DividendLowVolStrategy</code></td></tr>
+    <tr><td><strong>参数管理</strong></td><td>运行入口的 <code>PARAMS</code> 字典 + 环境变量 <code>.env</code></td></tr>
+    <tr><td><strong>数据来源</strong></td><td>优先 DuckDB，降级 QMT API</td></tr>
+    <tr><td><strong>日志</strong></td><td>使用 <code>logging.getLogger(__name__)</code>，关键步骤打印 <code>logger.info()</code></td></tr>
+    <tr><td><strong>安全模式</strong></td><td><code>--trade</code> 参数控制是否实际下单</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 2 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">二</span>数据获取</h2>
+
+  <h3>2.1 DuckDB 优先策略</h3>
+  <p>策略中的数据获取应采用"<strong>DuckDB 优先、QMT 降级</strong>"的模式：</p>
+
+  <pre><code>def get_stock_prices() -&gt; Dict[str, float]:
+    """获取全市场最新收盘价，优先 DuckDB，降级 QMT"""
+    # 方式1：DuckDB（毫秒级）
+    try:
+        import duckdb
+        con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+        latest = con.execute("SELECT MAX(date) FROM stock_daily").fetchone()[0]
+        rows = con.execute(f"""
+            SELECT stock_code, close FROM stock_daily
+            WHERE date = '{latest}' AND close &gt; 0
+        """).fetchall()
+        con.close()
+        if rows:
+            return {r[0]: r[1] for r in rows}
+    except Exception:
+        pass
+
+    # 方式2：QMT API 降级（秒级）
+    try:
+        from easy_xt import get_api
+        api = get_api()
+        api.init_data()
+        df = api.get_current_price(api.get_stock_list())
+        return dict(zip(df['code'], df['price']))
+    except Exception:
+        return {}</code></pre>
+
+  <h3>2.2 QMT 降级模式</h3>
+  <p>EasyXT 框架自动处理数据源降级。在策略中直接使用 <code>api.get_price()</code>，框架会自动选择最佳数据源。</p>
+
+  <div class="callout callout-green">
+    <strong>性能对比：</strong>DuckDB 全市场收盘价查询 ~50ms，QMT API 同样查询 ~3-5 秒。高频策略应尽量用 DuckDB 预下载数据。
+  </div>
+
+  <h3>2.3 分红/财务数据</h3>
+  <p>分红数据通过 DuckDB <code>dividend_data</code> 表获取，无数据时降级到 QMT <code>get_divid_factors()</code>：</p>
+
+  <pre><code>def get_dividend_data() -&gt; pd.DataFrame:
+    try:  # DuckDB
+        import duckdb
+        con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+        df = con.execute("""SELECT ts_code as code, cash_div, ex_date
+            FROM dividend_data WHERE cash_div &gt; 0 ORDER BY ex_date DESC""").fetchdf()
+        con.close()
+        if not df.empty: return df
+    except: pass
+
+    # 降级 QMT
+    from xtquant import xtdata
+    results = []
+    for code in stock_list:
+        data = xtdata.get_divid_factors(code, '20150101', '20991231')
+        if data is not None and not data.empty:
+            last = data.sort_values('time').iloc[-1]
+            if float(last['interest']) &gt; 0:
+                results.append({'code': code, 'cash_div': float(last['interest'])})
+    return pd.DataFrame(results)</code></pre>
+</div>
+
+<!-- ==================== 3 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">三</span>信号生成</h2>
+
+  <h3>3.1 单因子信号</h3>
+  <p>最简单的信号生成——按某个指标排名选股：</p>
+
+  <pre><code># 按股息率降序选前 N 只
+pool['yield_rank'] = pool['dividend_yield'].rank(ascending=False)
+buy_list = pool.nsmallest(buy_n, 'yield_rank')</code></pre>
+
+  <h3>3.2 多因子排名融合</h3>
+  <p>对每个因子分别排名，加权求和得到综合得分。推荐使用排名法而非原始值法——排名法量纲无关、极端值鲁棒：</p>
+
+  <pre><code># 因子1：股息率（越高越好 → 降序排名）
+pool['yield_rank'] = pool['dividend_yield'].rank(ascending=False)
+
+# 因子2：波动率（越低越好 → 升序排名）
+pool['vol_rank'] = pool['volatility'].rank(ascending=True)
+
+# 因子3：市值（越小越好 → 升序排名）
+pool['size_rank'] = pool['market_cap'].rank(ascending=True)
+
+# 综合得分（权重可调）
+pool['score'] = (pool['yield_rank'] * 1.0 +
+                 pool['vol_rank'] * 0.5 +
+                 pool['size_rank'] * 0.3)
+
+# 得分最低的 N 只入选
+selected = pool.nsmallest(buy_n, 'score')</code></pre>
+
+  <div class="callout callout-yellow">
+    <strong>为什么不直接加权原始值？</strong>股息率 2%-15%，波动率 15%-50%，直接用原始值加权会把波动率的影响放大 10 倍。排名打分是量贩策略的通用做法。
+  </div>
+
+  <h3>3.3 技术指标信号</h3>
+  <p>结合 MA、RSI、MACD 等技术指标生成交易信号：</p>
+
+  <pre><code>def generate_ma_signal(code, price_map):
+    closes = get_historical_closes(code, period=60)
+    if len(closes) &lt; 20: return None
+
+    ma5 = np.mean(closes[-5:])
+    ma20 = np.mean(closes[-20:])
+    prev_ma5 = np.mean(closes[-6:-1])
+    prev_ma20 = np.mean(closes[-21:-1])
+
+    # 金叉买入
+    if prev_ma5 &lt;= prev_ma20 and ma5 &gt; ma20:
+        return 'buy'
+    # 死叉卖出
+    elif prev_ma5 &gt;= prev_ma20 and ma5 &lt; ma20:
+        return 'sell'
+    return None</code></pre>
+</div>
+
+<!-- ==================== 4 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">四</span>下单执行</h2>
+
+  <h3>4.1 限价单与市价单</h3>
+  <table>
+    <tr><th>类型</th><th><code>price_type</code></th><th><code>price</code></th><th>说明</th></tr>
+    <tr><td><strong>限价单</strong></td><td><code>'limit'</code></td><td>&gt;0 的具体价格</td><td>按指定价格下单，可能不成交</td></tr>
+    <tr><td><strong>市价单</strong></td><td><code>'market'</code></td><td>0</td><td>以对手价成交，保证成交但不保证价格</td></tr>
+  </table>
+
+  <pre><code># 限价 12.50 买入
+api.trade.buy(account_id, '000001.SZ', volume=100, price=12.50, price_type='limit')
+
+# 市价卖出
+api.trade.sell(account_id, '000001.SZ', volume=100, price=0, price_type='market')</code></pre>
+
+  <h3>4.2 价格取整</h3>
+  <p>不同品种有不同的最小价格变动单位，必须取整否则废单：</p>
+
+  <pre><code>def round_price(code, price):
+    """按交易品种取整到交易所最小价差"""
+    code_str = str(code).replace('.SH','').replace('.SZ','')
+    if code_str.startswith(('1','12')):     # 可转债 → 0.001
+        return round(price, 3)
+    elif code_str.startswith(('5','15','16','588')):  # ETF → 0.001
+        return round(price, 3)
+    else:                                    # 股票 → 0.01
+        return round(price, 2)</code></pre>
+
+  <h3>4.3 卖出数量安全处理</h3>
+  <p>卖出时取 <code>enable_amount</code>（可用数量）而非 <code>volume</code>（总持仓），避免挂单中的持仓被重复卖出导致废单：</p>
+
+  <pre><code>def get_safe_sell_volume(positions, code, default=100):
+    """获取安全的卖出数量"""
+    match = positions[positions['code'].str.contains(code.replace('.SH','').replace('.SZ',''))]
+    if match.empty: return default
+    row = match.iloc[0]
+    enable = int(row.get('enable_amount', 0) or row.get('can_use_volume', 0) or 0)
+    if enable &gt; 0: return enable
+    volume = int(row.get('volume', 0) or 0)
+    return max(volume, default) if volume &gt; 0 else default</code></pre>
+</div>
+
+<!-- ==================== 5 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">五</span>实盘部署</h2>
+
+  <h3>5.1 dry_run 安全模式</h3>
+  <p>所有策略必须支持 dry_run 模式——只输出信号，不实际下单：</p>
+
+  <pre><code># 安全模式（不下单）
+python strategies/quant_strategies/run_dividend_lowvol.py
+
+# 实盘模式
+python strategies/quant_strategies/run_dividend_lowvol.py --trade</code></pre>
+
+  <div class="callout callout-red">
+    <strong>铁律：</strong>实盘前必须先用 dry_run 模式跑至少 1-2 天，确认信号逻辑、资金计算、买卖数量都正确。
+  </div>
+
+  <h3>5.2 .env 配置管理</h3>
+  <p>策略运行入口从 <code>.env</code> 读取敏感配置，不硬编码：</p>
+
+  <pre><code>def _env(key, default=''):
+    """从 .env 读取配置"""
+    p = os.path.join(PROJECT_ROOT, '.env')
+    try:
+        with open(p, encoding='utf-8') as f:
+            for line in f:
+                if line.startswith(f'{key}='):
+                    return line.split('=', 1)[1].strip()
+    except: pass
+    return default
+
+QMT_PATH   = _env('QMT_DATA_DIR', '')
+ACCOUNT_ID = _env('QMT_ACCOUNT_ID', '')</code></pre>
+
+  <h3>5.3 定时调度</h3>
+  <p>生产环境建议用 Windows 任务计划程序或 cron 定时触发：</p>
+
+  <pre><code># Windows 任务计划程序示例
+# 程序: python.exe
+# 参数: D:/EasyXT/strategies/quant_strategies/run_dividend_lowvol.py --trade
+# 触发器: 每月最后一个交易日 14:50
+
+# Linux cron 示例
+# 50 14 * * 1-5 cd /opt/EasyXT && python strategies/quant_strategies/run_dividend_lowvol.py --trade</code></pre>
+
+  <p>也可以使用项目内置的调度器运行多策略：</p>
+  <pre><code>python strategies/scheduler/strategy_scheduler.py</code></pre>
+</div>
+
+<!-- ==================== 6 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">六</span>多策略调度</h2>
+
+  <h3>6.1 StrategyCoordinator</h3>
+  <p>多策略协调器负责：统一初始化交易连接、按比例分配资金、去重合并订单、先卖后买执行。</p>
+
+  <div class="arch-box">
+    <div class="arch-layer">
+      <div class="arch-layer-label">调度流程</div>
+      <div class="arch-nodes">
+        <div class="arch-node accent">StrategyCoordinator</div>
+        <div class="arch-node">→</div>
+        <div class="arch-node">逐个策略 generate_signals()</div>
+        <div class="arch-node">→</div>
+        <div class="arch-node">订单去重</div>
+        <div class="arch-node">→</div>
+        <div class="arch-node">资金分配</div>
+        <div class="arch-node">→</div>
+        <div class="arch-node">先卖后买</div>
+      </div>
+    </div>
+  </div>
+
+  <p>关键能力：</p>
+  <ul>
+    <li><strong>订单去重</strong>：同一只证券只能被一个策略交易，避免买卖冲突</li>
+    <li><strong>资金分配</strong>：按策略的 <code>target_allocation</code> 比例分配可用资金</li>
+    <li><strong>虚拟持仓</strong>：各策略独立追踪持仓，不与 QMT 真实持仓混淆</li>
+  </ul>
+
+  <h3>6.2 VirtualBookkeeper</h3>
+  <p>虚拟账簿记录每个策略的独立持仓，策略调用 <code>get_positions()</code> 时返回虚拟持仓而非 QMT 真实持仓：</p>
+
+  <pre><code># 协调器注入虚拟持仓
+strategy.positions = virtual_bookkeeper.get_positions(strategy_name)
+
+# 策略内 get_positions() 优先用虚拟持仓
+def _get_positions(self):
+    if self.positions is not None:      # 被注入的虚拟持仓
+        return self.positions
+    return self.api.trade.get_positions(self.account_id)  # 回退 QMT</code></pre>
+
+  <h3>6.3 冲突处理</h3>
+  <table>
+    <tr><th>规则</th><th>说明</th></tr>
+    <tr><td><code>allow_same_security: false</code></td><td>同一证券只被一个策略持有</td></tr>
+    <tr><td><code>max_total_capital</code></td><td>所有策略合计资金上限</td></tr>
+    <tr><td><code>reserve_ratio: 0.1</code></td><td>预留 10% 现金不动用</td></tr>
+  </table>
+</div>
+
+<!-- ==================== 7 ==================== -->
+<div class="section">
+  <h2 class="section-title"><span class="section-number">七</span>内置策略解析</h2>
+
+  <p>剖析 EasyXT 内置策略的实现，帮助理解策略开发模式。</p>
+
+  <h3>7.1 红利低波策略</h3>
+  <table>
+    <tr><th>环节</th><th>实现</th></tr>
+    <tr><td><strong>数据</strong></td><td>DuckDB stock_daily（股价）+ dividend_data（分红），降级 QMT get_divid_factors</td></tr>
+    <tr><td><strong>股息率</strong></td><td>每股最新分红 / 当前股价 × 100%</td></tr>
+    <tr><td><strong>波动率</strong></td><td>60 日对数收益率年化标准差</td></tr>
+    <tr><td><strong>门槛</strong></td><td>股息率 ≥ 2%，波动率 ≤ 50%</td></tr>
+    <tr><td><strong>打分</strong></td><td>股息率排名 × 1.0 + 波动率排名 × 0.5</td></tr>
+    <tr><td><strong>买入</strong></td><td>得分最低的前 20 只，不重复当前持仓</td></tr>
+    <tr><td><strong>卖出</strong></td><td>持仓跌出前 40 名时清仓</td></tr>
+  </table>
+
+  <h3>7.2 可转债双低/三低策略</h3>
+  <table>
+    <tr><th>策略</th><th>公式</th><th>逻辑</th></tr>
+    <tr><td><strong>双低</strong></td><td>转债价格 + 转股溢价率</td><td>越小越好，代表偏债（保护）和偏股（进攻）的平衡</td></tr>
+    <tr><td><strong>三低</strong></td><td>双低值 + 剩余规模惩罚</td><td>在双低基础上排除大规模债</td></tr>
+  </table>
+  <p>均线多头排列过滤器：MA5 &gt; MA10 &gt; MA20 &gt; MA30，每满足一层 +25 分，低于 50 分不买。</p>
+
+  <h3>7.3 ETF 趋势策略</h3>
+  <table>
+    <tr><th>环节</th><th>实现</th></tr>
+    <tr><td><strong>选池</strong></td><td>主要 ETF（沪深300、创业板、科创50、恒生等）</td></tr>
+    <tr><td><strong>趋势判断</strong></td><td>收盘价在 MA20 之上为上升趋势</td></tr>
+    <tr><td><strong>排序</strong></td><td>按近期涨幅排名，买入最强的前 N 只</td></tr>
+    <tr><td><strong>止损</strong></td><td>跌破 MA20 或回撤超过 8% 清仓</td></tr>
+  </table>
+
+  <div class="callout callout-green">
+    <strong>学习路径建议：</strong>先读懂红利低波（逻辑最清晰），再看 ETF 趋势（技术指标入门），最后研究可转债双低（多因子融合）。三个策略覆盖了基本面因子、技术因子、多品种三大方向。
+  </div>
+
+  <p style="margin-top:40px;text-align:center;color:#888;font-size:9pt;">
+    — 文档结束 —<br>
+    EasyXT 量化交易框架 &middot; 策略开发指南<br>
+    王者quant &middot; 2026 年 7 月
+  </p>
+</div>
+
+</body>
+</html>
