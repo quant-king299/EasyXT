@@ -94,7 +94,8 @@ class DataDownloadThread(QThread):
         try:
             if self.task_type == 'download_stocks':
                 self._download_stocks()
-            # download_bonds 已移除 - QMT 不提供溢价率数据
+            elif self.task_type == 'update_data':
+                self._update_data()
         except Exception as e:
             import traceback
             error_msg = f"下载失败: {str(e)}\n{traceback.format_exc()}"
@@ -1672,6 +1673,26 @@ class LocalDataManagerWidget(QWidget):
         """)
         btn_layout.addWidget(self.download_stocks_btn)
 
+        self.download_etfs_btn = QPushButton("📥 下载ETF数据")
+        self.download_etfs_btn.clicked.connect(self.download_etfs)
+        self.download_etfs_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #2196F3;
+                color: white;
+                border: none;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #1976D2;
+            }
+            QPushButton:disabled {
+                background-color: #cccccc;
+            }
+        """)
+        btn_layout.addWidget(self.download_etfs_btn)
+
         # 可转债数据下载已移除 - QMT 不提供溢价率数据，策略必须使用 Tushare
         # 请使用 "Tushare数据下载" 标签页中的可转债下载功能
 
@@ -2037,14 +2058,14 @@ class LocalDataManagerWidget(QWidget):
         cursor.movePosition(QTextCursor.End)
         self.log_text.setTextCursor(cursor)
 
-    def _get_duckdb_connection(self):
-        """获取DuckDB连接，子类可override复用已有连接"""
+    def _get_duckdb_connection(self, read_only=True):
+        """获取DuckDB连接，默认只读不锁库"""
         import duckdb
         from pathlib import Path
         db_path = Path(get_default_db_path())
         if not db_path.exists():
             return None
-        return duckdb.connect(str(db_path), read_only=False)
+        return duckdb.connect(str(db_path), read_only=read_only)
 
     def load_duckdb_statistics(self):
         """从DuckDB加载统计数据"""
@@ -2663,6 +2684,56 @@ class LocalDataManagerWidget(QWidget):
 
         self._set_download_state(True)
 
+    def _get_etf_list(self):
+        """获取全部ETF列表"""
+        from xtquant import xtdata
+        etf_list = []
+        for sector in ['沪深ETF', '上证ETF', '深证ETF']:
+            try:
+                stocks = xtdata.get_stock_list_in_sector(sector)
+                if stocks:
+                    etf_list.extend(stocks)
+            except Exception:
+                pass
+        return list(set(etf_list)) if etf_list else []
+
+    def download_etfs(self):
+        """下载ETF数据"""
+        if self.download_thread and self.download_thread.isRunning():
+            QMessageBox.warning(self, "提示", "已有下载任务正在运行")
+            return
+
+        start_date = self.start_date_edit.date().toString("yyyy-MM-dd")
+        end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
+        data_type_text = self.data_type_combo.currentText()
+        period_map = {
+            "日线数据": "daily", "1分钟数据": "1min", "5分钟数据": "5min",
+            "15分钟数据": "15min", "30分钟数据": "30min", "60分钟数据": "60min",
+            "Tick数据": "tick"
+        }
+        data_type = period_map.get(data_type_text, "daily")
+
+        etf_list = self._get_etf_list()
+        if not etf_list:
+            QMessageBox.warning(self, "提示", "无法获取ETF列表，请确认QMT已连接")
+            return
+
+        self.log(f"📥 开始下载ETF数据 ({start_date} ~ {end_date}), 共 {len(etf_list)} 只, 类型: {data_type_text}")
+
+        self.download_thread = DataDownloadThread(
+            task_type='download_stocks',
+            symbols=etf_list,
+            start_date=start_date,
+            end_date=end_date,
+            data_type=data_type
+        )
+        self.download_thread.log_signal.connect(self.log)
+        self.download_thread.progress_signal.connect(self.update_progress)
+        self.download_thread.finished_signal.connect(self.on_download_finished)
+        self.download_thread.error_signal.connect(self.on_download_error)
+        self.download_thread.start()
+        self._set_download_state(True)
+
     def download_bonds(self):
         """下载可转债数据 - 已移除，请使用 Tushare 下载"""
         QMessageBox.information(
@@ -2742,6 +2813,7 @@ class LocalDataManagerWidget(QWidget):
     def _set_download_state(self, is_downloading):
         """设置下载状态"""
         self.download_stocks_btn.setEnabled(not is_downloading)
+        self.download_etfs_btn.setEnabled(not is_downloading)
         # download_bonds_btn 已移除 - QMT 不提供溢价率数据
         self.import_big_qmt_btn.setEnabled(not is_downloading)
         self.update_data_btn.setEnabled(not is_downloading)

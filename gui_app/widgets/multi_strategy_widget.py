@@ -30,7 +30,7 @@ from typing import Dict, Optional
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QLabel,
     QPushButton, QTableWidget, QTableWidgetItem, QHeaderView,
-    QPlainTextEdit, QCheckBox, QRadioButton, QButtonGroup,
+    QPlainTextEdit, QCheckBox, QRadioButton, QButtonGroup, QMenu,
     QMessageBox, QSplitter, QFrame, QComboBox, QSpinBox,
     QDoubleSpinBox, QLineEdit, QFormLayout, QSizePolicy
 )
@@ -594,6 +594,9 @@ class MultiStrategyWidget(QWidget):
 
         self.log_output = QPlainTextEdit()
         self.log_output.setReadOnly(True)
+        self.log_output.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.log_output.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.log_output.customContextMenuRequested.connect(self._show_log_context_menu)
         self.log_output.setMaximumBlockCount(500)
         self.log_output.setFont(QFont("Consolas", 9))
         log_layout.addWidget(self.log_output)
@@ -673,6 +676,23 @@ class MultiStrategyWidget(QWidget):
         self.log_output.appendPlainText(f"[{ts}] {msg}")
         if at_bottom:
             scrollbar.setValue(scrollbar.maximum())
+
+    def _show_log_context_menu(self, pos):
+        """日志区域右键菜单 - 支持复制"""
+        menu = QMenu(self.log_output)
+        copy_action = menu.addAction("复制选中")
+        copy_action.triggered.connect(self.log_output.copy)
+        copy_all_action = menu.addAction("复制全部")
+        copy_all_action.triggered.connect(lambda: self._copy_all_log())
+        menu.addSeparator()
+        clear_action = menu.addAction("清空日志")
+        clear_action.triggered.connect(self.log_output.clear)
+        menu.exec_(self.log_output.mapToGlobal(pos))
+
+    def _copy_all_log(self):
+        """复制全部日志到剪贴板"""
+        from PyQt5.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.log_output.toPlainText())
 
     # ---- 状态刷新 ----
 

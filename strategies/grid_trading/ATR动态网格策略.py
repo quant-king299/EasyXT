@@ -8,7 +8,7 @@ import json
 import time
 import logging
 from sys import path
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from collections import deque
 
@@ -56,7 +56,7 @@ class ATR动态网格策略:
         # ATR参数
         self.atr_period = params.get('ATR周期', 14)           # ATR计算周期
         self.atr_multiplier = params.get('ATR倍数', 0.5)      # ATR倍数（网格间距 = ATR * 倍数）
-        self.min_grid_spacing = params.get('最小网格间距', 0.1)  # 最小网格间距（%）
+        self.min_grid_spacing = params.get('最小网格间距', 0.5)  # 最小网格间距（%）
         self.max_grid_spacing = params.get('最大网格间距', 1.0)  # 最大网格间距（%）
 
         # 网格参数
@@ -89,6 +89,12 @@ class ATR动态网格策略:
         self.price_history = {}        # 各标的价格历史（用于计算ATR和MA）{stock_code: deque}
         self.last_action_time = {}     # 上次交易时间
         self.last_trigger_price = {}   # 上次触发交易的价格 {stock_code: price}
+        self._atr_cache = {}           # ATR日线缓存 {stock_code: atr_value}
+        self._atr_cache_time = {}      # ATR缓存时间 {stock_code: datetime}
+        self._data_fail_count = {}     # 数据获取失败计数 {stock_code: count}
+        self._data_skip_until = {}     # 跳过查询截止时间 {stock_code: datetime}
+        self._duckdb_available = None  # DuckDB可用性缓存: None=未检测, True=可用, False=不可用
+        self._duckdb_reader = None     # DuckDB读取器实例（复用）
 
         # 统计信息
         self.trade_count = 0
@@ -110,9 +116,9 @@ class ATR动态网格策略:
             # 初始化数据服务
             if hasattr(self.api, 'init_data'):
                 if self.api.init_data():
-                    logger.info("✓ 数据服务初始化成功")
+                    logger.info("[OK] 数据服务初始化成功")
                 else:
-                    logger.info("⚠ 警告: 数据服务初始化失败")
+                    logger.info("[WARN] 警告: 数据服务初始化失败")
 
             # 初始化交易服务（需要QMT路径和会话ID）
             if hasattr(self.api, 'init_trade') and self.qmt_path:
@@ -122,33 +128,33 @@ class ATR动态网格策略:
                     logger.info(f"  会话ID: {self.session_id}")
 
                     if self.api.init_trade(self.qmt_path, self.session_id):
-                        logger.info("✓ 交易服务初始化成功")
+                        logger.info("[OK] 交易服务初始化成功")
 
                         # 添加交易账户
                         if hasattr(self.api, 'add_account'):
                             if self.api.add_account(self.account_id, self.account_type):
-                                logger.info(f"✓ 交易账户 {self.account_id} 添加成功")
+                                logger.info(f"[OK] 交易账户 {self.account_id} 添加成功")
                             else:
-                                logger.info(f"⚠ 警告: 交易账户添加失败")
+                                logger.info(f"[WARN] 警告: 交易账户添加失败")
                     else:
-                        logger.info("⚠ 警告: 交易服务连接失败")
+                        logger.info("[WARN] 警告: 交易服务连接失败")
                         logger.info("   请检查：")
                         logger.info("   1. QMT客户端是否已启动")
                         logger.info("   2. QMT路径是否正确")
                         logger.info("   3. 账户是否已在QMT中登录")
 
                 except Exception as e:
-                    print(f"⚠ 警告: 交易服务初始化异常 - {str(e)}")
+                    print(f"[WARN] 警告: 交易服务初始化异常 - {str(e)}")
                     logger.info("   提示: 请在QMT客户端手动登录交易账户")
             else:
                 if not self.qmt_path:
-                    logger.info("⚠ 警告: 未配置QMT路径，无法连接交易服务")
+                    logger.info("[WARN] 警告: 未配置QMT路径，无法连接交易服务")
                     logger.info("   请在配置文件中添加 'QMT路径' 参数")
                 else:
-                    logger.info("⚠ 警告: API不支持init_trade方法")
+                    logger.info("[WARN] 警告: API不支持init_trade方法")
 
         except Exception as e:
-            print(f"✗ 错误: API初始化异常 - {str(e)}")
+            print(f"[ERR] 错误: API初始化异常 - {str(e)}")
 
         # 初始化价格历史队列
         max_history = max(self.atr_period, self.ma_period) + 5
@@ -171,40 +177,188 @@ class ATR动态网格策略:
         logger.info(f"  股票池: {self.stock_pool}")
         logger.info("=" * 60 + "\n")
 
+    def _get_duckdb_path(self):
+        """获取DuckDB数据库路径"""
+        db_path = os.environ.get('DUCKDB_PATH', '')
+        if not db_path:
+            db_path = str(Path(__file__).parent.parent.parent / 'data' / 'stock_data.ddb')
+        return db_path
+
+    def _get_duckdb_reader(self):
+        """获取DuckDB读取器（只尝试一次，缓存结果，自动建表，只读模式不锁库）"""
+        if self._duckdb_available is not None:
+            return self._duckdb_reader
+
+        try:
+            import duckdb
+            db_path = self._get_duckdb_path()
+            # 使用只读连接，不阻塞其他进程读取
+            conn = duckdb.connect(db_path, read_only=True)
+            tables = conn.execute("SHOW TABLES").fetchall()
+            table_names = {t[0] for t in tables}
+            if 'stock_daily' not in table_names:
+                conn.close()
+                # 表不存在，用写连接建表
+                write_conn = duckdb.connect(db_path)
+                write_conn.execute("""
+                    CREATE TABLE IF NOT EXISTS stock_daily (
+                        stock_code VARCHAR, date DATE,
+                        open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE,
+                        volume BIGINT, amount DOUBLE,
+                        PRIMARY KEY (stock_code, date)
+                    )
+                """)
+                write_conn.close()
+                conn = duckdb.connect(db_path, read_only=True)
+
+            self._duckdb_available = True
+            # 用简单的连接对象代替 DuckDBDataReader
+            self._duckdb_reader = conn
+            return conn
+        except Exception:
+            self._duckdb_available = False
+        return None
+
+    def _save_kline_to_duckdb(self, stock_code, df):
+        """将QMT/TDX获取的日线数据存入DuckDB（临时写连接，写完立即释放）"""
+        try:
+            import duckdb
+            import pandas as pd
+
+            save_df = df.copy()
+            save_df.columns = [c.lower() for c in save_df.columns]
+            if save_df.index.name and 'date' not in save_df.columns:
+                save_df = save_df.reset_index()
+            if 'date' not in save_df.columns:
+                return
+            save_df['stock_code'] = stock_code
+            save_df['date'] = pd.to_datetime(save_df['date']).dt.date
+            cols = ['stock_code', 'date', 'open', 'high', 'low', 'close']
+            save_df = save_df[[c for c in cols if c in save_df.columns]]
+
+            # 临时写连接，写完后立即释放，不阻塞其他读取
+            db_path = self._get_duckdb_path()
+            write_conn = duckdb.connect(db_path)
+            # 去重
+            existing = write_conn.execute(
+                "SELECT date FROM stock_daily WHERE stock_code = ?", [stock_code]
+            ).fetchall()
+            existing_dates = {row[0] for row in existing}
+            save_df = save_df[~save_df['date'].isin(existing_dates)]
+
+            if not save_df.empty:
+                write_conn.register('_tmp_import', save_df)
+                write_conn.execute("INSERT OR IGNORE INTO stock_daily SELECT * FROM _tmp_import")
+                write_conn.unregister('_tmp_import')
+            write_conn.close()
+        except Exception:
+            pass
+
+    def _get_daily_kline(self, stock_code):
+        """
+        获取日线K线数据，优先级: DuckDB → QMT下载 → TDX备用
+        返回: DataFrame with columns [high, low, close]，或 None
+        """
+        # --- 第1优先: DuckDB 本地数据库（只读，不阻塞其他进程） ---
+        reader = self._get_duckdb_reader()
+        if reader is not None:
+            try:
+                from datetime import datetime as dt, timedelta as td
+                import pandas as pd
+                start = (dt.now() - td(days=self.atr_period * 3)).strftime('%Y-%m-%d')
+                df = reader.execute(
+                    "SELECT * FROM stock_daily WHERE stock_code = ? AND date >= ? ORDER BY date",
+                    [stock_code, start]
+                ).fetchdf()
+                if df is not None and not df.empty and len(df) >= self.atr_period + 1:
+                    return df[['high', 'low', 'close']]
+            except Exception:
+                pass
+
+        # --- 第2优先: QMT下载到本地后读取 ---
+        try:
+            kline_df = self.api.data.get_price(
+                codes=[stock_code],
+                period='1d',
+                count=self.atr_period + 2,
+                fields=['high', 'low', 'close'],
+                adjust='front'
+            )
+            if kline_df is not None and not kline_df.empty and len(kline_df) >= 2:
+                # 异步存回DuckDB，下次直接用
+                self._save_kline_to_duckdb(stock_code, kline_df)
+                return kline_df
+        except Exception:
+            pass
+
+        return None
+
     def calculate_atr(self, stock_code):
         """
-        计算ATR指标
-        返回: ATR值
+        基于日线K线数据计算ATR指标，缓存15分钟内复用
+        数据源优先级: DuckDB → QMT → TDX
+        返回: ATR值（价格单位）
         """
-        history = self.price_history[stock_code]
-        if len(history) < 2:
-            return 0
+        now = datetime.now()
+        last_update = self._atr_cache_time.get(stock_code)
 
-        tr_list = []
-        for i in range(1, len(history)):
-            curr = history[i]
-            prev = history[i-1]
+        if last_update is not None and (now - last_update).seconds < 900:
+            return self._atr_cache.get(stock_code, 0)
 
-            high = curr.get('最高价', curr.get('当前价格', 0))
-            low = curr.get('最低价', curr.get('当前价格', 0))
-            prev_close = prev.get('收盘价', prev.get('当前价格', 0))
+        try:
+            kline_df = self._get_daily_kline(stock_code)
 
-            # 计算真实波动范围
-            tr = max(
-                high - low,
-                abs(high - prev_close),
-                abs(low - prev_close)
-            )
-            tr_list.append(tr)
+            if kline_df is None or kline_df.empty or len(kline_df) < 2:
+                return self._atr_cache.get(stock_code, 0)
 
-        if not tr_list:
-            return 0
+            kline_df = kline_df.sort_index()
+            high = kline_df['high'].values
+            low = kline_df['low'].values
+            close = kline_df['close'].values
 
-        # 计算ATR（使用简单移动平均）
-        period = min(self.atr_period, len(tr_list))
-        atr = sum(tr_list[-period:]) / period
+            tr_list = []
+            for i in range(1, len(high)):
+                tr = max(
+                    high[i] - low[i],
+                    abs(high[i] - close[i - 1]),
+                    abs(low[i] - close[i - 1])
+                )
+                tr_list.append(tr)
 
-        return atr
+            if not tr_list:
+                return self._atr_cache.get(stock_code, 0)
+
+            period = min(self.atr_period, len(tr_list))
+            atr = sum(tr_list[-period:]) / period
+
+            self._atr_cache[stock_code] = atr
+            self._atr_cache_time[stock_code] = now
+            return atr
+
+        except Exception as e:
+            print(f"  {stock_code}: 获取日线ATR失败 - {str(e)}，使用缓存值")
+            return self._atr_cache.get(stock_code, 0)
+
+    def _handle_data_fail(self, stock_code, error_msg):
+        """处理数据获取失败：连续失败3次后跳过5分钟"""
+        count = self._data_fail_count.get(stock_code, 0) + 1
+        self._data_fail_count[stock_code] = count
+
+        if count <= 3:
+            # 前3次打印警告
+            logger.info(f"  {stock_code}: [WARN] 行情获取失败({count}/3) - {error_msg}")
+        elif count == 4:
+            # 第4次开始跳过，打印一次提示
+            self._data_skip_until[stock_code] = datetime.now() + timedelta(minutes=5)
+            logger.info(f"  {stock_code}: [SKIP] 连续失败，跳过5分钟（请检查QMT是否订阅该标的）")
+        # count > 4: 静默跳过，不再打印
+
+    def _reset_data_fail(self, stock_code):
+        """数据获取成功后重置失败计数"""
+        if stock_code in self._data_fail_count:
+            self._data_fail_count.pop(stock_code)
+        if stock_code in self._data_skip_until:
+            self._data_skip_until.pop(stock_code)
 
     def calculate_ma(self, stock_code):
         """
@@ -339,7 +493,7 @@ class ATR动态网格策略:
                 # 使用正确的列名：can_use_volume (可用持仓)
                 return pos.get('can_use_volume', 0)
         except Exception as e:
-            print(f"  ✗ 获取持仓失败: {str(e)}")
+            print(f"  [ERR] 获取持仓失败: {str(e)}")
         return 0
 
     def get_available_cash(self):
@@ -350,7 +504,7 @@ class ATR动态网格策略:
                 return 0
             return account.get('cash', 0)
         except Exception as e:
-            print(f"  ✗ 获取资金失败: {str(e)}")
+            print(f"  [ERR] 获取资金失败: {str(e)}")
         return 0
 
     def place_order(self, stock_code, order_type, price):
@@ -358,7 +512,7 @@ class ATR动态网格策略:
         try:
             # 检查交易API是否可用
             if self.api is None or not hasattr(self.api, 'trade') or self.api.trade is None:
-                print(f"  ✗ 交易服务未连接，请检查：1) QMT客户端是否启动  2) 是否调用了init_trade()")
+                print(f"  [ERR] 交易服务未连接，请检查：1) QMT客户端是否启动  2) 是否调用了init_trade()")
                 return False
 
             # 检查持仓和资金
@@ -368,12 +522,12 @@ class ATR动态网格策略:
             if order_type == 'buy':
                 # 买入检查
                 if position >= self.max_position:
-                    print(f"  ⚠ 持仓已达上限 ({position}/{self.max_position})，取消买入")
+                    print(f"  [WARN] 持仓已达上限 ({position}/{self.max_position})，取消买入")
                     return False
 
                 required_cash = price * self.position_size * 1.01  # 预留1%费用
                 if required_cash > cash:
-                    print(f"  ⚠ 资金不足 (需{required_cash:.2f}, 可用{cash:.2f})，取消买入")
+                    print(f"  [WARN] 资金不足 (需{required_cash:.2f}, 可用{cash:.2f})，取消买入")
                     return False
 
                 # 执行买入
@@ -386,19 +540,19 @@ class ATR动态网格策略:
                 )
 
                 if order_id:
-                    print(f"  ✓ 买入成功: {stock_code} @ {price:.3f} x{self.position_size} (委托号: {order_id})")
+                    print(f"  [OK] 买入成功: {stock_code} @ {price:.3f} x{self.position_size} (委托号: {order_id})")
                     self.trade_count += 1
                     self.last_action_time[stock_code] = datetime.now()
                     self.last_trigger_price[stock_code] = price
                     return True
                 else:
-                    logger.info(f"  ✗ 买入失败")
+                    logger.info(f"  [ERR] 买入失败")
                     return False
 
             elif order_type == 'sell':
                 # 卖出检查
                 if position < self.position_size:
-                    print(f"  ⚠ 持仓不足 (持仓{position}, 需卖{self.position_size})，取消卖出")
+                    print(f"  [WARN] 持仓不足 (持仓{position}, 需卖{self.position_size})，取消卖出")
                     return False
 
                 # 执行卖出
@@ -411,17 +565,17 @@ class ATR动态网格策略:
                 )
 
                 if order_id:
-                    print(f"  ✓ 卖出成功: {stock_code} @ {price:.3f} x{min(position, self.position_size)} (委托号: {order_id})")
+                    print(f"  [OK] 卖出成功: {stock_code} @ {price:.3f} x{min(position, self.position_size)} (委托号: {order_id})")
                     self.trade_count += 1
                     self.last_action_time[stock_code] = datetime.now()
                     self.last_trigger_price[stock_code] = price
                     return True
                 else:
-                    logger.info(f"  ✗ 卖出失败")
+                    logger.info(f"  [ERR] 卖出失败")
                     return False
 
         except Exception as e:
-            print(f"  ✗ 下单异常: {str(e)}")
+            print(f"  [ERR] 下单异常: {str(e)}")
             return False
 
         return False
@@ -455,11 +609,11 @@ class ATR动态网格策略:
                     state = json.load(f)
                     self.base_prices = state.get('基准价格', {})
                     self.last_trigger_price = state.get('上次触发价格', {})
-                    print(f"✓ 已加载策略状态 (基准价格: {self.base_prices}, 上次触发价格: {self.last_trigger_price})")
+                    print(f"[OK] 已加载策略状态 (基准价格: {self.base_prices}, 上次触发价格: {self.last_trigger_price})")
             else:
-                logger.info(f"ℹ 首次运行，将自动初始化基准价格")
+                logger.info(f"[INFO] 首次运行，将自动初始化基准价格")
         except Exception as e:
-            print(f"⚠ 加载状态失败: {str(e)}")
+            print(f"[WARN] 加载状态失败: {str(e)}")
 
     def save_state(self):
         """保存策略状态"""
@@ -479,7 +633,7 @@ class ATR动态网格策略:
             with open(state_file, 'w', encoding='utf-8') as f:
                 json.dump(state, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"⚠ 保存状态失败: {str(e)}")
+            print(f"[WARN] 保存状态失败: {str(e)}")
 
     def is_trade_time(self):
         """判断是否在交易时间"""
@@ -513,21 +667,28 @@ class ATR动态网格策略:
         # 遍历股票池
         for stock_code in self.stock_pool:
             try:
+                # 连续失败3次后，跳过5分钟再重试（避免刷屏）
+                now = datetime.now()
+                skip_until = self._data_skip_until.get(stock_code)
+                if skip_until and now < skip_until:
+                    continue
+
                 # 获取行情（返回DataFrame）
                 price_df = self.api.data.get_current_price([stock_code])
 
                 # 检查数据有效性
                 if price_df is None or price_df.empty:
-                    logger.info(f"  {stock_code}: ⚠ 无法获取行情数据")
+                    self._handle_data_fail(stock_code, "无法获取行情数据")
                     continue
 
                 # 从DataFrame中提取数据（使用英文列名）
                 stock_data = price_df[price_df['code'] == stock_code]
                 if stock_data.empty:
-                    logger.info(f"  {stock_code}: ⚠ 未找到该股票数据")
+                    logger.info(f"  {stock_code}: [WARN] 未找到该股票数据")
                     continue
 
                 current_price = stock_data.iloc[0]['price']
+                self._reset_data_fail(stock_code)  # 成功获取，重置失败计数
                 high_price = stock_data.iloc[0].get('high', current_price)
                 low_price = stock_data.iloc[0].get('low', current_price)
 
@@ -578,9 +739,7 @@ class ATR动态网格策略:
                     logger.info(f"    无交易信号")
 
             except Exception as e:
-                print(f"  {stock_code}: ✗ 处理异常 - {str(e)}")
-                import traceback
-                traceback.print_exc()
+                self._handle_data_fail(stock_code, str(e))
 
         # 保存状态
         self.save_state()

@@ -341,7 +341,7 @@ class DuckDBDataReader:
 
             import duckdb
 
-            self.conn = duckdb.connect(self.duckdb_path)
+            self.conn = duckdb.connect(self.duckdb_path, read_only=True)
 
             logger.info(f"[OK] 成功连接数据库: {self.duckdb_path}")
 
@@ -385,7 +385,7 @@ class DuckDBDataReader:
                 logger.info("=" * 60)
                 print()
 
-                logger.info("当前数据库中只有以下表:", ', '.join(sorted(table_names)) if table_names else '（空）')
+                logger.info("当前数据库中只有以下表: %s", ', '.join(sorted(table_names)) if table_names else '（空）')
                 print()
 
                 logger.info("你需要先下载日线数据，以下任选一种方式：")

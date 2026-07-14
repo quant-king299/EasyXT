@@ -20,7 +20,7 @@ from PyQt5.QtWidgets import (
     QTableWidget, QTableWidgetItem, QHeaderView, QTabWidget,
     QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
     QProgressBar, QSplitter, QFrame, QMessageBox,
-    QFileDialog, QFormLayout, QScrollArea, QSizePolicy,
+    QFormLayout, QScrollArea, QSizePolicy,
     QToolButton, QMenu, QAction
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QMutex, QWaitCondition
@@ -135,6 +135,9 @@ class GridTradingWidget(QWidget):
         monitor_widget = self.create_monitor_panel()
         main_layout.addWidget(monitor_widget)
 
+        # 自动加载默认配置文件
+        self._auto_load_default_config()
+
     def create_top_panel(self) -> QWidget:
         """创建顶部面板：策略选择和账户配置"""
         panel = QWidget()
@@ -163,10 +166,6 @@ class GridTradingWidget(QWidget):
         self.config_file_edit.setReadOnly(True)
         strategy_layout.addWidget(QLabel("配置文件:"))
         strategy_layout.addWidget(self.config_file_edit)
-
-        self.load_config_btn = QPushButton("📁 加载配置")
-        self.load_config_btn.clicked.connect(self.load_config)
-        strategy_layout.addWidget(self.load_config_btn)
 
         strategy_layout.addStretch()
         layout.addWidget(strategy_group)
@@ -356,8 +355,8 @@ class GridTradingWidget(QWidget):
         params_layout.addRow("ATR倍数:", self.atr_multiplier_spin)
 
         self.min_grid_spacing_spin = QDoubleSpinBox()
-        self.min_grid_spacing_spin.setRange(0.01, 1.0)
-        self.min_grid_spacing_spin.setValue(0.1)
+        self.min_grid_spacing_spin.setRange(0.05, 2.0)
+        self.min_grid_spacing_spin.setValue(0.5)
         params_layout.addRow("最小间距(%):", self.min_grid_spacing_spin)
 
         self.max_grid_spacing_spin = QDoubleSpinBox()
@@ -496,6 +495,9 @@ class GridTradingWidget(QWidget):
 
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
+        self.log_text.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.log_text.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.log_text.customContextMenuRequested.connect(self._show_log_context_menu)
         self.log_text.setMinimumHeight(150)  # 从80增加到150
         self.log_text.setMaximumHeight(250)  # 从150增加到250
         self.log_text.setStyleSheet("""
@@ -551,28 +553,20 @@ class GridTradingWidget(QWidget):
         )
         self.config_file_edit.setText(config_path)
 
-    def load_config(self):
-        """加载配置文件"""
-        # 部分机器上 QMT (xtquant) 先占 COM 多线程模式, 导致 Windows 原生
-        # 文件对话框崩溃; 在 .env 中设 QT_NO_NATIVE_DIALOG=1 可切换 Qt 自带对话框
-        opts = QFileDialog.DontUseNativeDialog if _read_env('QT_NO_NATIVE_DIALOG') == '1' \
-               else QFileDialog.Options()
-        config_file, _ = QFileDialog.getOpenFileName(
-            self,
-            "选择配置文件",
-            os.path.join(os.path.dirname(__file__), '..', '..', 'strategies', 'grid_trading'),
-            "JSON文件 (*.json)",
-            options=opts
+    def _auto_load_default_config(self):
+        """启动时自动加载默认配置文件"""
+        default_config = os.path.join(
+            os.path.dirname(__file__), '..', '..',
+            'strategies', 'grid_trading', 'atr_grid_config.json'
         )
-
-        if config_file:
+        if os.path.exists(default_config):
             try:
-                with open(config_file, 'r', encoding='utf-8') as f:
+                with open(default_config, 'r', encoding='utf-8') as f:
                     config = json.load(f)
                 self.apply_config(config)
-                self.log(f"✓ 配置加载成功: {os.path.basename(config_file)}")
-            except Exception as e:
-                QMessageBox.warning(self, "加载失败", f"无法加载配置文件:\n{str(e)}")
+                self.config_file = default_config
+            except Exception:
+                pass  # 静默失败，使用界面默认值
 
     def apply_config(self, config: dict):
         """应用配置到界面"""
@@ -586,11 +580,23 @@ class GridTradingWidget(QWidget):
         # 根据配置类型设置参数
         strategy = self.strategy_combo.currentText()
 
-        if 'ATR' in config or ('ATR周期' in config and 'ATR' in strategy):
+        if 'ATR周期' in config:
             if hasattr(self, 'atr_period_spin'):
                 self.atr_period_spin.setValue(config.get('ATR周期', 14))
+            if hasattr(self, 'atr_multiplier_spin'):
                 self.atr_multiplier_spin.setValue(config.get('ATR倍数', 0.5))
-                # ... 其他参数
+            if hasattr(self, 'min_grid_spacing_spin'):
+                self.min_grid_spacing_spin.setValue(config.get('最小网格间距', 0.5))
+            if hasattr(self, 'max_grid_spacing_spin'):
+                self.max_grid_spacing_spin.setValue(config.get('最大网格间距', 0.8))
+            if hasattr(self, 'grid_layers_spin'):
+                self.grid_layers_spin.setValue(config.get('网格层数', 5))
+            if hasattr(self, 'trade_quantity_spin3'):
+                self.trade_quantity_spin3.setValue(config.get('单次交易数量', 100))
+            if hasattr(self, 'max_position_spin3'):
+                self.max_position_spin3.setValue(config.get('最大持仓数量', 500))
+            if hasattr(self, 'ma_period_spin'):
+                self.ma_period_spin.setValue(config.get('均线周期', 20))
 
     def get_config(self) -> dict:
         """获取当前配置"""
@@ -764,6 +770,23 @@ class GridTradingWidget(QWidget):
         except Exception as e:
             # 不显示错误，避免日志刷屏
             pass
+
+    def _show_log_context_menu(self, pos):
+        """日志区域右键菜单 - 支持复制"""
+        menu = QMenu(self.log_text)
+        copy_action = menu.addAction("复制选中")
+        copy_action.triggered.connect(self.log_text.copy)
+        copy_all_action = menu.addAction("复制全部")
+        copy_all_action.triggered.connect(lambda: self._copy_all_log())
+        menu.addSeparator()
+        clear_action = menu.addAction("清空日志")
+        clear_action.triggered.connect(self.clear_log)
+        menu.exec_(self.log_text.mapToGlobal(pos))
+
+    def _copy_all_log(self):
+        """复制全部日志到剪贴板"""
+        from PyQt5.QtWidgets import QApplication
+        QApplication.clipboard().setText(self.log_text.toPlainText())
 
     def clear_log(self):
         """清除日志"""

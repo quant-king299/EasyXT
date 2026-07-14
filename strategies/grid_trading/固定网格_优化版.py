@@ -393,7 +393,7 @@ class 固定网格策略优化版:
                 if order_id and order_id > 0:
                     self.current_positions[stock_code] += grid['quantity']
                     grid['filled'] = True
-                    self.log(f"✅ 买入成功: {stock_code} Level{grid['level']} "
+                    self.log(f"[OK] 买入成功: {stock_code} Level{grid['level']} "
                            f"{grid['quantity']}股 @{grid['price']:.3f} 委托号:{order_id}")
 
                     # 记录日志
@@ -412,7 +412,7 @@ class 固定网格策略优化版:
                         self.trade_log = pd.concat([self.trade_log, new_log], ignore_index=True, copy=True)
                     self.save_trade_log()
                 else:
-                    self.log(f"❌ 买入失败: {stock_code} Level{grid['level']}")
+                    self.log(f"[ERR] 买入失败: {stock_code} Level{grid['level']}")
                     return False
 
             elif grid['type'] == 'sell':
@@ -429,7 +429,7 @@ class 固定网格策略优化版:
                 if order_id and order_id > 0:
                     self.current_positions[stock_code] -= sell_qty
                     grid['filled'] = True
-                    self.log(f"✅ 卖出成功: {stock_code} Level{grid['level']} "
+                    self.log(f"[OK] 卖出成功: {stock_code} Level{grid['level']} "
                            f"{sell_qty}股 @{grid['price']:.3f} 委托号:{order_id}")
 
                     # 记录日志
@@ -448,7 +448,7 @@ class 固定网格策略优化版:
                         self.trade_log = pd.concat([self.trade_log, new_log], ignore_index=True, copy=True)
                     self.save_trade_log()
                 else:
-                    self.log(f"❌ 卖出失败: {stock_code} Level{grid['level']}")
+                    self.log(f"[ERR] 卖出失败: {stock_code} Level{grid['level']}")
                     return False
 
             return True
@@ -513,7 +513,7 @@ class 固定网格策略优化版:
 
     def run(self):
         """运行策略主循环"""
-        self.log("\n🚀 开始运行固定网格策略...")
+        self.log("\n[START] 开始运行固定网格策略...")
         self.log("提示: 按 Ctrl+C 停止策略\n")
         self.log("="*80)
 
@@ -565,10 +565,10 @@ class 固定网格策略优化版:
                 time.sleep(3)
 
         except KeyboardInterrupt:
-            self.log("\n⏹️ 策略已停止")
+            self.log("\n[STOP] 策略已停止")
             self.print_summary()
         except Exception as e:
-            self.log(f"\n❌ 运行错误: {str(e)}")
+            self.log(f"\n[ERR] 运行错误: {str(e)}")
             self.print_summary()
 
     def print_summary(self):

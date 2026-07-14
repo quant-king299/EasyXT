@@ -71,8 +71,8 @@ class 自适应网格策略(BaseStrategy):
 
         # 策略参数
         self.stock_pool = self.params.get('股票池', ['511130.SH', '511090.SH'])
-        self.buy_threshold = self.params.get('买入涨跌幅', -0.2)  # 负数表示下跌
-        self.sell_threshold = self.params.get('卖出涨跌幅', 0.2)  # 正数表示上涨
+        self.buy_threshold = self.params.get('买入涨跌幅', -0.5)  # 负数表示下跌
+        self.sell_threshold = self.params.get('卖出涨跌幅', 0.5)  # 正数表示上涨
         self.trade_quantity = self.params.get('单次交易数量', 100)
         self.max_position = self.params.get('最大持仓数量', 300)
         self.price_mode = self.params.get('价格模式', 5)  # 默认最新价
@@ -95,9 +95,10 @@ class 自适应网格策略(BaseStrategy):
                                        os.path.join(os.path.dirname(__file__),
                                                   'trade_log.json'))
 
-        # 网格状态（从日志恢复）
+        # 网格状态
         self.trade_log = pd.DataFrame()
         self.is_first_run = True
+        self._last_trigger_price = {}  # 内存级上次触发价，避免文件读写延迟导致重复触发
 
     def initialize(self):
         """策略初始化"""
@@ -334,7 +335,7 @@ class 自适应网格策略(BaseStrategy):
 
     def get_last_trigger_price(self, stock_code):
         """
-        获取上次触发价格
+        获取上次触发价格（内存优先，文件做备份）
 
         Args:
             stock_code: 股票代码
@@ -342,34 +343,29 @@ class 自适应网格策略(BaseStrategy):
         Returns:
             float: 上次触发价格，如果没有则返回基准价
         """
-        if self.trade_log.empty:
-            # 没有交易记录，使用前收盘价作为基准
-            try:
-                api = easy_xt.get_api()
-                price_df = api.data.get_current_price([stock_code])
-                if price_df is not None and not price_df.empty:
-                    stock_data = price_df[price_df['code'] == stock_code]
-                    if not stock_data.empty:
-                        return stock_data.iloc[0]['pre_close']
-            except Exception:                pass
-            return None
+        # 优先使用内存中的上次触发价，避免文件读写延迟导致重复触发
+        if stock_code in self._last_trigger_price:
+            return self._last_trigger_price[stock_code]
 
-        # 查找该股票的最新触发记录
-        stock_log = self.trade_log[self.trade_log['证券代码'] == stock_code]
-        if stock_log.empty:
-            # 该股票没有交易记录，使用前收盘价
-            try:
-                api = easy_xt.get_api()
-                price_df = api.data.get_current_price([stock_code])
-                if price_df is not None and not price_df.empty:
-                    stock_data = price_df[price_df['code'] == stock_code]
-                    if not stock_data.empty:
-                        return stock_data.iloc[0]['pre_close']
-            except Exception:                pass
-            return None
+        # 内存中没有，从文件恢复（策略重启场景）
+        if not self.trade_log.empty:
+            stock_log = self.trade_log[self.trade_log['证券代码'] == stock_code]
+            if not stock_log.empty:
+                file_price = stock_log.iloc[-1]['触发价格']
+                self._last_trigger_price[stock_code] = file_price
+                return file_price
 
-        # 返回最新触发价格
-        return stock_log.iloc[-1]['触发价格']
+        # 文件和内存都没有，使用前收盘价作为首次基准
+        try:
+            api = easy_xt.get_api()
+            price_df = api.data.get_current_price([stock_code])
+            if price_df is not None and not price_df.empty:
+                stock_data = price_df[price_df['code'] == stock_code]
+                if not stock_data.empty:
+                    return stock_data.iloc[0]['pre_close']
+        except Exception:
+            pass
+        return None
 
     def calculate_change_pct(self, current_price, last_price):
         """
@@ -611,9 +607,9 @@ class 自适应网格策略(BaseStrategy):
                 )
 
                 if order_id and order_id > 0:
-                    self.log(f"✅ 买入成功: {stock_code} {quantity}股 @{price:.3f} 委托号:{order_id}")
+                    self.log(f"[OK] 买入成功: {stock_code} {quantity}股 @{price:.3f} 委托号:{order_id}")
                 else:
-                    self.log(f"❌ 买入失败: {stock_code} {quantity}股 @{price:.3f}")
+                    self.log(f"[ERR] 买入失败: {stock_code} {quantity}股 @{price:.3f}")
                     return False
 
             elif trade_type == 'sell':
@@ -627,9 +623,9 @@ class 自适应网格策略(BaseStrategy):
                 )
 
                 if order_id and order_id > 0:
-                    self.log(f"✅ 卖出成功: {stock_code} {quantity}股 @{price:.3f} 委托号:{order_id}")
+                    self.log(f"[OK] 卖出成功: {stock_code} {quantity}股 @{price:.3f} 委托号:{order_id}")
                 else:
-                    self.log(f"❌ 卖出失败: {stock_code} {quantity}股 @{price:.3f}")
+                    self.log(f"[ERR] 卖出失败: {stock_code} {quantity}股 @{price:.3f}")
                     return False
 
             # 记录交易日志
@@ -649,6 +645,9 @@ class 自适应网格策略(BaseStrategy):
                 self.trade_log = pd.concat([self.trade_log, new_log],
                                           ignore_index=True, copy=True)
             self.save_trade_log()
+
+            # 同步更新内存中的上次触发价，防止文件I/O延迟导致重复触发
+            self._last_trigger_price[stock_code] = price
 
             return True
 
