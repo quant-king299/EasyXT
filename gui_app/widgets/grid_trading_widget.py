@@ -23,7 +23,7 @@ from PyQt5.QtWidgets import (
     QFormLayout, QScrollArea, QSizePolicy,
     QToolButton, QMenu, QAction
 )
-from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QMutex, QWaitCondition
+from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize, QMutex, QWaitCondition, QObject, QEvent
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon, QTextCursor
 
 # 添加项目路径
@@ -52,6 +52,15 @@ try:
 except ImportError:
     EASYXT_AVAILABLE = False
     logger.info("EasyXT未安装，部分功能将不可用")
+
+
+class _NoWheelFilter(QObject):
+    """禁止QSpinBox/QDoubleSpinBox滚轮调整，防止滚动页面时误改参数"""
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Wheel:
+            event.ignore()
+            return True
+        return super().eventFilter(obj, event)
 
 
 class StrategyThread(QThread):
@@ -137,6 +146,9 @@ class GridTradingWidget(QWidget):
 
         # 自动加载默认配置文件
         self._auto_load_default_config()
+
+        # 禁止所有参数输入框的滚轮调整，避免滚动页面时误操作
+        self._disable_spinbox_wheel()
 
     def create_top_panel(self) -> QWidget:
         """创建顶部面板：策略选择和账户配置"""
@@ -552,6 +564,13 @@ class GridTradingWidget(QWidget):
             config_name
         )
         self.config_file_edit.setText(config_path)
+
+    def _disable_spinbox_wheel(self):
+        """禁止所有 QSpinBox/QDoubleSpinBox 滚轮调整参数"""
+        self._wheel_filter = _NoWheelFilter(self)
+        for spin in self.findChildren(QSpinBox) + self.findChildren(QDoubleSpinBox):
+            spin.installEventFilter(self._wheel_filter)
+            spin.setFocusPolicy(Qt.StrongFocus)
 
     def _auto_load_default_config(self):
         """启动时自动加载默认配置文件"""
