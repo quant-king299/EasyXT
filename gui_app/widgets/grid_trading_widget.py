@@ -179,6 +179,17 @@ class GridTradingWidget(QWidget):
         strategy_layout.addWidget(QLabel("配置文件:"))
         strategy_layout.addWidget(self.config_file_edit)
 
+        self.save_config_btn = QPushButton("💾 保存配置")
+        self.save_config_btn.clicked.connect(self.save_config)
+        self.save_config_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #FF9800; color: white;
+                border: none; padding: 8px 16px; border-radius: 4px; font-weight: bold;
+            }
+            QPushButton:hover { background-color: #F57C00; }
+        """)
+        strategy_layout.addWidget(self.save_config_btn)
+
         strategy_layout.addStretch()
         layout.addWidget(strategy_group)
 
@@ -586,6 +597,55 @@ class GridTradingWidget(QWidget):
                 self.config_file = default_config
             except Exception:
                 pass  # 静默失败，使用界面默认值
+
+    def save_config(self):
+        """保存当前参数到配置文件"""
+        config_file = getattr(self, 'config_file', '') or ''
+        if not config_file:
+            QMessageBox.warning(self, "保存失败", "未找到配置文件路径")
+            return
+
+        try:
+            # 读取现有配置（保留未在GUI显示的字段）
+            if os.path.exists(config_file):
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+            else:
+                config = {}
+
+            # 更新股票池
+            pool_text = self.stock_pool_edit.text().strip()
+            config['股票池'] = [s.strip() for s in pool_text.replace('，', ',').split(',') if s.strip()]
+
+            # 更新账户类型
+            config['账户类型'] = self.account_type_combo.currentText()
+
+            # 更新策略参数
+            strategy = self.strategy_combo.currentText()
+            if 'ATR' in strategy:
+                if hasattr(self, 'atr_period_spin'):
+                    config['ATR周期'] = self.atr_period_spin.value()
+                if hasattr(self, 'atr_multiplier_spin'):
+                    config['ATR倍数'] = self.atr_multiplier_spin.value()
+                if hasattr(self, 'min_grid_spacing_spin'):
+                    config['最小网格间距'] = self.min_grid_spacing_spin.value()
+                if hasattr(self, 'max_grid_spacing_spin'):
+                    config['最大网格间距'] = self.max_grid_spacing_spin.value()
+                if hasattr(self, 'grid_layers_spin'):
+                    config['网格层数'] = self.grid_layers_spin.value()
+                if hasattr(self, 'trade_quantity_spin3'):
+                    config['单次交易数量'] = self.trade_quantity_spin3.value()
+                if hasattr(self, 'max_position_spin3'):
+                    config['最大持仓数量'] = self.max_position_spin3.value()
+                if hasattr(self, 'ma_period_spin'):
+                    config['均线周期'] = self.ma_period_spin.value()
+
+            with open(config_file, 'w', encoding='utf-8') as f:
+                json.dump(config, f, ensure_ascii=False, indent=2)
+
+            self.log(f"配置已保存: {os.path.basename(config_file)}")
+        except Exception as e:
+            QMessageBox.warning(self, "保存失败", f"无法保存配置文件:\n{str(e)}")
 
     def apply_config(self, config: dict):
         """应用配置到界面"""

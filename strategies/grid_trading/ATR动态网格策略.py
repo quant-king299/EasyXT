@@ -248,7 +248,9 @@ class ATR动态网格策略:
 
             if not save_df.empty:
                 write_conn.register('_tmp_import', save_df)
-                write_conn.execute("INSERT OR IGNORE INTO stock_daily SELECT * FROM _tmp_import")
+                # 只插入已有列，避免列数不匹配导致的静默失败
+                cols_str = ', '.join(save_df.columns.tolist())
+                write_conn.execute(f"INSERT OR IGNORE INTO stock_daily ({cols_str}) SELECT {cols_str} FROM _tmp_import")
                 write_conn.unregister('_tmp_import')
             write_conn.close()
         except Exception:
@@ -270,8 +272,14 @@ class ATR动态网格策略:
                     "SELECT * FROM stock_daily WHERE stock_code = ? AND date >= ? ORDER BY date",
                     [stock_code, start]
                 ).fetchdf()
-                if df is not None and not df.empty and len(df) >= self.atr_period + 1:
-                    return df[['high', 'low', 'close']]
+                if df is not None and not df.empty and len(df) >= 2:
+                    # 检查数据新鲜度：最新日期超过2天没更新，触发QMT补数据
+                    if 'date' in df.columns:
+                        latest = pd.to_datetime(df['date'].max())
+                        if (dt.now() - latest).days <= 2:
+                            return df[['high', 'low', 'close']]
+                    else:
+                        return df[['high', 'low', 'close']]
             except Exception:
                 pass
 
@@ -285,11 +293,12 @@ class ATR动态网格策略:
                 adjust='front'
             )
             if kline_df is not None and not kline_df.empty and len(kline_df) >= 2:
-                # 异步存回DuckDB，下次直接用
                 self._save_kline_to_duckdb(stock_code, kline_df)
                 return kline_df
         except Exception:
             pass
+        # QMT下载失败（网络问题/股票代码不存在/数据未覆盖等）
+        print(f"  {stock_code}: 日线数据下载失败，请前往GUI「数据管理」→「下载A股数据」先下载历史数据。")
 
         return None
 

@@ -2,7 +2,9 @@
   "账户ID": "",
   "账户类型": "STOCK",
   "股票池": [
-    "511090.SH"
+    "511090.SH",
+    "511130.SH",
+    "300059.SZ"
   ],
   "QMT路径": "D:\\国金QMT交易端模拟\\userdata_mini",
   "会话ID": "atr_grid_session",
