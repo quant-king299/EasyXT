@@ -759,6 +759,29 @@ class MultiStrategyWidget(QWidget):
         bk = VirtualBookkeeper()
         if bk.is_position_confirmed():
             return True
+        # 检查账户是否真的有持仓，没有持仓则自动跳过
+        try:
+            import easy_xt, os as _os
+            api = easy_xt.get_api()
+            account_id = _os.environ.get('QMT_ACCOUNT_ID', '')
+            if not account_id:
+                # 尝试从 .env 文件读取
+                env_path = str(PROJECT_ROOT / '.env')
+                try:
+                    with open(env_path, encoding='utf-8') as f:
+                        for line in f:
+                            if line.startswith('QMT_ACCOUNT_ID='):
+                                account_id = line.split('=', 1)[1].strip()
+                                break
+                except Exception:
+                    pass
+            if account_id:
+                positions = api.trade.get_positions(account_id)
+                if positions is None or positions.empty:
+                    bk.mark_position_confirmed()
+                    return True
+        except Exception:
+            pass
         reply = QMessageBox.question(
             self, "⚠️ 持仓未分配",
             "检测到首次实盘运行，持仓尚未分配到策略。\n\n"
@@ -769,7 +792,6 @@ class MultiStrategyWidget(QWidget):
         )
         if reply == QMessageBox.Yes:
             self._show_position_assignment()
-            # 再次检查是否已确认
             bk2 = VirtualBookkeeper()
             return bk2.is_position_confirmed()
         return False
