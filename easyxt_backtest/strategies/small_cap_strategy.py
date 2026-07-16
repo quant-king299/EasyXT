@@ -4,6 +4,9 @@
 
 使用新的统一回测框架
 """
+import logging
+
+logger = logging.getLogger(__name__)
 from typing import List, Dict
 import pandas as pd
 
