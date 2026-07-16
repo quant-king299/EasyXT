@@ -478,3 +478,6 @@ userswukunappdatalocaltempeasyxt_test/
 
 # EasyXT 文档生成工作区（gen_*.py + 截图 + RAR 不提交）
 docs/manual/
+
+# 知乎运营内容（不提交到 GitHub）
+知乎/
