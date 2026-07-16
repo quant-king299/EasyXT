@@ -1,6 +1,6 @@
 from xtquant import xtconstant
 from datetime import datetime
-from qka.anis import RED, GREEN, YELLOW, BLUE, RESET
+from .anis import RED, GREEN, YELLOW, BLUE, RESET
 
 def add_stock_suffix(stock_code):
     """

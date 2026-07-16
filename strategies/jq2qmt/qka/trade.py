@@ -1,9 +1,9 @@
 from xtquant.xttrader import XtQuantTrader, XtQuantTraderCallback
 from xtquant.xttype import StockAccount
 import random
-from qka.utils import timestamp_to_datetime_string, parse_order_type, convert_to_current_date
-from qka.anis import RED, GREEN, YELLOW, BLUE, RESET
-from qka.logger import logger
+from .utils import timestamp_to_datetime_string, parse_order_type, convert_to_current_date
+from .anis import RED, GREEN, YELLOW, BLUE, RESET
+from .logger import logger
 
 import logging
 

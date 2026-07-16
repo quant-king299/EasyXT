@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel
 import inspect
 from typing import Any, Dict
-from qka.trade import create_trader
+from .trade import create_trader
 import uvicorn
 import uuid
 import hashlib
