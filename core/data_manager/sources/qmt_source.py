@@ -327,24 +327,25 @@ class QMTSource(BaseDataSource):
         """
         检查QMT数据源是否可用
 
+        只返回连接状态，避免每次调用都做真实的 xtdata API 探测，
+        从而提升 HybridDataManager 在 QMT 优先级较高时的数据获取速度。
+        实际数据调用失败时，HybridDataManager 会捕获异常并 fallback 到下一个数据源。
+
         Returns:
             bool: 数据源是否可用
         """
-        if not self.is_connected:
-            return False
+        return self.is_connected
 
-        try:
-            from xtquant import xtdata
-            # 简单测试：尝试获取一只股票的数据
-            test_data = xtdata.get_market_data_ex(
-                ['000001.SZ'],
-                period='1d',
-                start_time='20230101',
-                end_time='20230101'
-            )
-            return True
-        except Exception:
-            return False
+    def close(self):
+        """
+        关闭QMT数据源连接
+
+        QMTSource 没有需要关闭的连接对象，但需要显式重置连接状态，
+        避免 BaseSource.close() 因 _connection 为 None 而跳过状态重置。
+        """
+        self.is_connected = False
+        self._last_used = None
+        self._cache.clear()
 
     def get_stock_list(self, market: str = 'stock') -> Optional[List[str]]:
         """

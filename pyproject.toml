@@ -55,3 +55,9 @@ Source = "https://github.com/quant-king299/EasyXT"
 
 [tool.flit.module]
 name = "easy_xt"
+
+[tool.pytest.ini_options]
+testpaths = ["unit_tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
