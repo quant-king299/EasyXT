@@ -479,5 +479,9 @@ userswukunappdatalocaltempeasyxt_test/
 # EasyXT 文档生成工作区（gen_*.py + 截图 + RAR 不提交）
 docs/manual/
 
+# AI助手生成的内容（公众号推文等，不提交到 GitHub）
+docs/王者quant 公众号文章/
+docs/王者quant策略工坊/
+
 # 知乎运营内容（不提交到 GitHub）
 知乎/
