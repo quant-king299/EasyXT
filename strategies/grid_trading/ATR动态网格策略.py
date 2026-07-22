@@ -260,7 +260,15 @@ class ATR动态网格策略:
         """
         获取日线K线数据，优先级: DuckDB → QMT下载 → TDX备用
         返回: DataFrame with columns [high, low, close]，或 None
+
+        注意：连续失败后会触发退避机制，避免反复调用 download_history_data2 导致卡死。
         """
+        # 快速退出：如果该股票已被标记为跳过，直接返回 None
+        now = datetime.now()
+        skip_until = self._data_skip_until.get(stock_code)
+        if skip_until and now < skip_until:
+            return None
+
         # --- 第1优先: DuckDB 本地数据库（只读，不阻塞其他进程） ---
         reader = self._get_duckdb_reader()
         if reader is not None:
@@ -284,6 +292,8 @@ class ATR动态网格策略:
                 pass
 
         # --- 第2优先: QMT下载到本地后读取 ---
+        # 注意：download_history_data2 是阻塞调用，可能耗时较长
+        # calculate_atr() 已保证单只股票15分钟内只调用一次此路径
         try:
             kline_df = self.api.data.get_price(
                 codes=[stock_code],
@@ -294,12 +304,14 @@ class ATR动态网格策略:
             )
             if kline_df is not None and not kline_df.empty and len(kline_df) >= 2:
                 self._save_kline_to_duckdb(stock_code, kline_df)
+                self._reset_data_fail(stock_code)  # 成功后重置失败计数
                 return kline_df
         except Exception:
             pass
-        # QMT下载失败（网络问题/股票代码不存在/数据未覆盖等）
-        print(f"  {stock_code}: 日线数据下载失败，请前往GUI「数据管理」→「下载A股数据」先下载历史数据。")
 
+        # QMT下载失败（网络问题/股票代码不存在/数据未覆盖等）
+        # 使用失败退避机制：连续失败3次后跳过5分钟
+        self._handle_data_fail(stock_code, "日线数据下载失败")
         return None
 
     def calculate_atr(self, stock_code):
@@ -307,18 +319,32 @@ class ATR动态网格策略:
         基于日线K线数据计算ATR指标，缓存15分钟内复用
         数据源优先级: DuckDB → QMT → TDX
         返回: ATR值（价格单位）
+
+        注意：失败时也会更新缓存时间，防止每次循环都重试下载导致卡死。
         """
         now = datetime.now()
         last_update = self._atr_cache_time.get(stock_code)
 
-        if last_update is not None and (now - last_update).seconds < 900:
+        # 使用 total_seconds() 而非 .seconds，避免跨天时计算错误
+        if last_update is not None and (now - last_update).total_seconds() < 900:
+            return self._atr_cache.get(stock_code, 0)
+
+        # 失败降级检查：如果连续失败达到跳过阈值，直接返回缓存
+        skip_until = self._data_skip_until.get(stock_code)
+        if skip_until and now < skip_until:
             return self._atr_cache.get(stock_code, 0)
 
         try:
             kline_df = self._get_daily_kline(stock_code)
 
             if kline_df is None or kline_df.empty or len(kline_df) < 2:
-                return self._atr_cache.get(stock_code, 0)
+                # 【修复】数据获取失败时也更新缓存时间，避免每3秒重试下载导致卡死
+                # 失败时与成功时共用相同的15分钟缓存窗口，防止反复触发阻塞下载
+                self._atr_cache_time[stock_code] = now
+                cached = self._atr_cache.get(stock_code, 0)
+                if cached == 0:
+                    logger.info(f"  {stock_code}: [INFO] ATR数据暂不可用，15分钟内不再重试")
+                return cached
 
             kline_df = kline_df.sort_index()
             high = kline_df['high'].values
@@ -335,6 +361,7 @@ class ATR动态网格策略:
                 tr_list.append(tr)
 
             if not tr_list:
+                self._atr_cache_time[stock_code] = now
                 return self._atr_cache.get(stock_code, 0)
 
             period = min(self.atr_period, len(tr_list))
@@ -342,10 +369,14 @@ class ATR动态网格策略:
 
             self._atr_cache[stock_code] = atr
             self._atr_cache_time[stock_code] = now
+            # 成功获取数据，重置失败计数
+            self._reset_data_fail(stock_code)
             return atr
 
         except Exception as e:
-            print(f"  {stock_code}: 获取日线ATR失败 - {str(e)}，使用缓存值")
+            # 【修复】异常时也更新缓存时间，防止异常循环重试导致卡死
+            self._atr_cache_time[stock_code] = now
+            logger.info(f"  {stock_code}: 获取日线ATR异常 - {str(e)}，使用缓存值，15分钟内不再重试")
             return self._atr_cache.get(stock_code, 0)
 
     def _handle_data_fail(self, stock_code, error_msg):
