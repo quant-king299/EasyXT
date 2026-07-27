@@ -485,3 +485,7 @@ docs/王者quant策略工坊/
 
 # 知乎运营内容（不提交到 GitHub）
 知乎/
+
+# Node.js（puppeteer 抓取工具）
+node_modules/
+package-lock.json

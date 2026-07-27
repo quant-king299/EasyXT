@@ -128,6 +128,8 @@ class TushareDownloadThread(QThread):
                 self._download_cb_share()
             elif self.task_type == 'basic_all':
                 self._download_basic_all()
+            elif self.task_type == 'factor_data_update':
+                self._download_factor_data_update()
             else:
                 self.log_signal.emit(f"未知任务类型: {self.task_type}")
         except Exception as e:
@@ -2467,6 +2469,145 @@ class TushareDownloadThread(QThread):
             import traceback
             self.error_signal.emit(f"基础数据下载失败: {str(e)}\n{traceback.format_exc()}")
 
+    def _download_factor_data_update(self):
+        """因子数据增量更新——按顺序更新 EasyFactor 依赖的核心表"""
+        token = self.kwargs.get('token', '')
+        if token:
+            os.environ['TUSHARE_TOKEN'] = token
+
+        today = datetime.now().strftime('%Y%m%d')
+        update_tables = self.kwargs.get('update_tables', ['stock_daily', 'stock_market_cap'])
+
+        self.log_signal.emit("=" * 60)
+        self.log_signal.emit("🧬 因子数据增量更新")
+        self.log_signal.emit(f"  目标日期: {today}")
+        self.log_signal.emit(f"  更新范围: {', '.join(update_tables)}")
+        self.log_signal.emit("=" * 60)
+
+        summary = {}
+
+        for table in update_tables:
+            if not self._is_running:
+                break
+            self.log_signal.emit(f"\n--- 更新 {table} ---")
+            try:
+                if table == 'stock_daily':
+                    result = self._update_stock_daily_for_factor()
+                else:
+                    continue
+                summary[table] = result
+                self.log_signal.emit(f"  ✅ {table}: {result.get('message', '完成')}")
+            except StopIteration:
+                self.log_signal.emit(f"  ⏸️ {table}: 用户停止")
+                break
+            except Exception as e:
+                self.log_signal.emit(f"  ❌ {table}: {e}")
+                summary[table] = {'status': 'failed', 'message': str(e)}
+
+        self.log_signal.emit(f"\n{'=' * 60}")
+        self.log_signal.emit("📊 更新汇总:")
+        for t, r in summary.items():
+            status = r.get('status', 'unknown')
+            msg = r.get('message', '')
+            icon = '✅' if status == 'ok' else '❌'
+            self.log_signal.emit(f"  {icon} {t}: {msg}")
+        self.log_signal.emit("=" * 60)
+
+        self.finished_signal.emit({'success': True, 'type': 'factor_data_update', 'summary': summary})
+
+    def _update_stock_daily_for_factor(self):
+        """更新 stock_daily 表（核心日线数据）"""
+        db_path = self.kwargs.get('db_path') or self._get_db_path()
+        conn = duckdb.connect(db_path)
+
+        # 检测已有数据
+        existing_map = self._get_existing_stocks(conn, 'stock_daily', date_col='date', code_col='stock_code')
+        self.log_signal.emit(f"  已有 {len(existing_map)} 只股票的日线数据")
+
+        # 获取全 A 股列表
+        pro = self._get_tushare_pro()
+        stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+        symbols = stock_list['ts_code'].tolist()
+        today = datetime.now().strftime('%Y%m%d')
+
+        # 增量分类
+        skip_list, incremental_list, new_list = [], [], []
+        for ts_code in symbols:
+            if ts_code in existing_map:
+                max_date = existing_map[ts_code]
+                target_str = f"{today[:4]}-{today[4:6]}-{today[6:]}"
+                if max_date and str(max_date)[:10] >= target_str:
+                    skip_list.append(ts_code)
+                else:
+                    incremental_list.append(ts_code)
+            else:
+                new_list.append(ts_code)
+
+        self.log_signal.emit(f"  跳过(已完整): {len(skip_list)} | 增量: {len(incremental_list)} | 新下载: {len(new_list)}")
+
+        # 复用已有的 _download_daily 逻辑——但这里我们需要内联实现来避免传递复杂的 kwargs
+        need_list = incremental_list + new_list
+        if not need_list:
+            conn.close()
+            return {'status': 'ok', 'message': f'已是最新 ({len(skip_list)} 只)'}
+
+        # 确保表存在
+        try:
+            conn.execute("SELECT COUNT(*) FROM stock_daily LIMIT 1")
+        except Exception:
+            conn.execute("""
+                CREATE TABLE stock_daily (
+                    stock_code VARCHAR, symbol_type VARCHAR DEFAULT 'stock',
+                    date DATE, period VARCHAR DEFAULT '1d',
+                    open DOUBLE, high DOUBLE, low DOUBLE, close DOUBLE,
+                    volume BIGINT, amount DOUBLE,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY (stock_code, date, period)
+                )
+            """)
+
+        # 计算起始日期：增量从最新日期+1，新下载从3年前
+        three_years_ago = f"{datetime.now().year - 3}0101"
+        success = 0
+        total = len(need_list)
+
+        for i, ts_code in enumerate(need_list):
+            if not self._is_running:
+                conn.close()
+                raise StopIteration("用户停止")
+
+            try:
+                if ts_code in existing_map and existing_map[ts_code]:
+                    max_d = str(existing_map[ts_code])[:10].replace('-', '')
+                    start_d = (pd.to_datetime(max_d) + pd.Timedelta(days=1)).strftime('%Y%m%d')
+                else:
+                    start_d = three_years_ago
+
+                df = pro.daily(ts_code=ts_code, start_date=start_d, end_date=today,
+                              fields='ts_code,trade_date,open,high,low,close,vol,amount')
+                if df is not None and not df.empty:
+                    # 列映射：Tushare → stock_daily
+                    df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+                    df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+                    df['symbol_type'] = 'stock'
+                    df['period'] = '1d'
+                    # 复用已有的批量写入方法
+                    self._save_daily_dataframe(conn, df)
+                    success += 1
+
+            except Exception as e:
+                self.log_signal.emit(f"    ⚠️ {ts_code}: {str(e)[:60]}")
+
+            if (i + 1) % 100 == 0:
+                self.log_signal.emit(f"    日线进度: {i + 1}/{total}（成功 {success} 只）")
+                self.progress_signal.emit(i + 1, total)
+            import time
+            time.sleep(0.05)
+
+        conn.close()
+        return {'status': 'ok', 'message': f'新增 {success} 只股票数据，跳过 {len(skip_list)} 只（已完整）'}
+
 class TushareDataWidget(QWidget):
     """Tushare数据下载组件（整合版）"""
 
@@ -2594,6 +2735,10 @@ class TushareDataWidget(QWidget):
         etf_data_tab = self._create_etf_data_tab()
         tab_widget.addTab(etf_data_tab, "📈 ETF数据")
 
+        # 日线数据状态标签页
+        factor_tab = self._create_factor_maintenance_tab()
+        tab_widget.addTab(factor_tab, "📅 日线状态")
+
         layout.addWidget(tab_widget)
 
         # 日志区域
@@ -2608,8 +2753,15 @@ class TushareDataWidget(QWidget):
                 background-color: #1e1e1e;
                 color: #d4d4d4;
                 border: 1px solid #3c3c3c;
+                selection-background-color: #264f78;
+                selection-color: #ffffff;
             }
         """)
+        # 确保 Ctrl+C 和右键复制可用（readOnly 模式下有时会失效）
+        self.log_text.setContextMenuPolicy(Qt.ActionsContextMenu)
+        copy_action = self.log_text.addAction("📋 复制选中内容")
+        copy_action.setShortcut("Ctrl+C")
+        copy_action.triggered.connect(lambda: self._copy_log_selection())
         log_layout.addWidget(self.log_text)
 
         layout.addWidget(log_group)
@@ -4175,6 +4327,210 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread('basic_all', token=token,
                                        start_date=start_date, end_date=end_date)
         self._start_download_thread(thread)
+
+    # ============================================================
+    # 因子数据维护 Tab
+    # ============================================================
+
+    def _create_factor_maintenance_tab(self):
+        """创建因子数据维护标签页"""
+        tab = QWidget()
+        layout = QVBoxLayout(tab)
+
+        # 说明
+        info_label = QLabel(
+            "📅 <b>日线数据状态</b><br><br>"
+            "EasyFactor 的 50+ 因子全部从 <b>stock_daily</b> 表实时计算。<br>"
+            "只需日线数据是最新的，因子就能自动刷新。<br><br>"
+            "📌 <b>推荐更新方式</b>：QMT「数据管理」tab（更快更全）<br>"
+            "📌 <b>备选</b>：下方 Tushare 按钮（QMT 无法登录时应急）"
+        )
+        info_label.setStyleSheet("""
+            QLabel {
+                background-color: #e8f5e9;
+                color: #2e7d32;
+                padding: 15px;
+                border-radius: 5px;
+                border: 1px solid #c8e6c9;
+            }
+        """)
+        layout.addWidget(info_label)
+
+        # 数据状态仪表盘
+        status_group = QGroupBox("📊 数据状态仪表盘")
+        status_layout = QFormLayout(status_group)
+
+        self.factor_status_labels = {}
+        tables_info = [
+            ('stock_daily', 'stock_daily', 'date', 'stock_code', '日线 OHLCV（EasyFactor 50+因子唯一数据源）'),
+        ]
+        for key, table, date_col, code_col, desc in tables_info:
+            label = QLabel("检测中...")
+            label.setStyleSheet("color: #666; padding: 3px;")
+            status_layout.addRow(f"{desc}:", label)
+            self.factor_status_labels[key] = label
+
+        layout.addWidget(status_group)
+
+        # 刷新按钮
+        refresh_btn = QPushButton("🔄 刷新状态")
+        refresh_btn.clicked.connect(self._refresh_factor_status)
+        layout.addWidget(refresh_btn)
+
+        layout.addSpacing(10)
+
+        # 更新按钮区
+        btn_group = QGroupBox("📥 数据更新")
+        btn_layout = QVBoxLayout(btn_group)
+
+        btn_font = QFont("Microsoft YaHei", 10)
+
+        # 仅更新日线
+        daily_btn = QPushButton("📈 Tushare 增量更新日线（备选，QMT用户可跳过）")
+        daily_btn.setFont(QFont("Microsoft YaHei", 9))
+        daily_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #1976D2; color: white;
+                padding: 8px; border-radius: 5px;
+            }
+            QPushButton:hover { background-color: #1565C0; }
+        """)
+        daily_btn.clicked.connect(lambda: self.start_download_factor_update(['stock_daily']))
+        btn_layout.addWidget(daily_btn)
+
+        layout.addWidget(btn_group)
+
+        layout.addStretch()
+
+        # 打开 tab 时自动刷新状态（容错：DuckDB 不可用时静默跳过）
+        try:
+            self._refresh_factor_status()
+        except Exception:
+            pass
+
+        return tab
+
+    def _refresh_factor_status(self):
+        """查询 DuckDB 并刷新仪表盘状态"""
+        # 自动检测 DuckDB 路径
+        db_path = get_default_db_path()
+        if not os.path.exists(db_path):
+            for p in ['D:/StockData/stock_data.ddb', 'C:/StockData/stock_data.ddb',
+                       'E:/StockData/stock_data.ddb']:
+                if os.path.exists(p):
+                    db_path = p
+                    break
+        tables_info = [
+            ('stock_daily', 'stock_daily', 'date', 'stock_code'),
+        ]
+
+        for key, table, date_col, code_col in tables_info:
+            label = self.factor_status_labels.get(key)
+            if not label:
+                continue
+            try:
+                if not os.path.exists(db_path):
+                    label.setText("❌ 数据库未找到")
+                    label.setStyleSheet("color: #c62828; padding: 3px;")
+                    continue
+
+                conn = duckdb.connect(db_path, read_only=True)
+                try:
+                    # 检查表是否存在
+                    tables = conn.execute(
+                        "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                    ).fetchall()
+                    table_names = [t[0] for t in tables]
+                    if table not in table_names:
+                        label.setText("⚠️ 表不存在（需下载）")
+                        label.setStyleSheet("color: #e65100; padding: 3px; font-weight: bold;")
+                        continue
+
+                    # 最新日期
+                    max_date = conn.execute(f"SELECT MAX({date_col}) FROM {table}").fetchone()
+                    # 记录数和股票数
+                    record_cnt = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                    stock_cnt = conn.execute(
+                        f"SELECT COUNT(DISTINCT {code_col}) FROM {table}"
+                    ).fetchone()[0]
+
+                    if max_date and max_date[0]:
+                        latest = str(max_date[0])[:10]
+                        # 判断新鲜度
+                        today = datetime.now().strftime('%Y-%m-%d')
+                        days_behind = (datetime.now() - pd.to_datetime(latest)).days if latest else 999
+
+                        if table == 'financial_indicator':
+                            # 财务数据按报告期判断，滞后90天正常
+                            if days_behind <= 120:
+                                color = '#2e7d32'
+                            elif days_behind <= 180:
+                                color = '#e65100'
+                            else:
+                                color = '#c62828'
+                        else:
+                            if days_behind <= 3:
+                                color = '#2e7d32'  # 绿色：3天内
+                            elif days_behind <= 30:
+                                color = '#e65100'  # 橙色：一个月内
+                            else:
+                                color = '#c62828'  # 红色：超过一个月
+
+                        stock_str = f"{stock_cnt:,}只" if stock_cnt else ""
+                        label.setText(
+                            f"📅 {latest} | 📊 {record_cnt:,}条 | "
+                            f"📈 {stock_str} | ⏰ 滞后 {days_behind} 天"
+                        )
+                    else:
+                        label.setText("⚠️ 表为空")
+                        color = '#c62828'
+                        label.setStyleSheet(f"color: {color}; padding: 3px; font-weight: bold;")
+
+                    label.setStyleSheet(f"color: {color}; padding: 3px;")
+                finally:
+                    conn.close()
+            except Exception as e:
+                label.setText(f"❌ 查询失败: {e}")
+                label.setStyleSheet("color: #c62828; padding: 3px;")
+
+    def start_download_factor_update(self, update_tables=None):
+        """开始因子数据增量更新"""
+        if update_tables is None:
+            update_tables = ['stock_daily', 'stock_market_cap']
+
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+
+        os.environ['TUSHARE_TOKEN'] = token
+
+        self.log_text.append("=" * 60)
+        self.log_text.append(f"🧬 开始因子数据增量更新...")
+        self.log_text.append("=" * 60)
+
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+
+        thread = TushareDownloadThread(
+            'factor_data_update',
+            token=token,
+            update_tables=update_tables
+        )
+        self._start_download_thread(thread)
+
+    def _on_factor_tab_activated(self):
+        """因子数据 tab 被激活时自动刷新状态"""
+        self._refresh_factor_status()
+
+    # ============================================================
+
+    def _copy_log_selection(self):
+        """复制日志选中文本到剪贴板"""
+        cursor = self.log_text.textCursor()
+        if cursor.hasSelection():
+            from PyQt5.QtWidgets import QApplication
+            QApplication.clipboard().setText(cursor.selectedText())
 
     def _on_log(self, message):
         """处理日志消息"""
