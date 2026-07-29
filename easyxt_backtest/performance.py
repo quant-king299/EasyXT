@@ -335,3 +335,196 @@ class PerformanceAnalyzer:
         report.append("\n" + "="*70)
 
         return "\n".join(report)
+
+    # ==================== HTML 报告 ====================
+
+    def generate_html_report(self,
+                              daily_df: pd.DataFrame,
+                              trades_df: pd.DataFrame,
+                              strategy_name: str = "策略回测",
+                              symbol: str = "",
+                              date_range: str = "",
+                              initial_cash: float = 1_000_000,
+                              output_path: str = "") -> str:
+        """
+        生成独立 HTML 回测报告（含 SVG 净值曲线和回撤图）
+
+        Args:
+            daily_df: 日净值 DataFrame，需含 date 和 total 列
+            trades_df: 交易记录 DataFrame，需含 date, action, price, shares 列
+            strategy_name: 策略名称
+            symbol: 标的代码
+            date_range: 回测区间描述（如 "2024-07-01 → 2025-07-01"）
+            initial_cash: 初始资金
+            output_path: 输出路径。为空则自动存到 easyxt_backtest/output/
+
+        Returns:
+            HTML 文件路径
+        """
+        import numpy as np
+        from pathlib import Path as _Path
+
+        daily = daily_df.copy()
+        trades = trades_df.copy()
+        daily["date"] = pd.to_datetime(daily["date"])
+        trades["date"] = pd.to_datetime(trades["date"])
+
+        # --- 计算指标 ---
+        nav = (daily["total"] / initial_cash).values
+        dates = daily["date"].dt.strftime("%Y-%m-%d").values
+        cummax = np.maximum.accumulate(nav)
+        dd = (nav - cummax) / cummax
+
+        total_return = nav[-1] - 1
+        ar = (nav[-1]) ** (252 / max(len(nav), 1)) - 1
+        max_dd = dd.min()
+        daily_ret = np.diff(nav) / nav[:-1]
+        std_ret = np.std(daily_ret) if len(daily_ret) > 0 else 1e-9
+        sharpe = np.mean(daily_ret) / std_ret * np.sqrt(252) if std_ret > 0 else 0
+        calmar = ar / abs(max_dd) if max_dd != 0 else 0
+        annual_vol = std_ret * np.sqrt(252)
+        final_value = nav[-1] * initial_cash
+        buy_count = len(trades[trades["action"] == "BUY"])
+        sell_count = len(trades[trades["action"] == "SELL"])
+
+        # --- SVG 净值曲线 ---
+        w, h = 800, 350
+        pad = 60
+        step = max(1, len(nav) // 200)
+        x_scale = (w - 2 * pad) / max(len(nav) - 1, 1)
+        y_min, y_max = min(nav) * 0.98, max(nav) * 1.02
+        y_range = max(y_max - y_min, 1e-9)
+
+        def yp(v):
+            return h - pad - (v - y_min) / y_range * (h - 2 * pad)
+
+        nav_pts = " ".join(
+            f"{pad + i * x_scale:.1f},{yp(nav[i]):.1f}"
+            for i in range(0, len(nav), step)
+        )
+
+        buys = sells = ""
+        for _, t in trades.iterrows():
+            idx = daily[daily["date"] == t["date"]].index
+            if len(idx) > 0:
+                x = pad + idx[0] * x_scale
+                c = "red" if t["action"] == "BUY" else "green"
+                s = (f'<circle cx="{x:.1f}" cy="{yp(nav[idx[0]]):.1f}" '
+                     f'r="4" fill="{c}"/>\n            ')
+                if t["action"] == "BUY":
+                    buys += s
+                else:
+                    sells += s
+
+        # --- SVG 回撤 ---
+        dd_bars = ""
+        for i in range(0, len(nav), max(1, len(nav) // 300)):
+            if dd[i] < 0:
+                x = pad + i * x_scale
+                bh = abs(dd[i]) / abs(max_dd) * (h - 2 * pad) * 0.8 if max_dd != 0 else 0
+                dd_bars += (f'<rect x="{x - 1:.1f}" y="{h - pad - bh:.1f}" '
+                            f'width="2" height="{bh:.1f}" fill="#e74c3c" opacity="0.3"/>')
+
+        # --- 交易明细 ---
+        trows = ""
+        for _, t in trades.iterrows():
+            c = "#e74c3c" if t["action"] == "BUY" else "#27ae60"
+            trows += (f"<tr><td>{t['date'].strftime('%Y-%m-%d')}</td>"
+                      f"<td style='color:{c};font-weight:600'>{t['action']}</td>"
+                      f"<td>{t['price']:.2f}</td><td>{t['shares']:,.0f}</td></tr>")
+
+        pos_cls = "positive" if total_return > 0 else "negative"
+        sym_str = f"&nbsp;|&nbsp; {symbol}" if symbol else ""
+
+        html = f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>{strategy_name} — {symbol or '回测报告'}</title>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background: #f5f6fa; color: #2d3436; line-height: 1.6; }}
+.container {{ max-width: 960px; margin: 0 auto; padding: 24px; }}
+.header {{ background: linear-gradient(135deg, #2d3436, #636e72); color: white; padding: 40px 32px; border-radius: 12px; margin-bottom: 24px; }}
+.header h1 {{ font-size: 24px; margin-bottom: 8px; }}
+.header .sub {{ opacity: 0.8; font-size: 14px; }}
+.card {{ background: white; border-radius: 12px; padding: 24px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.06); }}
+.card h2 {{ font-size: 16px; color: #636e72; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 2px solid #dfe6e9; }}
+.metrics {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; }}
+.metric {{ text-align: center; padding: 16px; background: #f8f9fa; border-radius: 8px; }}
+.metric .label {{ font-size: 12px; color: #636e72; margin-bottom: 4px; }}
+.metric .value {{ font-size: 22px; font-weight: 700; color: #2d3436; }}
+.metric .value.positive {{ color: #27ae60; }}
+.metric .value.negative {{ color: #e74c3c; }}
+table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+th {{ text-align: left; padding: 10px 12px; background: #f8f9fa; border-bottom: 2px solid #dfe6e9; color: #636e72; font-weight: 600; }}
+td {{ padding: 8px 12px; border-bottom: 1px solid #f1f2f6; }}
+tr:hover td {{ background: #f8f9fa; }}
+.legend {{ display: flex; gap: 20px; font-size: 12px; color: #636e72; margin-bottom: 8px; }}
+.legend span {{ display: flex; align-items: center; gap: 4px; }}
+.dot {{ width: 8px; height: 8px; border-radius: 50%; display: inline-block; }}
+.footer {{ text-align: center; color: #b2bec3; font-size: 12px; padding: 20px; }}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>{strategy_name}</h1>
+    <div class="sub">{symbol}{sym_str if not sym_str else ''} &nbsp;|&nbsp; {date_range} &nbsp;|&nbsp; 初始资金 ¥{initial_cash:,.0f}</div>
+  </div>
+  <div class="card">
+    <h2>绩效指标</h2>
+    <div class="metrics">
+      <div class="metric"><div class="label">总收益率</div><div class="value {pos_cls}">{total_return:+.2%}</div></div>
+      <div class="metric"><div class="label">年化收益</div><div class="value {pos_cls}">{ar:+.2%}</div></div>
+      <div class="metric"><div class="label">最终资金</div><div class="value positive">¥{final_value:,.0f}</div></div>
+      <div class="metric"><div class="label">最大回撤</div><div class="value negative">{max_dd:.2%}</div></div>
+      <div class="metric"><div class="label">夏普比率</div><div class="value">{sharpe:.2f}</div></div>
+      <div class="metric"><div class="label">卡玛比率</div><div class="value">{calmar:.2f}</div></div>
+      <div class="metric"><div class="label">年化波动</div><div class="value">{annual_vol:.2%}</div></div>
+      <div class="metric"><div class="label">交易天数</div><div class="value">{len(daily)}</div></div>
+      <div class="metric"><div class="label">买/卖次数</div><div class="value">{buy_count} / {sell_count}</div></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>净值曲线</h2>
+    <div class="legend"><span><span class="dot" style="background:#3498db"></span>策略净值</span><span><span class="dot" style="background:red"></span>买入</span><span><span class="dot" style="background:green"></span>卖出</span></div>
+    <svg viewBox="0 0 {w} {h}" width="100%" height="350">
+      <line x1="{pad}" y1="{yp(1):.1f}" x2="{w-pad}" y2="{yp(1):.1f}" stroke="#b2bec3" stroke-width="1" stroke-dasharray="4,4"/>
+      <polyline points="{nav_pts}" fill="none" stroke="#3498db" stroke-width="2"/>
+      {buys}{sells}
+      <text x="{pad}" y="20" font-size="11" fill="#636e72">起始净值: 1.00</text>
+      <text x="{w-pad}" y="20" font-size="11" fill="#636e72" text-anchor="end">终值: {nav[-1]:.2f}</text>
+    </svg>
+  </div>
+  <div class="card">
+    <h2>回撤曲线</h2>
+    <svg viewBox="0 0 {w} 160" width="100%" height="160">
+      <line x1="{pad}" y1="130" x2="{w-pad}" y2="130" stroke="#dfe6e9" stroke-width="1"/>
+      {dd_bars}
+      <text x="{pad}" y="14" font-size="11" fill="#636e72">最大回撤: {max_dd:.2%}</text>
+    </svg>
+  </div>
+  <div class="card">
+    <h2>交易明细</h2>
+    <table><thead><tr><th>日期</th><th>方向</th><th>价格</th><th>股数</th></tr></thead><tbody>{trows}</tbody></table>
+  </div>
+  <div class="footer">EasyXT {strategy_name} · 生成于 {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}</div>
+</div>
+</body>
+</html>"""
+
+        # --- 保存 ---
+        if not output_path:
+            import os as _os
+            out_dir = _Path(__file__).parent / "output"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            safe_name = strategy_name.replace(" ", "_").replace("/", "_")
+            output_path = str(out_dir / f"{safe_name}_report.html")
+        else:
+            _Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html)
+
+        return output_path

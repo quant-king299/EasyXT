@@ -209,6 +209,56 @@ def _render_category_tab(cat: str, cat_reg: dict):
             else:
                 st.info("暂无交易记录")
 
+        # ── HTML 报告下载 ──
+        st.markdown("---")
+        st.subheader("📥 回测报告")
+
+        if st.button("📄 生成 HTML 回测报告", type="secondary",
+                     key=f"gen_report_{cat}",
+                     help="生成包含净值曲线、回撤图、交易明细的独立HTML报告"):
+            with st.spinner("正在生成 HTML 报告..."):
+                try:
+                    from easyxt_backtest.performance import PerformanceAnalyzer
+                    import tempfile
+
+                    # 准备数据
+                    nav_df = result.get('nav_curve', pd.DataFrame())
+                    trades_list = result.get('trades', [])
+                    metrics = result.get('metrics', {})
+
+                    daily_df = nav_df.reset_index()
+                    daily_df.rename(columns={'index': 'date', 'total_value': 'total'}, inplace=True)
+                    if 'total' not in daily_df.columns and 'nav' in daily_df.columns:
+                        daily_df['total'] = daily_df['nav'] * metrics.get('initial_cash', 100000)
+
+                    trades_df = pd.DataFrame(trades_list) if trades_list else pd.DataFrame()
+                    if not trades_df.empty:
+                        trades_df.rename(columns={'action': 'action', 'action': 'action'}, inplace=True)
+
+                    analyzer = PerformanceAnalyzer()
+                    html_path = analyzer.generate_html_report(
+                        daily_df=daily_df,
+                        trades_df=trades_df,
+                        strategy_name=f"{cfg['label']}策略回测",
+                        initial_cash=metrics.get('initial_cash', 100000),
+                    )
+
+                    with open(html_path, 'rb') as f:
+                        html_bytes = f.read()
+
+                    st.download_button(
+                        label="⬇️ 下载 HTML 报告",
+                        data=html_bytes,
+                        file_name=f"{cat}_backtest_report.html",
+                        mime="text/html",
+                        key=f"dl_report_{cat}",
+                    )
+                    st.success(f"✅ 报告已生成（{len(html_bytes)/1024:.0f} KB），点击上方按钮下载")
+                except Exception as e:
+                    st.error(f"报告生成失败: {e}")
+                    import traceback
+                    st.code(traceback.format_exc())
+
 
 def _render_metrics(metrics: dict):
     """渲染回测指标"""

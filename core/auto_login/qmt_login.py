@@ -291,54 +291,79 @@ class QMTAutoLogin:
 
     def _check_logged_in(self, app: Application) -> bool:
         """检查是否已登录"""
+        # ① 优先用 xtquant API 检测（最可靠）
+        if self._check_xtquant_connected():
+            self.logger.info("xtquant 已连接，判断为已登录")
+            return True
+
+        # ② 回退到窗口标题分析
         try:
             top_window = app.top_window()
             window_text = top_window.window_text()
 
-            self.logger.debug(f"窗口标题: {window_text}")
+            self.logger.info(f"窗口标题: {window_text}")
 
             # 检查是否有登录窗口的特征
-            # 登录窗口通常包含"登录"、"密码"、"账号"等关键词
             login_keywords = ["登录", "密码", "账号", "用户", "Login", "Password", "User"]
             if any(keyword in window_text for keyword in login_keywords):
-                self.logger.debug("检测到登录窗口特征")
+                self.logger.info("检测到登录窗口特征")
                 return False
 
-            # 检查是否有已登录窗口的特征
-            # 已登录窗口通常包含"委托"、"持仓"、"交易"等关键词
+            # 检查是否有已登录窗口的特征（大QMT主界面）
             logged_in_keywords = ["委托", "持仓", "交易", "行情", "资产", "策略"]
             if any(keyword in window_text for keyword in logged_in_keywords):
-                self.logger.debug("检测到已登录窗口特征")
+                self.logger.info("检测到已登录窗口特征")
                 return True
 
-            # 如果窗口标题是"miniQMT"或"QMT"，可能已经登录
+            # miniQMT 登录后只有浮动工具栏，没有上述关键词
+            # 如果标题包含 miniQMT/QMT 且没有登录关键字 → 认为已登录
             if "QMT" in window_text or "mini" in window_text.lower():
-                self.logger.debug("检测到QMT主窗口")
-                # 进一步检查：尝试找密码输入框，如果有说明在登录界面
+                self.logger.info("检测到miniQMT窗口")
                 if self._has_password_field(top_window):
-                    self.logger.debug("发现密码输入框，判断为登录界面")
+                    self.logger.info("发现密码输入框，判断为登录界面")
                     return False
+                self.logger.info("miniQMT窗口无登录特征，判断为已登录")
                 return True
 
             # 默认情况下，认为未登录
-            self.logger.debug("无法确定登录状态，默认为未登录")
+            self.logger.info("无法确定登录状态(window_text='%s')，默认为未登录", window_text)
             return False
 
         except Exception as e:
-            self.logger.debug(f"检查登录状态异常: {e}")
+            self.logger.warning(f"窗口检测异常: {e}，尝试 xtquant 回退")
+            return self._check_xtquant_connected()
+
+    def _check_xtquant_connected(self) -> bool:
+        """通过 xtquant API 检查是否已连接（比窗口标题更可靠）"""
+        try:
+            from xtquant import xtdata
+            # xtdata.is_connected() 返回 True 表示已连接并登录
+            if hasattr(xtdata, 'is_connected'):
+                return xtdata.is_connected()
+            # 回退：尝试获取客户端对象
+            if hasattr(xtdata, 'get_client'):
+                client = xtdata.get_client()
+                return client is not None
+            return False
+        except Exception as e:
+            self.logger.debug(f"xtquant 检测失败: {e}")
             return False
 
     def _has_password_field(self, window) -> bool:
         """检查窗口是否有密码输入框"""
         try:
-            # 检查是否有密码相关的Edit控件
-            # 通常密码输入框是Edit2或包含"密码"的控件
-            if hasattr(window, 'Edit2') and window.Edit2.Exists():
-                return True
-            if hasattr(window, 'Edit'):
-                for edit in window.children(class_name='Edit'):
-                    if '密码' in str(edit.window_text()) or 'password' in str(edit.window_text()).lower():
-                        return True
+            # 只检查文本含"密码"或"password"的 Edit 控件
+            # 不再检查 Edit2.Exists() —— miniQMT 已登录后的代码输入框也会匹配
+            if hasattr(window, 'children'):
+                for child in window.children():
+                    try:
+                        class_name = child.class_name() if callable(child.class_name) else child.class_name
+                        if class_name and 'Edit' in class_name:
+                            text = child.window_text() if callable(child.window_text) else child.window_text
+                            if text and ('密码' in str(text) or 'password' in str(text).lower()):
+                                return True
+                    except Exception:
+                        continue
             return False
         except Exception:
             return False

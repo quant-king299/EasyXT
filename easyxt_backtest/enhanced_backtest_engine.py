@@ -213,6 +213,46 @@ class EnhancedBacktestResult:
 
         logger.info(f"\n{'='*80}\n")
 
+    def generate_html_report(self,
+                              strategy_name: str = "策略回测",
+                              symbol: str = "",
+                              date_range: str = "",
+                              output_path: str = "") -> str:
+        """
+        生成 HTML 回测报告（含 SVG 图表，可直接在浏览器打开）
+
+        Args:
+            strategy_name: 策略名称
+            symbol: 标的代码
+            date_range: 回测区间（如 "2024-07-01 → 2025-07-01"）
+            output_path: 输出路径。默认保存到 easyxt_backtest/output/
+
+        Returns:
+            HTML 文件路径
+        """
+        from .performance import PerformanceAnalyzer
+
+        daily_df = self.portfolio_history
+        trades_df = self.trades
+        initial_cash = self.performance.get("initial_cash", 1_000_000)
+
+        if not date_range and not daily_df.empty:
+            d_min = daily_df["date"].iloc[0]
+            d_max = daily_df["date"].iloc[-1]
+            if hasattr(d_min, "strftime"):
+                date_range = f"{d_min.strftime('%Y-%m-%d')} → {d_max.strftime('%Y-%m-%d')}"
+
+        analyzer = PerformanceAnalyzer()
+        return analyzer.generate_html_report(
+            daily_df=daily_df,
+            trades_df=trades_df,
+            strategy_name=strategy_name,
+            symbol=symbol,
+            date_range=date_range,
+            initial_cash=initial_cash,
+            output_path=output_path,
+        )
+
 
 
 
@@ -304,7 +344,8 @@ class EnhancedBacktestEngine:
 
                      start_date: str,
 
-                     end_date: str) -> Dict:
+                     end_date: str,
+                     auto_report: bool = True) -> EnhancedBacktestResult:
 
         """
 
@@ -953,7 +994,7 @@ class EnhancedBacktestEngine:
 
 
 
-        return EnhancedBacktestResult(
+        result = EnhancedBacktestResult(
 
             trades=trades_df,
 
@@ -972,6 +1013,20 @@ class EnhancedBacktestEngine:
             statistics=statistics
 
         )
+
+        # 自动生成 HTML 报告
+        if auto_report:
+            try:
+                html_path = result.generate_html_report(
+                    strategy_name=getattr(strategy, "name", "策略回测"),
+                    symbol=getattr(strategy, "symbol", ""),
+                    date_range=f"{start_date} → {end_date}",
+                )
+                logger.info(f"HTML 回测报告已生成: {html_path}")
+            except Exception as e:
+                logger.warning(f"HTML 报告生成失败（不影响回测结果）: {e}")
+
+        return result
 
 
 
