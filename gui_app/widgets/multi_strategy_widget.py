@@ -692,7 +692,8 @@ class MultiStrategyWidget(QWidget):
     def _copy_all_log(self):
         """复制全部日志到剪贴板"""
         from PyQt5.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.log_output.toPlainText())
+        from gui_app.utils.clipboard import copy_text
+        copy_text(self.log_output.toPlainText())
 
     # ---- 状态刷新 ----
 

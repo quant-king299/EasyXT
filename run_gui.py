@@ -8,13 +8,13 @@ GUI应用快速启动脚本
 import sys
 import os
 
-# 初始化 Windows COM，防止 OleSetClipboard 等剪贴板报错
+# 初始化 Windows OLE，防止 OleSetClipboard 剪贴板报错
+# OleInitialize 会调用 CoInitializeEx(NULL, COINIT_APARTMENTTHREADED)，
+# 并额外初始化 OLE 剪贴板/拖放等子系统，这是 Qt 在 Windows 上正常工作所必需的。
 if sys.platform == 'win32':
-    try:
-        import ctypes
-        ctypes.windll.ole32.CoInitializeEx(0, 0)  # COINIT_APARTMENTTHREADED
-    except Exception:
-        pass
+    import ctypes
+    # 先尝试 OleInitialize，如果已初始化会返回 S_FALSE（不会报错）
+    ctypes.windll.ole32.OleInitialize(0)
 
 def main():
     # 获取项目根目录

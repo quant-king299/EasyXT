@@ -21,7 +21,7 @@ from PyQt5.QtWidgets import (
     QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
     QProgressBar, QSplitter, QFrame, QMessageBox,
     QFileDialog, QFormLayout, QScrollArea, QTextBrowser,
-    QDialog, QDialogButtonBox
+    QDialog, QDialogButtonBox, QAction, QApplication
 )
 from PyQt5.QtCore import Qt, QTimer, QThread, pyqtSignal, QSize
 from PyQt5.QtGui import QFont, QColor, QPalette, QIcon
@@ -108,7 +108,7 @@ class CodeConversionWorker(QThread):
             if CONVERTER_AVAILABLE:
                 if self.converter_type == "unified" and JQToPtradeUnifiedConverter:
                     converter = JQToPtradeUnifiedConverter(verbose=False)
-                    self.progress_updated.emit(50, "正在使用统一转换器转换（v5.1 全面兼容版）...")
+                    self.progress_updated.emit(50, "正在使用统一转换器转换（v5.3 全面兼容版）...")
                 elif self.converter_type == "backtest" and JQToPtradeBacktestConverter:
                     converter = JQToPtradeBacktestConverter()
                     self.progress_updated.emit(50, "正在转换为回测版本...")
@@ -166,7 +166,7 @@ class JQToPtradeWidget(QWidget):
         layout.addWidget(title_label)
         
         # 版本说明标签
-        self.version_info_label = QLabel("v5.1 全面兼容版：集成PTrade运行调试发现的所有问题修复（set_slippage、query ORM括号计数、日期格式、参数转换等15+项改进），自动注入Tushare替代实现。")
+        self.version_info_label = QLabel("v5.3 一键转换版：every_bar多时段适配、持仓属性映射(amount/enable_amount/cost_basis)、price包装器(get_price列名兼容)、available_cash→cash、record→log.info、apply_filters自动补context参数、get_Ashares Tushare兼容、g对象全局替换等30+项改进。")
         self.version_info_label.setWordWrap(True)
         self.version_info_label.setStyleSheet("""
             QLabel {
@@ -237,7 +237,7 @@ class JQToPtradeWidget(QWidget):
         converter_type_layout = QHBoxLayout()
         converter_type_label = QLabel("转换版本:")
         self.converter_type_combo = QComboBox()
-        self.converter_type_combo.addItem("v5.1 统一转换器 (推荐-全面兼容)", "unified")
+        self.converter_type_combo.addItem("v5.3 一键转换器 (推荐-30+项兼容)", "unified")
         self.converter_type_combo.addItem("标准版本", "default")
         self.converter_type_combo.addItem("回测版本", "backtest")
         self.converter_type_combo.addItem("增强回测版本", "enhanced")
@@ -325,12 +325,14 @@ class JQToPtradeWidget(QWidget):
         self.input_code_preview = QTextEdit()
         self.input_code_preview.setReadOnly(True)
         self.input_code_preview.setFont(QFont("Consolas", 10))
+        self._add_copy_action(self.input_code_preview)
         self.preview_tabs.addTab(self.input_code_preview, "输入代码（聚宽）")
-        
+
         # 输出代码预览
         self.output_code_preview = QTextEdit()
         self.output_code_preview.setReadOnly(True)
         self.output_code_preview.setFont(QFont("Consolas", 10))
+        self._add_copy_action(self.output_code_preview)
         self.preview_tabs.addTab(self.output_code_preview, "输出代码（Ptrade）")
         
         main_splitter.addWidget(control_widget)
@@ -483,6 +485,16 @@ class JQToPtradeWidget(QWidget):
             self.status_label.setText("转换失败")
             QMessageBox.critical(self, "错误", output_code)
     
+    def _add_copy_action(self, text_edit: QTextEdit):
+        """为只读代码预览框添加 Ctrl+C 复制功能"""
+        from gui_app.utils.clipboard import copy_text
+        copy_action = QAction("📋 复制选中内容", text_edit)
+        text_edit.addAction(copy_action)
+        copy_action.setShortcut("Ctrl+C")
+        copy_action.triggered.connect(
+            lambda: copy_text(text_edit.textCursor().selectedText())
+        )
+
     def save_output(self):
         """保存输出文件"""
         if not self.current_output_file:
@@ -521,7 +533,7 @@ class JQToPtradeWidget(QWidget):
         style_sheet = ""
 
         if converter_type == "unified":
-            info_text = "v5.1 统一转换器（推荐）：集成PTrade运行调试发现的所有问题修复（set_slippage/FixedSlippage、query ORM括号计数自动转换、日期格式、get_history参数、panel移除、has_key、subportfolios等15+项），自动注入Tushare替代实现，PTrade可直接运行。"
+            info_text = "v5.3 一键转换器（推荐）：全面适配聚宽→PTrade差异，包含every_bar多时段、持仓属性映射、get_price列名兼容、available_cash、record、g对象、apply_filters、get_Ashares等30+项自动修复，一键转换即可回测。"
             style_sheet = """
                 QLabel {
                     background-color: #fff3e0;

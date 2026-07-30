@@ -865,7 +865,8 @@ class GridTradingWidget(QWidget):
     def _copy_all_log(self):
         """复制全部日志到剪贴板"""
         from PyQt5.QtWidgets import QApplication
-        QApplication.clipboard().setText(self.log_text.toPlainText())
+        from gui_app.utils.clipboard import copy_text
+        copy_text(self.log_text.toPlainText())
 
     def clear_log(self):
         """清除日志"""

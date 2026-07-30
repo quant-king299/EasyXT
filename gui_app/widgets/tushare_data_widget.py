@@ -27,7 +27,7 @@ from PyQt5.QtWidgets import (
     QCheckBox, QSpinBox, QDoubleSpinBox, QComboBox,
     QProgressBar, QSplitter, QFrame, QMessageBox, QDialog,
     QFileDialog, QFormLayout, QScrollArea, QSizePolicy,
-    QRadioButton, QButtonGroup, QDateEdit
+    QRadioButton, QButtonGroup, QDateEdit, QAction, QApplication
 )
 from PyQt5.QtCore import Qt, QThread, pyqtSignal, QDate, QTimer
 from PyQt5.QtGui import QFont, QColor, QPalette, QTextCursor
@@ -2759,7 +2759,8 @@ class TushareDataWidget(QWidget):
         """)
         # 确保 Ctrl+C 和右键复制可用（readOnly 模式下有时会失效）
         self.log_text.setContextMenuPolicy(Qt.ActionsContextMenu)
-        copy_action = self.log_text.addAction("📋 复制选中内容")
+        copy_action = QAction("📋 复制选中内容", self.log_text)
+        self.log_text.addAction(copy_action)
         copy_action.setShortcut("Ctrl+C")
         copy_action.triggered.connect(lambda: self._copy_log_selection())
         log_layout.addWidget(self.log_text)
@@ -4527,10 +4528,10 @@ class TushareDataWidget(QWidget):
 
     def _copy_log_selection(self):
         """复制日志选中文本到剪贴板"""
+        from gui_app.utils.clipboard import copy_text
         cursor = self.log_text.textCursor()
         if cursor.hasSelection():
-            from PyQt5.QtWidgets import QApplication
-            QApplication.clipboard().setText(cursor.selectedText())
+            copy_text(cursor.selectedText())
 
     def _on_log(self, message):
         """处理日志消息"""
