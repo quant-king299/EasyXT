@@ -1406,63 +1406,6 @@ class DataAPI:
 
         try:
 
-            # 先下载历史数据（使用正确的API）
-
-            try:
-
-                logger.info(f"正在下载 {codes} 的历史数据...")
-                
-
-                # 对于分钟数据，限制时间范围避免数据量过大
-
-                if period in ['1m', '5m', '15m', '30m']:
-
-                    # 分钟数据只下载最近几天
-
-                    from datetime import timedelta
-
-                    end_dt = datetime.now()
-
-                    start_dt = end_dt - timedelta(days=3)  # 只下载最近3天
-
-                    download_start = start_dt.strftime('%Y%m%d')
-
-                    download_end = end_dt.strftime('%Y%m%d')
-
-                else:
-
-                    download_start = start_date if start_date else '20200101'
-
-                    download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
-
-
-
-                # 使用线程锁保护下载操作，防止并发调用导致卡死
-
-                with DataAPI._download_lock:
-
-                    self.xt.download_history_data2(
-
-                        stock_list=codes,
-
-                        period=period,
-
-                        start_time=download_start,
-
-                        end_time=download_end
-
-                    )
-
-                logger.info("历史数据下载完成")
-            except Exception as download_error:
-
-                logger.info(f"数据下载警告: {download_error}")
-                # 下载失败不影响后续获取，可能本地已有数据
-
-            
-
-            # 调用xtquant接口获取数据
-
             # 对于分钟数据，使用count参数限制数据量
 
             if period in ['1m', '5m', '15m', '30m'] and count is None:
@@ -1475,7 +1418,17 @@ class DataAPI:
 
                 actual_count = count if count else -1
 
-            
+
+
+            # ============================================================
+
+            # 【修复】先尝试从本地缓存读取，避免每次调用都重新下载
+
+            # 开盘前已下载过数据的情况下，本地缓存应该已有数据
+
+            # 只有本地缓存为空时才触发下载
+
+            # ============================================================
 
             data = self.xt.get_market_data_ex(
 
@@ -1496,6 +1449,106 @@ class DataAPI:
                 fill_data=config.get('data.fill_data', True)
 
             )
+
+
+
+            # 检查本地缓存是否为空，为空时才下载
+
+            local_data_empty = True
+
+            if data:
+
+                for field, field_data in data.items():
+
+                    if field_data is not None and hasattr(field_data, 'empty') and not field_data.empty:
+
+                        local_data_empty = False
+
+                        break
+
+
+
+            if local_data_empty:
+
+                # 本地缓存为空，需要下载历史数据
+
+                try:
+
+                    logger.info(f"正在下载 {codes} 的历史数据...")
+
+
+
+                    # 对于分钟数据，限制时间范围避免数据量过大
+
+                    if period in ['1m', '5m', '15m', '30m']:
+
+                        # 分钟数据只下载最近几天
+
+                        from datetime import timedelta
+
+                        end_dt = datetime.now()
+
+                        start_dt = end_dt - timedelta(days=3)  # 只下载最近3天
+
+                        download_start = start_dt.strftime('%Y%m%d')
+
+                        download_end = end_dt.strftime('%Y%m%d')
+
+                    else:
+
+                        download_start = start_date if start_date else '20200101'
+
+                        download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
+
+
+
+                    # 使用线程锁保护下载操作，防止并发调用导致卡死
+
+                    with DataAPI._download_lock:
+
+                        self.xt.download_history_data2(
+
+                            stock_list=codes,
+
+                            period=period,
+
+                            start_time=download_start,
+
+                            end_time=download_end
+
+                        )
+
+                    logger.info("历史数据下载完成")
+
+
+
+                    # 下载后重新获取数据
+
+                    data = self.xt.get_market_data_ex(
+
+                        field_list=fields,
+
+                        stock_list=codes,
+
+                        period=period,
+
+                        start_time=start_date if start_date else '20200101',
+
+                        end_time=end_date if end_date else datetime.now().strftime('%Y%m%d'),
+
+                        count=actual_count,
+
+                        dividend_type=dividend_type,
+
+                        fill_data=config.get('data.fill_data', True)
+
+                    )
+
+                except Exception as download_error:
+
+                    logger.info(f"数据下载警告: {download_error}")
+
+                    # 下载失败不影响后续获取，可能本地已有数据
 
             
 
@@ -3717,55 +3770,6 @@ class DataAPI:
 
             try:
 
-                # 先下载历史数据
-
-                try:
-
-                    logger.info(f"正在下载 {codes} 的历史数据... (第{attempt+1}次尝试)")
-                    
-
-                    # 对于分钟数据，限制时间范围避免数据量过大
-
-                    if period in ['1m', '5m', '15m', '30m']:
-
-                        # 分钟数据只下载最近几天
-
-                        download_start, download_end = auto_time_range(3)
-
-                    else:
-
-                        download_start = start_date if start_date else '20200101'
-
-                        download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
-
-
-
-                    # 使用线程锁保护下载操作，防止并发调用导致卡死
-
-                    with DataAPI._download_lock:
-
-                        self.xt.download_history_data2(
-
-                            stock_list=codes,
-
-                            period=period,
-
-                            start_time=download_start,
-
-                            end_time=download_end
-
-                        )
-
-                    logger.info("历史数据下载完成")
-                except Exception as download_error:
-
-                    logger.info(f"数据下载警告: {download_error}")
-                    # 下载失败不影响后续获取，可能本地已有数据
-
-                
-
-                # 调用xtquant接口获取数据
-
                 # 对于分钟数据，使用count参数限制数据量
 
                 if period in ['1m', '5m', '15m', '30m'] and count is None:
@@ -3778,7 +3782,15 @@ class DataAPI:
 
                     actual_count = count if count else -1
 
-                
+
+
+                # ============================================================
+
+                # 【修复】先尝试从本地缓存读取，避免每次调用都重新下载
+
+                # 只有本地缓存为空时才触发下载
+
+                # ============================================================
 
                 data = self.xt.get_market_data_ex(
 
@@ -3799,6 +3811,98 @@ class DataAPI:
                     fill_data=config.get('data.fill_data', True)
 
                 )
+
+
+
+                # 检查本地缓存是否为空，为空时才下载
+
+                local_data_empty = True
+
+                if data:
+
+                    for field, field_data in data.items():
+
+                        if field_data is not None and hasattr(field_data, 'empty') and not field_data.empty:
+
+                            local_data_empty = False
+
+                            break
+
+
+
+                if local_data_empty:
+
+                    # 本地缓存为空，需要下载历史数据
+
+                    try:
+
+                        logger.info(f"正在下载 {codes} 的历史数据... (第{attempt+1}次尝试)")
+
+
+
+                        # 对于分钟数据，限制时间范围避免数据量过大
+
+                        if period in ['1m', '5m', '15m', '30m']:
+
+                            # 分钟数据只下载最近几天
+
+                            download_start, download_end = auto_time_range(3)
+
+                        else:
+
+                            download_start = start_date if start_date else '20200101'
+
+                            download_end = end_date if end_date else datetime.now().strftime('%Y%m%d')
+
+
+
+                        # 使用线程锁保护下载操作，防止并发调用导致卡死
+
+                        with DataAPI._download_lock:
+
+                            self.xt.download_history_data2(
+
+                                stock_list=codes,
+
+                                period=period,
+
+                                start_time=download_start,
+
+                                end_time=download_end
+
+                            )
+
+                        logger.info("历史数据下载完成")
+
+
+
+                        # 下载后重新获取数据
+
+                        data = self.xt.get_market_data_ex(
+
+                            field_list=fields,
+
+                            stock_list=codes,
+
+                            period=period,
+
+                            start_time=start_date if start_date else '20200101',
+
+                            end_time=end_date if end_date else datetime.now().strftime('%Y%m%d'),
+
+                            count=actual_count,
+
+                            dividend_type=dividend_type,
+
+                            fill_data=config.get('data.fill_data', True)
+
+                        )
+
+                    except Exception as download_error:
+
+                        logger.info(f"数据下载警告: {download_error}")
+
+                        # 下载失败不影响后续获取，可能本地已有数据
 
                 
 
