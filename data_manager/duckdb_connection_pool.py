@@ -30,16 +30,20 @@ class DuckDBConnectionManager:
     4. 上下文管理器支持
     """
 
-    _instance = None
+    _instances = {}
     _lock = threading.Lock()
 
     def __new__(cls, duckdb_path: str = None):
-        if cls._instance is None:
-            with cls._lock:
-                if cls._instance is None:
-                    cls._instance = super().__new__(cls)
-                    cls._instance._initialized = False
-        return cls._instance
+        if duckdb_path is None:
+            duckdb_path = get_default_db_path()
+        normalized_path = str(Path(duckdb_path).expanduser().resolve())
+        with cls._lock:
+            if normalized_path not in cls._instances:
+                instance = super().__new__(cls)
+                instance._initialized = False
+                instance._instance_path = normalized_path
+                cls._instances[normalized_path] = instance
+        return cls._instances[normalized_path]
 
     def __init__(self, duckdb_path: str = None):
         if self._initialized:
@@ -47,7 +51,7 @@ class DuckDBConnectionManager:
 
         if duckdb_path is None:
             duckdb_path = get_default_db_path()
-        self.duckdb_path = duckdb_path
+        self.duckdb_path = self._instance_path
         self._write_lock = threading.Lock()
         self._connection_count = 0
 
@@ -105,26 +109,40 @@ class DuckDBConnectionManager:
         retry_delay = 1.0
 
         with self._write_lock:
+            # 只重试“建立连接”。with 块中的业务异常绝不能重新 yield，
+            # 否则 contextmanager 会报 generator didn't stop after throw。
             for attempt in range(max_retries):
                 try:
                     con = duckdb.connect(self.duckdb_path, read_only=False)
                     self._connection_count += 1
-                    yield con
                     break
                 except Exception as e:
-                    if "lock" in str(e).lower() or "already open" in str(e).lower():
-                        if attempt < max_retries - 1:
-                            logger.warning(f"[WARNING] 数据库被占用，重试 {attempt + 1}/{max_retries}...")
-                            time.sleep(retry_delay * (attempt + 1))
-                            continue
+                    if ("lock" in str(e).lower() or "already open" in str(e).lower()) \
+                            and attempt < max_retries - 1:
+                        logger.warning(f"[WARNING] 数据库被占用，重试 {attempt + 1}/{max_retries}...")
+                        time.sleep(retry_delay * (attempt + 1))
+                        continue
                     raise
-                finally:
-                    if con:
-                        try:
-                            con.close()
-                            self._connection_count -= 1
-                        except Exception:
-                            pass
+
+            try:
+                # DuckDB 默认每条语句自动提交。显式事务保证 DELETE + INSERT
+                # 要么全部成功，要么全部回滚，避免只留下 DELETE 的结果。
+                con.execute("BEGIN TRANSACTION")
+                yield con
+                con.execute("COMMIT")
+            except Exception:
+                if con:
+                    try:
+                        con.execute("ROLLBACK")
+                    except Exception:
+                        pass
+                raise
+            finally:
+                if con:
+                    try:
+                        con.close()
+                    finally:
+                        self._connection_count -= 1
 
     def execute_read_query(self, query: str, params: Optional[tuple] = None):
         """
@@ -273,15 +291,18 @@ class DuckDBConnectionManager:
 
 # 全局单例
 _db_manager = None
+_db_managers = {}
 
 
 def get_db_manager(duckdb_path: str = None) -> DuckDBConnectionManager:
     """获取数据库管理器单例"""
     global _db_manager
-    if _db_manager is None:
-        if duckdb_path is None:
-            duckdb_path = get_default_db_path()
-        _db_manager = DuckDBConnectionManager(duckdb_path)
+    if duckdb_path is None:
+        duckdb_path = get_default_db_path()
+    normalized_path = str(Path(duckdb_path).expanduser().resolve())
+    if normalized_path not in _db_managers:
+        _db_managers[normalized_path] = DuckDBConnectionManager(normalized_path)
+    _db_manager = _db_managers[normalized_path]  # 保留旧代码对该变量的兼容
     return _db_manager
 
 

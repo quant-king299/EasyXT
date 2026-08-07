@@ -352,7 +352,17 @@ class DataDownloadThread(QThread):
                             """)
 
                         con.register('temp_batch', df_all)
-                        con.execute(f"DELETE FROM {table_name} WHERE stock_code IN (SELECT DISTINCT stock_code FROM temp_batch)")
+                        # 仅替换本批次实际包含的键，绝不能因下载一个日期区间而
+                        # 删除这些股票在区间外的全部历史数据。
+                        con.execute(f"""
+                            DELETE FROM {table_name} AS target
+                            WHERE EXISTS (
+                                SELECT 1 FROM temp_batch AS incoming
+                                WHERE incoming.stock_code = target.stock_code
+                                  AND incoming.date = target.date
+                                  AND incoming.period = target.period
+                            )
+                        """)
                         con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
                         con.unregister('temp_batch')
 
@@ -369,7 +379,15 @@ class DataDownloadThread(QThread):
                             df_batch = pd.concat(batch, ignore_index=True)
                             with db_manager.get_write_connection() as con:
                                 con.register('temp_batch', df_batch)
-                                con.execute(f"DELETE FROM {table_name} WHERE stock_code IN (SELECT DISTINCT stock_code FROM temp_batch)")
+                                con.execute(f"""
+                                    DELETE FROM {table_name} AS target
+                                    WHERE EXISTS (
+                                        SELECT 1 FROM temp_batch AS incoming
+                                        WHERE incoming.stock_code = target.stock_code
+                                          AND incoming.date = target.date
+                                          AND incoming.period = target.period
+                                    )
+                                """)
                                 con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_batch")
                                 con.unregister('temp_batch')
                             write_success += 1
@@ -1009,6 +1027,8 @@ class SingleStockDownloadThread(QThread):
                 data = xtdata.get_market_data_ex(
                     stock_list=[self.stock_code],
                     period=qmt_period,
+                    start_time=start_str,
+                    end_time=end_str,
                     count=count
                 )
 
@@ -1148,8 +1168,14 @@ class SingleStockDownloadThread(QThread):
 
             with manager.get_write_connection() as con:
                 con.register('temp_data', df_processed)
-                # 删除该股票该周期的旧数据
-                con.execute(f"DELETE FROM {table_name} WHERE stock_code = '{self.stock_code}'")
+                # 只替换本次实际下载到的日期范围；保留区间外历史数据。
+                data_min = df_processed['date'].min()
+                data_max = df_processed['date'].max()
+                con.execute(
+                    f"DELETE FROM {table_name} "
+                    "WHERE stock_code = ? AND period = ? AND date >= ? AND date <= ?",
+                    [self.stock_code, self.period, data_min, data_max]
+                )
                 # 插入新数据
                 con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_data")
                 con.unregister('temp_data')

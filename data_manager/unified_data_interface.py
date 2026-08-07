@@ -683,6 +683,9 @@ class UnifiedDataInterface:
         period: str
     ):
         """保存数据到DuckDB - 使用连接池确保原子性"""
+        if data is None or data.empty:
+            logger.warning(f"    [WARN] {stock_code} 没有可保存的数据，跳过写入")
+            return
         try:
             logger.debug(f"    [DEBUG] _save_to_duckdb: 开始保存 {stock_code} 的 {len(data)} 条记录...")
 
@@ -756,20 +759,10 @@ class UnifiedDataInterface:
                 if before_filter != after_filter:
                     logger.warning(f"    [WARN] 过滤掉 {before_filter - after_filter} 条stock_code为None的记录")
 
-                # 删除已存在的重复数据
                 date_min = str(df_to_save['date'].min())
                 date_max = str(df_to_save['date'].max())
 
                 logger.debug(f"    [DEBUG] 删除范围: {date_min} ~ {date_max}")
-
-                delete_sql = f"""
-                    DELETE FROM {table_name}
-                    WHERE stock_code = '{stock_code}'
-                        AND date >= '{date_min}'
-                        AND date <= '{date_max}'
-                """
-                con.execute(delete_sql)
-                logger.debug(f"    [DEBUG] DELETE执行完成")
 
                 # 添加缺失的元数据列
                 if table_name == 'stock_daily':
@@ -802,10 +795,9 @@ class UnifiedDataInterface:
                     logger.debug(f"    [DEBUG] 删除重复数据...")
                     con.execute(f"""
                         DELETE FROM {table_name}
-                        WHERE stock_code = '{stock_code}'
-                            AND date >= '{date_min}'
-                            AND date <= '{date_max}'
-                    """)
+                        WHERE stock_code = ? AND period = ?
+                            AND date >= ? AND date <= ?
+                    """, [stock_code, period, date_min, date_max])
 
                     # 插入新数据（明确指定所有列，避免列数不匹配）
                     logger.debug(f"    [DEBUG] 插入新数据...")
@@ -827,35 +819,9 @@ class UnifiedDataInterface:
 
                 except Exception as insert_err:
                     logger.error(f"    [ERROR] INSERT失败: {insert_err}")
-
-                    # 降级方案：只插入基础列（不含复权列）
-                    logger.debug(f"    [DEBUG] 使用降级方案（只保存基础列）...")
-                    basic_cols = [
-                        'stock_code', 'symbol_type', 'date', 'period',
-                        'open', 'high', 'low', 'close', 'volume', 'amount',
-                        'created_at', 'updated_at'
-                    ]
-
-                    # 确保这些列都存在
-                    existing_basic_cols = [col for col in basic_cols if col in df_ordered.columns]
-
-                    df_basic = df_ordered[existing_basic_cols]
-                    con.register('df_to_save_temp2', df_basic)
-
-                    # 先删除
-                    con.execute(f"""
-                        DELETE FROM {table_name}
-                        WHERE stock_code = '{stock_code}'
-                            AND date >= '{date_min}'
-                            AND date <= '{date_max}'
-                    """)
-
-                    # 插入基础列
-                    col_list = ', '.join(existing_basic_cols)
-                    con.execute(f"INSERT INTO {table_name} ({col_list}) SELECT {col_list} FROM df_to_save_temp2")
-
-                    con.unregister('df_to_save_temp2')
-                    logger.info(f"    → 降级方案成功：保存 {len(df_basic)} 条记录（基础列）")
+                    # 当前写连接处于事务中。任何插入错误都必须向外抛出，
+                    # 由连接管理器回滚之前的 DELETE，不能继续二次删除。
+                    raise
 
                 # 验证保存结果
                 verify_sql = f"""
@@ -871,9 +837,11 @@ class UnifiedDataInterface:
 
                 # 检查是否真的保存成功了
                 if verify_dict['count'] == 0:
-                    logger.error(f"    [ERROR] 保存失败！数据未写入数据库")
+                    raise RuntimeError("保存失败：数据未写入数据库")
                 elif verify_dict['count'] != len(df_ordered):
-                    logger.warning(f"    [WARN] 部分数据未保存：期望{len(df_ordered)}条，实际{verify_dict['count']}条")
+                    raise RuntimeError(
+                        f"保存记录数不一致：期望{len(df_ordered)}条，实际{verify_dict['count']}条"
+                    )
                 else:
                     logger.info(f"    [OK] 数据保存成功！")
 
@@ -881,6 +849,7 @@ class UnifiedDataInterface:
             logger.error(f"    [ERROR] 保存失败: {e}")
             import traceback
             traceback.print_exc()
+            raise
 
     def _ensure_tables_exist_with_con(self, con):
         """确保所有必需的表都存在（使用指定连接）

@@ -292,8 +292,10 @@ class TushareDownloader:
             return
 
         con = self._get_db_connection()
+        q_table = '"' + table_name.replace('"', '""') + '"'
 
         try:
+            con.execute("BEGIN TRANSACTION")
             # 先将所有数值类型转换为 DOUBLE，避免 INT32 溢出
             df_processed = df.copy()
             for col in df_processed.columns:
@@ -310,25 +312,31 @@ class TushareDownloader:
             # 检查表是否存在，如果存在且结构不对则重建
             table_exists = con.execute(f"""
                 SELECT COUNT(*) FROM information_schema.tables
-                WHERE table_name = '{table_name}'
-            """).fetchone()[0] > 0
+                WHERE table_name = ?
+            """, [table_name]).fetchone()[0] > 0
 
             if table_exists:
                 # 表已存在，检查是否有 INT32 类型的列（会导致溢出）
-                schema = con.execute(f"DESCRIBE {table_name}").fetchdf()
-                has_int32 = any(schema['column_type'] == 'INTEGER')
+                schema = con.execute(f"DESCRIBE {q_table}").fetchdf()
+                int32_columns = schema.loc[
+                    schema['column_type'] == 'INTEGER', 'column_name'
+                ].tolist()
 
-                if has_int32:
-                    self._log(f"表 {table_name} 结构已过时（有INTEGER类型），正在重建...", "WARN")
-                    con.execute(f"DROP TABLE {table_name}")
-                    table_exists = False
+                # 原地扩宽旧 INTEGER 列。禁止 DROP TABLE 后仅用本批数据重建，
+                # 否则会永久丢失表内其他股票和历史报告期。
+                for column in int32_columns:
+                    q_column = '"' + str(column).replace('"', '""') + '"'
+                    self._log(f"扩宽 {table_name}.{column}: INTEGER -> DOUBLE", "WARN")
+                    con.execute(
+                        f"ALTER TABLE {q_table} ALTER COLUMN {q_column} TYPE DOUBLE"
+                    )
 
             if not table_exists:
                 # 表不存在，创建新表（所有数值列用 DOUBLE）
                 columns_sql = []
                 for col in df_processed.columns:
                     dtype = df_processed[col].dtype
-                    col_name = col.replace("'", "''")  # 转义列名中的单引号
+                    col_name = str(col).replace('"', '""')
 
                     if pd.api.types.is_string_dtype(dtype) or dtype == 'object':
                         columns_sql.append(f'"{col_name}" VARCHAR')
@@ -338,7 +346,7 @@ class TushareDownloader:
                         columns_sql.append(f'"{col_name}" DOUBLE')  # 默认用 DOUBLE
 
                 create_sql = f"""
-                    CREATE TABLE {table_name} (
+                    CREATE TABLE {q_table} (
                         {', '.join(columns_sql)}
                     )
                 """
@@ -346,30 +354,46 @@ class TushareDownloader:
 
             # 如果有主键，先删除已存在的记录
             if primary_keys:
-                for _, row in df_processed.iterrows():
-                    conditions = []
-                    for pk in primary_keys:
-                        val = row.get(pk)
-                        if pd.notna(val):
-                            if isinstance(val, str):
-                                conditions.append(f"{pk} = '{val}'")
-                            else:
-                                conditions.append(f"{pk} = {val}")
-
-                    if conditions:
-                        delete_sql = f"DELETE FROM {table_name} WHERE {' AND '.join(conditions)}"
-                        con.execute(delete_sql)
+                missing_keys = [key for key in primary_keys if key not in df_processed.columns]
+                if missing_keys:
+                    raise ValueError(f"缺少主键列: {missing_keys}")
+                key_match = " AND ".join(
+                    f'target."{key.replace(chr(34), chr(34) * 2)}" '
+                    f'IS NOT DISTINCT FROM incoming."{key.replace(chr(34), chr(34) * 2)}"'
+                    for key in primary_keys
+                )
+                con.execute(f"""
+                    DELETE FROM {q_table} AS target
+                    WHERE EXISTS (
+                        SELECT 1 FROM temp_df AS incoming WHERE {key_match}
+                    )
+                """)
 
             # 插入新数据
-            con.execute(f"INSERT INTO {table_name} SELECT * FROM temp_df")
+            column_list = ", ".join(
+                '"' + str(column).replace('"', '""') + '"'
+                for column in df_processed.columns
+            )
+            con.execute(
+                f"INSERT INTO {q_table} ({column_list}) "
+                f"SELECT {column_list} FROM temp_df"
+            )
             con.unregister('temp_df')
+            con.execute("COMMIT")
 
             self._log(f"已保存 {len(df)} 条记录到 {table_name}")
 
         except Exception as e:
+            try:
+                con.execute("ROLLBACK")
+            except Exception:
+                pass
             self._log(f"保存到 {table_name} 失败: {e}", "ERROR")
-            if 'temp_df' in [t[0] for t in con.execute("SHOW TABLES").fetchall()]:
+            try:
                 con.unregister('temp_df')
+            except Exception:
+                pass
+            raise
         finally:
             con.close()
 

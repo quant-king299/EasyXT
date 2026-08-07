@@ -157,7 +157,13 @@ class DataIntegrityChecker:
             'missing_trading_days': missing_report['missing_count'],
             'completeness_ratio': missing_report['completeness_ratio'],
             'quality_report': report.get_summary(),
-            'status': 'PASS' if not report.has_errors() else 'FAIL'
+            # 缺失交易日就是完整性失败，不能因为它被归类为 WARNING
+            # 就向用户展示为 PASS。
+            'status': (
+                'FAIL'
+                if report.has_errors() or missing_report['missing_count'] > 0
+                else ('WARNING' if report.has_warnings() else 'PASS')
+            )
         }
 
         return summary
