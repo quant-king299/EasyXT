@@ -1969,8 +1969,8 @@ class LocalDataManagerWidget(QWidget):
 
         # 第三行：数据类型选择
         manual_layout.addWidget(QLabel("数据类型:"), 2, 0)
-        self.data_type_combo = QComboBox()
-        self.data_type_combo.addItems([
+        self.manual_data_type_combo = QComboBox()  # 改成独立的变量名，避免与上面的 data_type_combo 冲突
+        self.manual_data_type_combo.addItems([
             "日线数据",
             "1分钟数据",
             "5分钟数据",
@@ -1979,7 +1979,7 @@ class LocalDataManagerWidget(QWidget):
             "60分钟数据",
             "Tick数据"
         ])
-        manual_layout.addWidget(self.data_type_combo, 2, 1)
+        manual_layout.addWidget(self.manual_data_type_combo, 2, 1)
 
         # 日期范围
         manual_layout.addWidget(QLabel("日期范围:"), 2, 2)
@@ -2225,7 +2225,7 @@ class LocalDataManagerWidget(QWidget):
         end_date = self.manual_end_date_edit.date().toString("yyyy-MM-dd")
 
         # 获取数据类型
-        data_type_text = self.data_type_combo.currentText()
+        data_type_text = self.manual_data_type_combo.currentText()  # 使用正确的 combo box
         period_map = {
             "日线数据": "1d",
             "1分钟数据": "1m",
@@ -2687,8 +2687,12 @@ class LocalDataManagerWidget(QWidget):
         # 读取用户选择的数据类型
         data_type_text = self.data_type_combo.currentText()
         period_map = {
-            "日线数据": "daily", "1分钟数据": "1min", "5分钟数据": "5min",
-            "15分钟数据": "15min", "30分钟数据": "30min", "60分钟数据": "60min",
+            "日线数据": "1d",
+            "1分钟数据": "1m",
+            "5分钟数据": "5m",
+            "15分钟数据": "15m",
+            "30分钟数据": "30m",
+            "60分钟数据": "60m",
             "Tick数据": "tick"
         }
         data_type = period_map.get(data_type_text, "daily")
@@ -2733,8 +2737,12 @@ class LocalDataManagerWidget(QWidget):
         end_date = self.end_date_edit.date().toString("yyyy-MM-dd")
         data_type_text = self.data_type_combo.currentText()
         period_map = {
-            "日线数据": "daily", "1分钟数据": "1min", "5分钟数据": "5min",
-            "15分钟数据": "15min", "30分钟数据": "30min", "60分钟数据": "60min",
+            "日线数据": "1d",
+            "1分钟数据": "1m",
+            "5分钟数据": "5m",
+            "15分钟数据": "15m",
+            "30分钟数据": "30m",
+            "60分钟数据": "60m",
             "Tick数据": "tick"
         }
         data_type = period_map.get(data_type_text, "daily")
