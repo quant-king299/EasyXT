@@ -315,41 +315,52 @@ class DataDownloadThread(QThread):
                         table_name = f'stock_{self.data_type}'
 
                     with db_manager.get_write_connection() as con:
-                        # 确保表存在
+                        # 确保表存在（带主键约束）
                         if is_daily:
-                            con.execute(f"""
-                                CREATE TABLE IF NOT EXISTS {table_name} (
-                                    stock_code VARCHAR(20),
-                                    symbol_type VARCHAR(10),
-                                    date DATE,
-                                    period VARCHAR(10),
-                                    open DOUBLE,
-                                    high DOUBLE,
-                                    low DOUBLE,
-                                    close DOUBLE,
-                                    volume BIGINT,
-                                    amount DOUBLE,
-                                    created_at TIMESTAMP,
-                                    updated_at TIMESTAMP
-                                )
-                            """)
+                            # 先检查表是否存在，如果不存在则创建带主键的表
+                            try:
+                                con.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
+                            except Exception:
+                                # 表不存在，创建带主键的表
+                                con.execute(f"""
+                                    CREATE TABLE {table_name} (
+                                        stock_code VARCHAR,
+                                        symbol_type VARCHAR DEFAULT 'stock',
+                                        date DATE,
+                                        period VARCHAR DEFAULT '1d',
+                                        open DOUBLE,
+                                        high DOUBLE,
+                                        low DOUBLE,
+                                        close DOUBLE,
+                                        volume BIGINT,
+                                        amount DOUBLE,
+                                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        PRIMARY KEY (stock_code, date, period)
+                                    )
+                                """)
                         else:
-                            con.execute(f"""
-                                CREATE TABLE IF NOT EXISTS {table_name} (
-                                    stock_code VARCHAR(20),
-                                    symbol_type VARCHAR(10),
-                                    date TIMESTAMP,
-                                    period VARCHAR(10),
-                                    open DOUBLE,
-                                    high DOUBLE,
-                                    low DOUBLE,
-                                    close DOUBLE,
-                                    volume BIGINT,
-                                    amount DOUBLE,
-                                    created_at TIMESTAMP,
-                                    updated_at TIMESTAMP
-                                )
-                            """)
+                            # 分钟线表（TIMESTAMP 类型日期）
+                            try:
+                                con.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
+                            except Exception:
+                                con.execute(f"""
+                                    CREATE TABLE {table_name} (
+                                        stock_code VARCHAR,
+                                        symbol_type VARCHAR DEFAULT 'stock',
+                                        date TIMESTAMP,
+                                        period VARCHAR,
+                                        open DOUBLE,
+                                        high DOUBLE,
+                                        low DOUBLE,
+                                        close DOUBLE,
+                                        volume BIGINT,
+                                        amount DOUBLE,
+                                        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                        PRIMARY KEY (stock_code, date, period)
+                                    )
+                                """)
 
                         con.register('temp_batch', df_all)
                         # 仅替换本批次实际包含的键，绝不能因下载一个日期区间而
@@ -1088,23 +1099,28 @@ class SingleStockDownloadThread(QThread):
 
                 table_name = 'stock_tick'
 
-                # 确保stock_tick表存在
+                # 确保stock_tick表存在（带主键约束）
                 with manager.get_write_connection() as con:
-                    con.execute(f"""
-                        CREATE TABLE IF NOT EXISTS {table_name} (
-                            stock_code VARCHAR(20),
-                            symbol_type VARCHAR(10),
-                            datetime TIMESTAMP,
-                            period VARCHAR(10),
-                            lastPrice DOUBLE,
-                            volume BIGINT,
-                            amount DOUBLE,
-                            func_type INTEGER,
-                            openInt DOUBLE,
-                            created_at TIMESTAMP,
-                            updated_at TIMESTAMP
-                        )
-                    """)
+                    try:
+                        con.execute(f"SELECT 1 FROM {table_name} LIMIT 1")
+                    except Exception:
+                        # 表不存在，创建带主键的表
+                        con.execute(f"""
+                            CREATE TABLE {table_name} (
+                                stock_code VARCHAR,
+                                symbol_type VARCHAR DEFAULT 'stock',
+                                datetime TIMESTAMP,
+                                period VARCHAR DEFAULT 'tick',
+                                lastPrice DOUBLE,
+                                volume BIGINT,
+                                amount DOUBLE,
+                                func_type INTEGER,
+                                openInt DOUBLE,
+                                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                                PRIMARY KEY (stock_code, datetime, period)
+                            )
+                        """)
 
                 # 保存tick数据
                 with manager.get_write_connection() as con:
