@@ -499,3 +499,6 @@ screenshots/
 *_log_state.json
 unit_tests/data_manager/test_data_loss_protection.py
 docs/DATA_NODE_SERVICE.md
+
+# code_converter 子模块中的个人代码目录（不提交）
+code_converter/大QMT代码/
