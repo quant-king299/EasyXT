@@ -489,3 +489,13 @@ docs/王者quant策略工坊/
 # Node.js（puppeteer 抓取工具）
 node_modules/
 package-lock.json
+tools/fetch_tdxquant_docs.py
+strategies/双均线金叉回测_平安银行.py
+
+# 文档截图（临时文件，不提交）
+screenshots/
+
+# 策略运行时状态文件
+*_log_state.json
+unit_tests/data_manager/test_data_loss_protection.py
+docs/DATA_NODE_SERVICE.md

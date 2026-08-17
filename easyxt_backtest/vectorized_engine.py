@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 
 
 
+import os
+from pathlib import Path
+
 import pandas as pd
 
 import numpy as np
@@ -442,6 +445,8 @@ class VectorizedBacktestEngine:
 
         e = f'{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}'
 
+        label = {'cb': 'CB', 'etf': 'ETF', 'stock': '股票'}[self.category]
+
         table = self.cfg['table']
 
         code_col = self.cfg['code_col']
@@ -455,6 +460,9 @@ class VectorizedBacktestEngine:
         con = None
 
         try:
+
+            if not Path(self.db_path).exists():
+                raise FileNotFoundError(f"DuckDB database does not exist: {self.db_path}")
 
             con = duckdb.connect(self.db_path, read_only=True)
 
@@ -478,8 +486,6 @@ class VectorizedBacktestEngine:
 
             """).fetchdf()
 
-            label = {'cb': 'CB', 'etf': 'ETF', 'stock': '股票'}[self.category]
-
             print(f"[{label}引擎] 加载 {table}: {len(df)} 行, "
 
                   f"{df['ts_code'].nunique()} 只标的, "
@@ -491,7 +497,7 @@ class VectorizedBacktestEngine:
         except Exception as e:
 
             logger.info(f"[{label}引擎] 数据加载失败: {e}")
-            return pd.DataFrame()
+            return self._load_daily_data_from_data_node(start_date, end_date, label)
 
         finally:
 
@@ -504,6 +510,37 @@ class VectorizedBacktestEngine:
                 except Exception:
 
                     pass
+
+    def _load_daily_data_from_data_node(self, start_date: str, end_date: str, label: str) -> pd.DataFrame:
+        """从 Windows EasyXT Data Node 加载全量日线数据（Mac/Linux 投研端兜底）。"""
+        host = os.environ.get("EASYXT_DATA_NODE_HOST")
+        port = os.environ.get("EASYXT_DATA_SERVICE_PORT", "18820")
+        if not host:
+            return pd.DataFrame()
+
+        try:
+            import requests
+
+            session = requests.Session()
+            session.trust_env = False
+            url = f"http://{host}:{port}/daily/{self.category}"
+            resp = session.get(
+                url,
+                params={"start_time": start_date, "end_time": end_date},
+                timeout=120,
+            )
+            resp.raise_for_status()
+            payload = resp.json()
+            rows = payload.get("data", [])
+            df = pd.DataFrame(rows)
+            if not df.empty:
+                df["trade_date"] = pd.to_datetime(df["trade_date"])
+                df.sort_values(["ts_code", "trade_date"], inplace=True)
+            print(f"[{label}引擎] 从 Data Node 加载: {len(df)} 行")
+            return df
+        except Exception as exc:
+            logger.info(f"[{label}引擎] Data Node 加载失败: {exc}")
+            return pd.DataFrame()
 
     def _filter_redemption_risk(self, df: pd.DataFrame) -> pd.DataFrame:
         """排除处于强赎危险区的可转债
