@@ -1,0 +1,26 @@
+{
+  "active_node": "win_data_node_1",
+  "nodes": {
+    "win_data_node_1": {
+      "label": "Windows data node 1",
+      "host": "${EASYXT_DATA_NODE_HOST}",
+      "xqshare_port": 18812,
+      "data_service_port": "${EASYXT_DATA_SERVICE_PORT}",
+      "smb_mount": "${EASYXT_DATA_NODE_SMB_MOUNT}",
+      "smb_source": "${EASYXT_DATA_NODE_SMB_SOURCE}",
+      "qmt_status": {
+        "mini_qmt": "available_now",
+        "big_qmt": "available_now"
+      },
+      "current_role": [
+        "research_data",
+        "backtest_data"
+      ],
+      "future_role": [
+        "big_qmt_signal_bridge_for_live_trading",
+        "local_data_service_for_research_data"
+      ],
+      "notes": "Personal node addresses and paths belong in .env. xqshare depends on xtquant and should not be treated as the long-term big-QMT trading bridge."
+    }
+  }
+}
