@@ -44,6 +44,9 @@ realtime = [
   "pyyaml>=6.0",
   "colorlog>=6.6.0"
 ]
+baostock = [
+  "baostock>=0.9.3,<0.10",
+]
 
 [project.urls]
 Homepage = "https://github.com/quant-king299/EasyXT"

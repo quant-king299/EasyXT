@@ -12,7 +12,7 @@ from typing import Optional, List, Dict, Union
 from datetime import datetime
 import time
 
-from .sources import BaseDataSource, DuckDBSource, TushareSource, QMTSource
+from .sources import BaseDataSource, DuckDBSource, TushareSource, QMTSource, BaoStockSource
 from .config import DataManagerConfig, get_global_config
 from .utils import (
     normalize_symbol,
@@ -26,7 +26,7 @@ class HybridDataManager:
     混合数据管理器
 
     特性：
-    - 自动数据源选择（DuckDB > QMT > Tushare）
+    - 自动数据源选择（DuckDB > QMT > Tushare > BaoStock）
     - 优雅降级（一个数据源失败，自动切换到下一个）
     - 统一缓存策略
     - 批量操作优化
@@ -41,7 +41,7 @@ class HybridDataManager:
 
         Args:
             config: 配置对象（None时使用全局配置）
-            preferred_sources: 优先数据源列表 ['duckdb', 'qmt', 'tushare']
+            preferred_sources: 优先数据源列表 ['duckdb', 'qmt', 'tushare', 'baostock']
         """
         # 加载配置
         self.config = config or get_global_config()
@@ -62,6 +62,7 @@ class HybridDataManager:
             'duckdb_queries': 0,
             'qmt_queries': 0,
             'tushare_queries': 0,
+            'baostock_queries': 0,
             'cache_hits': 0,
             'total_queries': 0
         }
@@ -115,6 +116,20 @@ class HybridDataManager:
             except Exception as e:
                 print(f"[HybridDataManager] [FAIL] QMT初始化失败: {e}")
 
+        # 初始化 BaoStock（免费、免 Token 的历史数据兜底源）
+        if 'baostock' in self.source_priority:
+            try:
+                baostock_config = self.config.get_source_config('baostock')
+                if baostock_config.get('enabled', True):
+                    baostock_source = BaoStockSource(baostock_config)
+                    if baostock_source.connect():
+                        self.sources['baostock'] = baostock_source
+                        print("[HybridDataManager] [OK] BaoStock数据源已连接")
+                    else:
+                        print("[HybridDataManager] [FAIL] BaoStock数据源连接失败")
+            except Exception as e:
+                print(f"[HybridDataManager] [FAIL] BaoStock初始化失败: {e}")
+
         print(f"[HybridDataManager] 数据源初始化完成，可用数据源: {list(self.sources.keys())}")
 
     def get_price(self,
@@ -147,7 +162,7 @@ class HybridDataManager:
         symbols_str = ','.join(symbols) if isinstance(symbols, list) else symbols
 
         # 检查缓存
-        cache_key = f"price:{symbols_str}:{start_date}:{end_date}"
+        cache_key = f"price:{symbols_str}:{start_date}:{end_date}:{period}:{adjust}:{preferred_source or 'auto'}"
         if cache_key in self.price_cache:
             self.stats['cache_hits'] += 1
             return self.price_cache[cache_key].copy()

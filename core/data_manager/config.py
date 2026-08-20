@@ -27,6 +27,7 @@ class DataManagerConfig:
         'tushare_token': None,
         'tushare_token_2': None,  # 备用token（限流时自动切换）
         'qmt_path': None,
+        'baostock_enabled': True,
         # 数据源优先级（改为智能模式，优先使用本地可用数据源）
         'preferred_sources': None,  # None = 自动检测可用数据源
         'cache_enabled': True,
@@ -34,6 +35,8 @@ class DataManagerConfig:
         'log_level': 'INFO',
         'timeout': 30,
         'max_retries': 3,
+        'baostock_timeout': 15,
+        'baostock_max_retries': 1,
         # 新增：新手模式（默认False，优先QMT/Tushare）
         'beginner_mode': False,
     }
@@ -125,6 +128,9 @@ class DataManagerConfig:
         if 'QMT_PATH' in os.environ:
             self.config['qmt_path'] = os.environ['QMT_PATH']
 
+        if 'BAOSTOCK_ENABLED' in os.environ:
+            self.config['baostock_enabled'] = os.environ['BAOSTOCK_ENABLED'].lower() in ('true', '1', 'yes')
+
         # 日志级别
         if 'LOG_LEVEL' in os.environ:
             self.config['log_level'] = os.environ['LOG_LEVEL']
@@ -187,6 +193,15 @@ class DataManagerConfig:
         if self.config.get('tushare_token'):
             available.append('tushare')
 
+        # BaoStock 无需 Token；仅在依赖已安装且配置开启时启用。
+        if self.config.get('baostock_enabled', True):
+            try:
+                import importlib.util
+                if importlib.util.find_spec('baostock') is not None:
+                    available.append('baostock')
+            except (ImportError, ValueError):
+                pass
+
         return available
 
     def get(self, key: str, default=None):
@@ -217,7 +232,7 @@ class DataManagerConfig:
         获取特定数据源的配置
 
         Args:
-            source_name: 数据源名称 (duckdb/tushare/qmt)
+            source_name: 数据源名称 (duckdb/tushare/qmt/baostock)
 
         Returns:
             Dict: 数据源配置
@@ -235,6 +250,11 @@ class DataManagerConfig:
             'qmt': {
                 'path': self.get('qmt_path'),
                 'enabled': True  # QMT总是可用的（如果安装了）
+            },
+            'baostock': {
+                'enabled': self.get('baostock_enabled', True),
+                'timeout': self.get('baostock_timeout', 15),
+                'max_retries': self.get('baostock_max_retries', 1),
             }
         }
 
@@ -259,7 +279,7 @@ class DataManagerConfig:
         if not available:
             # 如果什么都检测不到，使用默认降级方案
             logger.info("[Config] 未检测到任何数据源，使用默认降级方案: QMT -> Tushare")
-            return ['qmt', 'tushare']
+            return ['qmt', 'tushare', 'baostock']
 
         # 根据是否为新手模式调整优先级
         if self.config.get('beginner_mode'):
@@ -272,6 +292,8 @@ class DataManagerConfig:
                 preferred.append('tushare')
             if 'duckdb' in available:
                 preferred.append('duckdb')
+            if 'baostock' in available:
+                preferred.append('baostock')
         else:
             # 进阶模式：优先使用最快的数据源
             # DuckDB（本地最快） > QMT（本地） > Tushare（在线）
