@@ -11,10 +11,15 @@ from .base_provider import BaseDataProvider
 from .tdx_provider import TdxDataProvider
 from .ths_provider import ThsDataProvider
 from .eastmoney_provider import EastmoneyDataProvider
+try:
+    from .big_qmt_bridge_provider import BigQmtBridgeDataProvider
+except ImportError:
+    BigQmtBridgeDataProvider = None
 
 __all__ = [
     'BaseDataProvider',
     'TdxDataProvider', 
     'ThsDataProvider',
-    'EastmoneyDataProvider'
+    'EastmoneyDataProvider',
+    'BigQmtBridgeDataProvider'
 ]

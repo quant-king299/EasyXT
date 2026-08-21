@@ -14,11 +14,15 @@ from .providers.base_provider import BaseDataProvider
 from .providers.ths_provider import ThsDataProvider
 from .providers.eastmoney_provider import EastmoneyDataProvider
 try:
+    from .providers.big_qmt_bridge_provider import BigQmtBridgeDataProvider
+except ImportError:
+    BigQmtBridgeDataProvider = None
+try:
     from .providers.tdx_provider import TdxDataProvider
 except ImportError:
     TdxDataProvider = None
-from .config import RealtimeDataConfig
-from .cache import CacheManager
+from .config.settings import RealtimeDataConfig
+from .cache import CacheManager, CacheConfig as DataCacheConfig
 
 
 @dataclass
@@ -49,8 +53,15 @@ class UnifiedDataAPI:
         self.logger = logging.getLogger(__name__)
         
         # 初始化缓存管理器
-        if self.config.get('cache_enabled', True):
-            self.cache_manager = CacheManager(self.config.get_cache_config())
+        cache_config_dict = self.config.get_cache_config()
+        if cache_config_dict.get('enabled', True):
+            from .cache.cache_strategy import CacheType
+            cache_config = DataCacheConfig(
+                cache_type=CacheType.MEMORY,
+                max_size=cache_config_dict.get('max_size', 1000),
+                default_ttl=cache_config_dict.get('ttl', 300)
+            )
+            self.cache_manager = CacheManager(cache_config)
             self.logger.info("缓存管理器已启用")
         else:
             self.cache_manager = None
@@ -72,6 +83,14 @@ class UnifiedDataAPI:
     def _init_providers(self):
         """初始化数据源提供者"""
         try:
+            if self.config.is_provider_enabled('big_qmt_bridge'):
+                if BigQmtBridgeDataProvider is None:
+                    self.logger.warning("大QMT行情桥接未启用: 请安装 websockets")
+                else:
+                    bridge_config = self.config.get_provider_config('big_qmt_bridge')
+                    self.providers['big_qmt_bridge'] = BigQmtBridgeDataProvider(bridge_config)
+                    self.logger.info("大QMT实时行情桥接初始化成功")
+
             # 通达信数据源（可选，需要 pip install pytdx）
             if self.config.is_provider_enabled('tdx'):
                 if TdxDataProvider is None:
@@ -176,6 +195,9 @@ class UnifiedDataAPI:
         
         for name, provider in self.providers.items():
             status = self.source_status[name]
+            current_available = provider.is_available()
+            status.connected = bool(provider.connected)
+            status.available = current_available
             
             # 检查基本可用性
             if not (status.connected and status.available):
@@ -200,6 +222,7 @@ class UnifiedDataAPI:
         
         # 按优先级和响应时间排序
         available.sort(key=lambda x: (
+            self.config.get_provider_config(x).get('priority', 100),
             self.source_status[x].error_count,  # 错误次数越少越优先
             self.source_status[x].response_time  # 响应时间越短越优先
         ))

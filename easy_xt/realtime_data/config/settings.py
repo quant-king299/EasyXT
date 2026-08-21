@@ -44,6 +44,13 @@ class RealtimeDataConfig:
                 "timeout": 10,
                 "retry_count": 2,
                 "request_delay": 0.5
+            },
+            "big_qmt_bridge": {
+                "enabled": True,
+                "ws_host": "127.0.0.1",
+                "ws_port": 18766,
+                "token": "",
+                "timeout": 10
             }
         },
         "cache": {
