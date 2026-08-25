@@ -93,6 +93,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.local
 .venv
 env/
 venv/
@@ -497,8 +498,18 @@ screenshots/
 
 # 策略运行时状态文件
 *_log_state.json
+
+# 诊断和调试日志（txt格式）
+*_diag.txt
+*_diagnostic*.txt
+bridge_*.txt
 unit_tests/data_manager/test_data_loss_protection.py
 docs/DATA_NODE_SERVICE.md
 
 # code_converter 子模块中的个人代码目录（不提交）
 code_converter/大QMT代码/
+docs/BIG_QMT_REALTIME_BRIDGE.md
+docs/公众号文章/Mac使用EasyXT访问Windows数据源-UU远程端口映射方案.md
+
+# 实时行情桥接（VIP功能，不提交到GitHub）
+easy_xt/realtime_bridge/

@@ -14,6 +14,9 @@ import websockets
 
 from .base_provider import BaseDataProvider
 from ...realtime_bridge.relay import normalize_symbol
+from ...env_loader import load_project_env
+
+load_project_env()
 
 
 class BigQmtBridgeDataProvider(BaseDataProvider):
@@ -43,6 +46,9 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
         self._ready = threading.Event()
         self._thread = None
         self._last_message_time = 0.0
+        self._loop = None
+        self._websocket = None
+        self.request_timeout = float(config.get("request_timeout", 2))
 
     def _connection_url(self) -> str:
         if not self.token:
@@ -73,6 +79,7 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
             self.connected = False
 
     async def _receive_loop(self):
+        self._loop = asyncio.get_running_loop()
         while not self._stop.is_set():
             try:
                 connect_options = {
@@ -84,10 +91,10 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
                 if "proxy" in inspect.signature(websockets.connect).parameters:
                     connect_options["proxy"] = None
                 async with websockets.connect(self._connection_url(), **connect_options) as websocket:
+                    self._websocket = websocket
                     self.connected = True
                     self._last_message_time = time.time()
                     self._ready.set()
-                    await websocket.send(json.dumps({"type": "snapshot"}))
                     while not self._stop.is_set():
                         try:
                             raw = await asyncio.wait_for(websocket.recv(), timeout=1)
@@ -96,6 +103,7 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
                         self._handle_message(json.loads(raw))
             except Exception as exc:
                 self.connected = False
+                self._websocket = None
                 self._ready.set()
                 if not self._stop.is_set():
                     self.logger.debug("大QMT行情桥接等待重连: %s", exc)
@@ -125,6 +133,8 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
         self.connected = False
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=max(2.0, self.reconnect_delay + 1))
+        self._websocket = None
+        self._loop = None
 
     def is_available(self) -> bool:
         return bool(
@@ -135,6 +145,31 @@ class BigQmtBridgeDataProvider(BaseDataProvider):
         )
 
     def get_realtime_quotes(self, codes: List[str]) -> List[Dict[str, Any]]:
+        result = self._collect_quotes(codes)
+        found = {item["code"] for item in result}
+        missing = [normalize_symbol(code) for code in codes
+                   if normalize_symbol(code) not in found]
+        if missing and self.is_available() and self._loop and self._websocket:
+            try:
+                future = asyncio.run_coroutine_threadsafe(
+                    self._websocket.send(json.dumps({
+                        "type": "snapshot", "symbols": missing,
+                    })),
+                    self._loop,
+                )
+                future.result(timeout=self.request_timeout)
+                deadline = time.time() + self.request_timeout
+                while time.time() < deadline:
+                    result = self._collect_quotes(codes)
+                    if all(symbol in {item["code"] for item in result}
+                           for symbol in missing):
+                        break
+                    time.sleep(0.02)
+            except Exception as exc:
+                self.logger.debug("请求大QMT精确快照失败: %s", exc)
+        return result
+
+    def _collect_quotes(self, codes: List[str]) -> List[Dict[str, Any]]:
         now = time.time()
         result = []
         with self._lock:
