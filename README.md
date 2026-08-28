@@ -851,7 +851,7 @@ python strategies\jq2qmt\run_qka_server.py --account YOUR_ACCOUNT_ID --mini-qmt-
 - **项目主页**: https://github.com/quant-king299/EasyXT
 - **问题反馈**: https://github.com/quant-king299/EasyXT/issues
 - **网站**: https://www.ptqmt.com
-- **微信公众号**: 王者quant
+- **微信公众号**: 量化王国Quantaria
 
 ---
 

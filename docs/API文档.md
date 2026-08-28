@@ -580,6 +580,6 @@ ef.register_factor('CUSTOM', calculate_custom_factor)
 
 ## 技术支持
 
-微信公众号：**王者quant**
+微信公众号：**量化王国Quantaria**
 
 完整代码和示例：`学习实例/EasyFactor_扩展模块演示.py`

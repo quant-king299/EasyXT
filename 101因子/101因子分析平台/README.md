@@ -281,7 +281,7 @@ class CustomNode(BaseNode):
 
 ![QQ群二维码](docs/assets/qq_group_qr.jpg)
 
-- **微信公众号**: 王者quant
+- **微信公众号**: 量化王国Quantaria
 - **微信号**: www_ptqmt_com
 - **GitHub**: [项目地址]
 

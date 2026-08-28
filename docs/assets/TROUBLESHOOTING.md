@@ -1966,7 +1966,7 @@ data = api.get_price(['000001.SZ'], start='20240101', period='1d')
 
 ### 社区支持
 - **GitHub Issues**: https://github.com/quant-king299/EasyXT/issues
-- **微信公众号**: 王者quant
+- **微信公众号**: 量化王国Quantaria
 - **知识星球**: 获取一对一答疑服务
 
 ### 提交问题时请提供：

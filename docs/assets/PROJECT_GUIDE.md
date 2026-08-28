@@ -818,7 +818,7 @@ api.init_trade(
 
 **渠道**：
 - 💬 QQ群：492287081
-- 📢 公众号：王者quant
+- 📢 公众号：量化王国Quantaria
 - 🐛 GitHub Issues
 
 **优点**：免费，热心人多
@@ -1132,7 +1132,7 @@ python 学习实例/01_基础入门.py
 
 ## 👇 关注公众号 / 加群交流 👇
 
-### 📱 微信公众号：王者quant
+### 📱 微信公众号：量化王国Quantaria
 
 <img src="docs/assets/wechat_qr.jpg" alt="公众号二维码" width="260" />
 

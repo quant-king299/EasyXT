@@ -51,7 +51,7 @@ _patch_applied = _patch_xtdata_download()
 
 # 显示作者信息
 logger.info("作者微信: www_ptqmt_com")
-logger.info("欢迎关注微信公众号: 王者quant")
+logger.info("欢迎关注微信公众号: 量化王国Quantaria")
 
 # 延迟导入避免循环依赖
 def _get_api():
