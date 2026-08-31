@@ -138,14 +138,16 @@ class DataDownloadThread(QThread):
                     try:
                         import easy_xt
                         api = easy_xt.get_api()
-                        all_stocks_resp = api.data.get_all_securities()
-                        if hasattr(all_stocks_resp, 'index'):
-                            all_stocks = all_stocks_resp.index.tolist()
-                        else:
-                            all_stocks = []
+                        # init_data 内部按 QMT→xqshare→TDX→东财 自动降级
+                        api.init_data()
+                        all_stocks = api.data.get_stock_list() or []
                     except Exception as e2:
                         self.log_signal.emit(f"❌ 无法获取股票列表: {e2}")
-                        self.error_signal.emit(f"无法获取股票列表: {e2}")
+                        self.error_signal.emit(
+                            f"无法获取股票列表: {e2}\n"
+                            f"请检查QMT客户端是否已启动并登录；"
+                            f"或执行 pip install pytdx 启用通达信备用数据源"
+                        )
                         return
 
                 # 过滤掉ETF和基金
