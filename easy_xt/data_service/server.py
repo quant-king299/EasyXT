@@ -46,6 +46,25 @@ def _df_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
     return clean.to_dict(orient="records")
 
 
+def _json_safe(value: Any) -> Any:
+    """Convert QMT/numpy metadata into JSON-safe built-in values."""
+    if isinstance(value, dict):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(item) for item in value]
+    if hasattr(value, "item"):
+        try:
+            return _json_safe(value.item())
+        except Exception:
+            pass
+    if hasattr(value, "isoformat"):
+        try:
+            return value.isoformat()
+        except Exception:
+            pass
+    return value
+
+
 class DataNode:
     def __init__(self, node_id: str = DEFAULT_NODE_ID, duckdb_path: str = DEFAULT_DUCKDB_PATH):
         self.node_id = node_id
@@ -103,6 +122,7 @@ class DataNode:
         period: str = "1d",
         count: int = -1,
         source: str = "auto",
+        fill_data: bool = True,
     ) -> Dict[str, List[Dict[str, Any]]]:
         symbols = [_normalize_symbol(s) for s in symbols]
 
@@ -117,12 +137,34 @@ class DataNode:
 
         if source in ("auto", "xtquant"):
             try:
-                return self._bars_from_xtquant(symbols, start_time, end_time, period, count)
+                return self._bars_from_xtquant(
+                    symbols, start_time, end_time, period, count, fill_data
+                )
             except Exception:
                 if source == "xtquant":
                     raise
 
         return {}
+
+    def get_instrument_details(self, symbols: List[str]) -> Dict[str, Dict[str, Any]]:
+        """Read QMT contract metadata needed for point-in-time backtests.
+
+        In particular, ETF backtests must exclude instruments before OpenDate;
+        otherwise ``fill_data=True`` can turn pre-listing gaps into fake bars.
+        """
+        from xtquant import xtdata
+
+        result: Dict[str, Dict[str, Any]] = {}
+        for raw_symbol in symbols:
+            symbol = _normalize_symbol(raw_symbol)
+            try:
+                detail = xtdata.get_instrument_detail(symbol) or {}
+                # Return the original field names used by ContextInfo so a
+                # remote research run follows the converted QMT strategy.
+                result[symbol] = _json_safe(detail)
+            except Exception as exc:
+                result[symbol] = {"error": str(exc)}
+        return result
 
     def get_daily_table(
         self,
@@ -177,6 +219,99 @@ class DataNode:
             return _df_records(df)
         finally:
             con.close()
+
+    def supplement_daily_from_xtquant(
+        self, category: str, symbols: List[str], start_time: str, end_time: str
+    ) -> Dict[str, Any]:
+        """Fill explicit DuckDB edge gaps before a backtest, never during it.
+
+        The caller must provide the required universe.  This deliberately does
+        not try to infer or download an entire market universe: a silent bulk
+        download could change a backtest's data snapshot without the user
+        knowing it.
+        """
+        layouts = {
+            "etf": ("etf_daily", "ts_code", "trade_date", "vol"),
+            "stock": ("stock_daily", "stock_code", "date", "volume"),
+        }
+        if category not in layouts:
+            return {"ok": False, "reason": "仅支持 etf / stock 日线补数", "supplemented": []}
+        if not symbols:
+            return {"ok": True, "reason": "未指定 required symbols，不执行补数", "supplemented": []}
+        table, code_col, date_col, volume_col = layouts[category]
+        normalized = list(dict.fromkeys(_normalize_symbol(symbol) for symbol in symbols))
+        start, end = _date_for_duckdb(start_time), _date_for_duckdb(end_time)
+
+        con = self._duckdb_connect()
+        try:
+            placeholders = ", ".join(["?"] * len(normalized))
+            coverage = con.execute(
+                f"SELECT {code_col} AS code, MIN({date_col}) AS first_day, MAX({date_col}) AS last_day "
+                f"FROM {table} WHERE {code_col} IN ({placeholders}) "
+                f"GROUP BY {code_col}", normalized
+            ).fetchdf()
+            known = {str(row.code): (str(row.first_day), str(row.last_day)) for row in coverage.itertuples()}
+            needed = [code for code in normalized
+                      if code not in known or known[code][0] > start or known[code][1] < end]
+            if not needed:
+                return {"ok": True, "reason": "DuckDB 覆盖完整，无需 xtquant", "supplemented": [],
+                        "coverage": known}
+        finally:
+            con.close()
+
+        try:
+            from xtquant import xtdata
+            xtdata.download_history_data2(
+                stock_list=needed, period="1d", start_time=start.replace("-", ""),
+                end_time=end.replace("-", ""), callback=None,
+            )
+            raw = xtdata.get_market_data_ex(
+                field_list=["open", "high", "low", "close", "volume", "amount"],
+                stock_list=needed, period="1d", start_time=start.replace("-", ""),
+                end_time=end.replace("-", ""), count=-1, dividend_type="none", fill_data=False,
+            )
+        except Exception as exc:
+            # QMT/xtquant is optional.  Offline backtests continue using the
+            # existing immutable DuckDB snapshot and surface this diagnostic.
+            return {"ok": False, "reason": "xtquant 不可用或未登录: %s" % exc,
+                    "supplemented": [], "needed": needed}
+
+        con = self._duckdb_connect()
+        supplemented: List[str] = []
+        try:
+            column_rows = con.execute("PRAGMA table_info('%s')" % table).fetchall()
+            table_columns = {str(row[1]) for row in column_rows}
+            insert_columns = [code_col, date_col, "open", "high", "low", "close", volume_col, "amount"]
+            insert_columns = [column for column in insert_columns if column in table_columns]
+            for code, frame in (raw or {}).items():
+                if frame is None or frame.empty:
+                    continue
+                item = frame.reset_index().rename(columns={"index": "trade_date"}).copy()
+                if "trade_date" not in item.columns:
+                    continue
+                item["trade_date"] = pd.to_datetime(item["trade_date"], errors="coerce").dt.date
+                item = item[item["trade_date"].notna()].copy()
+                if item.empty:
+                    continue
+                item[code_col] = _normalize_symbol(code)
+                item[date_col] = item["trade_date"]
+                if volume_col not in item.columns and "volume" in item.columns:
+                    item[volume_col] = item["volume"]
+                for column in insert_columns:
+                    if column not in item.columns:
+                        item[column] = None
+                values = [tuple(row) for row in item[insert_columns].itertuples(index=False, name=None)]
+                markers = ", ".join(["?"] * len(insert_columns))
+                con.executemany(
+                    "INSERT OR REPLACE INTO %s (%s) VALUES (%s)" %
+                    (table, ", ".join(insert_columns), markers), values,
+                )
+                supplemented.append(_normalize_symbol(code))
+            con.commit()
+        finally:
+            con.close()
+        return {"ok": True, "reason": "xtquant 补数完成", "needed": needed,
+                "supplemented": supplemented}
 
     def get_cb_events(self, start_time: str = "", end_time: str = "") -> Dict[str, List[Dict[str, Any]]]:
         """读取可转债强赎与下修事件，供远程投研端按历史时点过滤。"""
@@ -272,6 +407,7 @@ class DataNode:
         end_time: str,
         period: str,
         count: int,
+        fill_data: bool,
     ) -> Dict[str, List[Dict[str, Any]]]:
         from xtquant import xtdata
 
@@ -283,7 +419,7 @@ class DataNode:
             end_time=end_time,
             count=count,
             dividend_type="none",
-            fill_data=True,
+            fill_data=bool(fill_data),
         )
         result: Dict[str, List[Dict[str, Any]]] = {}
         for symbol, df in (raw or {}).items():
@@ -304,6 +440,18 @@ class BarsRequest(BaseModel):
     period: str = "1d"
     count: int = -1
     source: str = "auto"
+    fill_data: bool = True
+
+
+class InstrumentsRequest(BaseModel):
+    symbols: List[str]
+
+
+class BacktestSupplementRequest(BaseModel):
+    category: str
+    symbols: List[str]
+    start_time: str
+    end_time: str
 
 
 node = DataNode()
@@ -337,8 +485,32 @@ def bars(req: BarsRequest) -> Dict[str, Any]:
             period=req.period,
             count=req.count,
             source=req.source,
+            fill_data=req.fill_data,
         )
-        return {"source": req.source, "period": req.period, "data": data}
+        return {
+            "source": req.source, "period": req.period,
+            "fill_data": req.fill_data, "data": data,
+        }
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/instruments")
+def instruments(req: InstrumentsRequest) -> Dict[str, Any]:
+    try:
+        details = node.get_instrument_details(req.symbols)
+        return {"count": len(details), "data": details}
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@app.post("/backtest/supplement-daily")
+def supplement_daily(req: BacktestSupplementRequest) -> Dict[str, Any]:
+    """Optional pre-backtest xtquant -> DuckDB supplement for explicit symbols."""
+    try:
+        return node.supplement_daily_from_xtquant(
+            req.category, req.symbols, req.start_time, req.end_time
+        )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 

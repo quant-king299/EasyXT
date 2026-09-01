@@ -38,6 +38,15 @@
 - 🚀 **推荐**：[DuckDB 数据库（提速 10-30 倍）](#duckdb-数据库配置)
 - ❌ **不需要**：QMT 交易配置
 
+日线正式回测使用 `duckdb_only` 模式：只读取本地 DuckDB，或 Windows
+数据节点的只读 `/daily` DuckDB 接口；不会初始化 xtquant，也不要求登录 QMT。
+xtquant 只用于下载、合约元数据核验、实时行情和交易。
+
+若回测请求提供了明确的 `symbols`，系统会在回测开始前检查这些标的在
+DuckDB 中的起止日期覆盖。只有发现缺口且 Windows 已登录 xtquant 时，才会
+下载缺失区间并写入 DuckDB；随后整次回测仍只读取 DuckDB。未登录 xtquant
+不会阻止已有数据的离线回测，结果审计会记录补数是否执行。
+
 #### 🟡 场景 D：我想使用雪球跟单策略
 - ✅ **必需**：[xtquant 配置](#1-xtquant-配置)
 - ✅ **必需**：[雪球 Cookie 配置](#雪球跟单配置)

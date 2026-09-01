@@ -508,6 +508,7 @@ docs/DATA_NODE_SERVICE.md
 
 # code_converter 子模块中的个人代码目录（不提交）
 code_converter/大QMT代码/
+code_converter/**/大QMT代码/
 docs/BIG_QMT_REALTIME_BRIDGE.md
 docs/公众号文章/Mac使用EasyXT访问Windows数据源-UU远程端口映射方案.md
 

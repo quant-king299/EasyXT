@@ -19,6 +19,7 @@ from easyxt_backtest.research.universe import universe_as_of
 from easyxt_backtest.research.audit import build_experiment_manifest
 
 DB_PATH = 'D:/StockData/stock_data.ddb'
+DATA_MODE_DUCKDB_ONLY = 'duckdb_only'
 
 # 各类资产配置
 CATEGORY_CONFIG = {
@@ -69,11 +70,19 @@ class VectorizedBacktestEngine:
     CB/ETF/股票共享同一套回测逻辑，仅数据源和交易参数不同。
     """
 
-    def __init__(self, category: str = 'cb', db_path: str = None):
+    def __init__(self, category: str = 'cb', db_path: str = None,
+                 data_mode: str = DATA_MODE_DUCKDB_ONLY):
         if category not in CATEGORY_CONFIG:
             raise ValueError(f"不支持类别: {category}，可选: {list(CATEGORY_CONFIG.keys())}")
+        if data_mode != DATA_MODE_DUCKDB_ONLY:
+            raise ValueError("日线回测只支持 data_mode='duckdb_only'；"
+                             "下载、实时行情和实盘交易请使用独立的数据接口")
         self.category = category
         self.cfg = CATEGORY_CONFIG[category]
+        # This engine must never initialize DataAPI/xtquant.  It reads the
+        # local DuckDB file, or the Data Node's /daily endpoint, which itself
+        # is a read-only DuckDB query.
+        self.data_mode = data_mode
         if db_path:
             self.db_path = db_path
         else:
@@ -303,7 +312,7 @@ class VectorizedBacktestEngine:
     # ── 数据加载 ──
 
     def _load_daily_data(self, start_date: str, end_date: str) -> pd.DataFrame:
-        """从 DuckDB 加载全量日线数据"""
+        """从 DuckDB 加载全量日线数据；不连接 xtquant。"""
         import duckdb
         s = f'{start_date[:4]}-{start_date[4:6]}-{start_date[6:]}'
         e = f'{end_date[:4]}-{end_date[4:6]}-{end_date[6:]}'
@@ -342,7 +351,7 @@ class VectorizedBacktestEngine:
                 except Exception:
                     pass
     def _load_daily_data_from_data_node(self, start_date: str, end_date: str, label: str) -> pd.DataFrame:
-        """从 Windows EasyXT Data Node 加载全量日线数据（Mac/Linux 投研端兜底）。"""
+        """从 Data Node 的 DuckDB-only /daily 端点加载日线数据。"""
         host = os.environ.get("EASYXT_DATA_NODE_HOST")
         port = os.environ.get("EASYXT_DATA_SERVICE_PORT", "18820")
         if not host and os.environ.get("EASYXT_DATA_NODE_DISCOVERY", "mdns").lower() == "mdns":
