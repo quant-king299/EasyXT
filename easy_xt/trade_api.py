@@ -11,6 +11,7 @@ import sys
 import os
 import time
 import datetime
+import math
 from threading import Event
 
 # 添加xtquant路径
@@ -352,6 +353,25 @@ class TradeAPI:
             ErrorHandler.log_error(f"添加账户失败: {str(e)}")
             return False
     
+    @staticmethod
+    def _validate_order_params(volume: int, price: float, price_type: str) -> None:
+        """在订单进入交易器或信号桥接前校验关键参数。"""
+        if isinstance(volume, bool) or not isinstance(volume, int):
+            raise ValueError("volume 必须是整数")
+        if volume <= 0 or volume % 100 != 0:
+            raise ValueError("volume 必须是大于 0 的 100 股整数倍")
+
+        valid_price_types = {'market', 'limit', '市价', '限价'}
+        if price_type not in valid_price_types:
+            raise ValueError(f"不支持的 price_type: {price_type}")
+
+        if isinstance(price, bool) or not isinstance(price, (int, float)):
+            raise ValueError("price 必须是数字")
+        if not math.isfinite(float(price)) or price < 0:
+            raise ValueError("price 必须是有限的非负数")
+        if price_type in {'limit', '限价'} and price <= 0:
+            raise ValueError("限价单 price 必须大于 0")
+
     @ErrorHandler.handle_api_error
     def buy(self, 
             account_id: str, 
@@ -372,6 +392,8 @@ class TradeAPI:
         Returns:
             Optional[int]: 委托编号，失败返回None
         """
+        self._validate_order_params(volume, price, price_type)
+
         if not self.trader or account_id not in self.accounts:
             # ────── 降级：大QMT信号桥接 ──────
             bridge = _get_signal_bridge()
@@ -443,6 +465,8 @@ class TradeAPI:
         Returns:
             Optional[int]: 委托编号，失败返回None
         """
+        self._validate_order_params(volume, price, price_type)
+
         if not self.trader or account_id not in self.accounts:
             # ────── 降级：大QMT信号桥接 ──────
             bridge = _get_signal_bridge()
@@ -737,6 +761,30 @@ class TradeAPI:
                 return self.get_trades_from_orders(account_id)
             except Exception:
                 return pd.DataFrame()
+
+    def get_history_trades(self, account_id: str, start_date: str = None,
+                           end_date: str = None) -> pd.DataFrame:
+        """获取并按日期过滤当前 QMT 可查的成交记录。
+
+        QMT 的 ``query_stock_trades`` 不接收日期参数，因此先查询客户端
+        当前可用记录，再在本地做包含边界的日期过滤。
+        """
+        trades = self.get_trades(account_id)
+        if trades is None or trades.empty or 'time' not in trades.columns:
+            return pd.DataFrame() if trades is None else trades
+
+        result = trades.copy()
+        result['time'] = pd.to_datetime(result['time'], errors='coerce')
+        result = result[result['time'].notna()]
+
+        if start_date:
+            start = pd.to_datetime(start_date, format='%Y%m%d', errors='raise')
+            result = result[result['time'].dt.normalize() >= start]
+        if end_date:
+            end = pd.to_datetime(end_date, format='%Y%m%d', errors='raise')
+            result = result[result['time'].dt.normalize() <= end]
+
+        return result.reset_index(drop=True)
     
     def _process_trades_data(self, trades) -> pd.DataFrame:
         """处理成交数据"""
@@ -756,7 +804,7 @@ class TradeAPI:
                 'volume': trade.traded_volume,
                 'price': trade.traded_price,
                 'amount': trade.traded_amount,
-                'time': trade.traded_time,
+                'time': pd.to_datetime(trade.traded_time, unit='s', errors='coerce'),
                 'order_id': trade.order_id,
                 'trade_id': trade.traded_id,
                 'strategy_name': getattr(trade, 'strategy_name', ''),
@@ -796,13 +844,16 @@ class TradeAPI:
         for _, order in filled_orders.iterrows():
             if order['traded_volume'] > 0:
                 trades_data.append({
-                    '证券代码': order['code'],
-                    '委托类型': order['order_type'],
-                    '成交数量': order['traded_volume'],
-                    '委托价格': order['price'],
-                    '委托时间': order['order_time'],
-                    '状态': order['status'],
-                    '备注': '从委托推断'
+                    'code': order['code'],
+                    'order_type': order['order_type'],
+                    'volume': order['traded_volume'],
+                    'price': order['price'],
+                    'amount': order['traded_volume'] * order['price'],
+                    'time': pd.to_datetime(order['order_time'], unit='s', errors='coerce'),
+                    'order_id': order['order_id'],
+                    'trade_id': None,
+                    'strategy_name': '',
+                    'remark': '从委托推断'
                 })
         
         if trades_data:
