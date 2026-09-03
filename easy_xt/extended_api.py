@@ -536,8 +536,8 @@ class ExtendedAPI:
         if trades is None or trades.empty:
             return {}
         
-        buy_trades = trades[trades['trade_type'] == '买入']
-        sell_trades = trades[trades['trade_type'] == '卖出']
+        buy_trades = trades[trades['order_type'] == '买入']
+        sell_trades = trades[trades['order_type'] == '卖出']
         
         return {
             'total_trades': len(trades),
