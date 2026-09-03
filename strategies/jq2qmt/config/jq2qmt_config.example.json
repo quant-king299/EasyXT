@@ -1,0 +1,26 @@
+{
+  "enabled": true,
+  "server_url": "http://localhost:5366",
+  "auth_config": {
+    "use_crypto_auth": false,
+    "client_id": "easyxt_client",
+    "private_key_file": "keys/easyxt_private.pem",
+    "simple_api_key": "CHANGE_ME"
+  },
+  "sync_settings": {
+    "auto_sync": true,
+    "sync_interval": 30,
+    "retry_times": 3
+  },
+  "order_settings": {
+    "enabled": true,
+    "endpoint": "/api/v1/orders/submit",
+    "timeout": 10,
+    "mode": "qka"
+  },
+  "qka_settings": {
+    "enabled": true,
+    "base_url": "http://127.0.0.1:8000",
+    "token": "GENERATE_A_NEW_RANDOM_TOKEN"
+  }
+}

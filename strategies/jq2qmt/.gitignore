@@ -41,3 +41,6 @@ quant_id_rsa*
 src/config.py
 src/api/jq_config.py
 src/api/qmt_jq_trade.py
+
+# Local trading credentials (copy from the committed example)
+config/jq2qmt_config.json
