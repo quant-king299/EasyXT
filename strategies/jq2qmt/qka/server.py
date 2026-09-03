@@ -4,20 +4,19 @@ import inspect
 from typing import Any, Dict
 from .trade import create_trader
 import uvicorn
-import uuid
-import hashlib
+import secrets
 
 import logging
 
 logger = logging.getLogger(__name__)
 
 class QMTServer:
-    def __init__(self, account_id: str, mini_qmt_path: str, host: str = "0.0.0.0", port: int = 8000, token: str = None):
+    def __init__(self, account_id: str, mini_qmt_path: str, host: str = "127.0.0.1", port: int = 8000, token: str = None):
         """初始化交易服务器
         Args:
             account_id: 账户ID
             mini_qmt_path: miniQMT路径
-            host: 服务器地址，默认0.0.0.0
+            host: 服务器地址，默认仅监听本机
             port: 服务器端口，默认8000
             token: 可选的自定义token
         """
@@ -28,18 +27,16 @@ class QMTServer:
         self.app = FastAPI()
         self.trader = None
         self.account = None
-        self.token = token if token else self.generate_token()  # 使用自定义token或生成固定token
-        logger.info(f"\n授权Token: {self.token}\n")
+        self.token = token if token else self.generate_token()
+        logger.info("交易服务鉴权 Token 已配置（不输出明文）")
 
     def generate_token(self) -> str:
-        """生成基于机器码的固定token"""
-        # 获取机器码（例如MAC地址）
-        mac = uuid.getnode()
-        # 将机器码转换为字符串
-        mac_str = str(mac)
-        # 使用SHA256哈希生成固定长度的token
-        token = hashlib.sha256(mac_str.encode()).hexdigest()
-        return token
+        """生成不可预测的临时 token。
+
+        实盘部署应显式传入持久 token；不再使用可由 MAC 地址
+        重现的固定值。
+        """
+        return secrets.token_urlsafe(48)
 
     async def verify_token(self, x_token: str = Header(...)):
         """验证token的依赖函数"""
@@ -124,7 +121,7 @@ class QMTServer:
         self.setup_routes()
         uvicorn.run(self.app, host=self.host, port=self.port)
 
-def qmt_server(account_id: str, mini_qmt_path: str, host: str = "0.0.0.0", port: int = 8000, token: str = None):
+def qmt_server(account_id: str, mini_qmt_path: str, host: str = "127.0.0.1", port: int = 8000, token: str = None):
     """快速创建并启动服务器的便捷函数"""
     server = QMTServer(account_id, mini_qmt_path, host, port, token)
     server.start()
