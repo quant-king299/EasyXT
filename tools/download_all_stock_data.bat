@@ -55,28 +55,31 @@ rem 验证下载结果
 echo [3/3] 验证下载结果...
 echo.
 
-rem 检查深圳数据目录
-set "SZ_DIR=D:\国金QMT交易端模拟\userdata_mini\datadir\SZ\86400"
-if exist "%SZ_DIR%" (
-    echo ✓ 深圳股票数据目录存在: %SZ_DIR%
-    for /f %%i in ('dir "%SZ_DIR%\*.DAT" /b ^| find /c /v ""') do set SZ_COUNT=%%i
-    echo   深圳股票数据文件数量: !SZ_COUNT!
+rem 验证目录由用户配置，避免假定某台电脑的 QMT 安装位置。
+rem 例：set QMT_DATA_DIR=C:\QMT\userdata_mini
+if not defined QMT_DATA_DIR (
+    echo ℹ 未设置 QMT_DATA_DIR，跳过 DAT 文件目录验证。
+    echo   如需验证，请先设置 QMT_DATA_DIR 为 QMT 的 userdata_mini 目录。
 ) else (
-    echo ℹ 深圳股票数据目录不存在: %SZ_DIR%
-    echo   （可能是目录尚未创建或路径不同）
-)
+    set "SZ_DIR=%QMT_DATA_DIR%\datadir\SZ\86400"
+    if exist "!SZ_DIR!" (
+        echo ✓ 深圳股票数据目录存在: !SZ_DIR!
+        for /f %%i in ('dir "!SZ_DIR!\*.DAT" /b ^| find /c /v ""') do set SZ_COUNT=%%i
+        echo   深圳股票数据文件数量: !SZ_COUNT!
+    ) else (
+        echo ℹ 深圳股票数据目录不存在: !SZ_DIR!
+    )
 
-echo.
+    echo.
 
-rem 检查上海数据目录
-set "SH_DIR=D:\国金QMT交易端模拟\userdata_mini\datadir\SH\86400"
-if exist "%SH_DIR%" (
-    echo ✓ 上海股票数据目录存在: %SH_DIR%
-    for /f %%i in ('dir "%SH_DIR%\*.DAT" /b ^| find /c /v ""') do set SH_COUNT=%%i
-    echo   上海股票数据文件数量: !SH_COUNT!
-) else (
-    echo ℹ 上海股票数据目录不存在: %SH_DIR%
-    echo   （可能是目录尚未创建或路径不同）
+    set "SH_DIR=%QMT_DATA_DIR%\datadir\SH\86400"
+    if exist "!SH_DIR!" (
+        echo ✓ 上海股票数据目录存在: !SH_DIR!
+        for /f %%i in ('dir "!SH_DIR!\*.DAT" /b ^| find /c /v ""') do set SH_COUNT=%%i
+        echo   上海股票数据文件数量: !SH_COUNT!
+    ) else (
+        echo ℹ 上海股票数据目录不存在: !SH_DIR!
+    )
 )
 
 echo.
