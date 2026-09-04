@@ -14,6 +14,7 @@ import pandas as pd
 # 添加项目路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+from config.env_config import get_default_db_path
 
 def update_data():
     """
@@ -32,7 +33,7 @@ logger = logging.getLogger(__name__)
         from xtquant import xtdata
         import duckdb
 
-        db_path = r'D:/StockData/stock_data.ddb'
+        db_path = get_default_db_path()
 
         # 步骤1：检查需要更新的股票
         logger.info("[步骤1] 检查需要更新的股票...")

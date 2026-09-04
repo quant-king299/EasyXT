@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 # 添加项目路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+from config.env_config import get_default_db_path
 
 def update_missing_stock_data(stock_codes=None, days_behind=30):
     """
@@ -34,7 +35,7 @@ def update_missing_stock_data(stock_codes=None, days_behind=30):
         import pandas as pd
 
         logger.info("\n[步骤1] 连接数据源...")
-        manager = get_db_manager(r'D:/StockData/stock_data.ddb')
+        manager = get_db_manager(get_default_db_path())
 
         logger.info("[步骤2] 查找需要更新的股票...")
 
