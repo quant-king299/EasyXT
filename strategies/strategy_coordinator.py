@@ -90,6 +90,8 @@ def consolidate_orders(all_sells, all_buys):
 
 def _read_env(key: str, default: str = '') -> str:
     """从 .env 文件直接读取配置（子进程无法继承内存中的 env）"""
+    if key in os.environ:
+        return os.environ[key]
     try:
         env_file = Path(__file__).parent.parent / '.env'
         if env_file.exists():
@@ -105,7 +107,8 @@ def _read_env(key: str, default: str = '') -> str:
 def _wait_for_duckdb(max_retries: int = 10, delay: float = 2.0) -> bool:
     """等待 DuckDB 可用，直到数据库被释放"""
     import duckdb
-    path = _read_env('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+    from config.env_config import get_default_db_path
+    path = _read_env('DUCKDB_PATH', get_default_db_path())
     for attempt in range(max_retries):
         try:
             con = duckdb.connect(path, read_only=True)
@@ -453,4 +456,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

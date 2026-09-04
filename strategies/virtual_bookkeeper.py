@@ -23,6 +23,7 @@ from pathlib import Path
 from datetime import datetime
 from typing import Dict, List, Optional
 import pandas as pd
+from config.env_config import get_default_db_path
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +263,7 @@ class VirtualBookkeeper:
         cls._NAME_CACHE = {}
         try:
             import duckdb
-            db_path = os.environ.get('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+            db_path = get_default_db_path()
             con = duckdb.connect(db_path, read_only=True)
             # 从 stock_daily 提取所有不重复的代码
             codes = con.execute("SELECT DISTINCT stock_code FROM stock_daily").df()
