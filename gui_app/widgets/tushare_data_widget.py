@@ -147,6 +147,19 @@ class TushareDownloadThread(QThread):
         ts.set_token(token)
         return ts.pro_api()
 
+    def _get_active_stock_symbols(self, pro, max_count=0):
+        """在下载线程中获取在市 A 股代码，避免阻塞 GUI 事件循环。"""
+        self.log_signal.emit("正在获取 A 股列表...")
+        stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
+        if stock_list is None or stock_list.empty or 'ts_code' not in stock_list:
+            raise RuntimeError("获取股票列表失败或返回空数据")
+
+        symbols = stock_list['ts_code'].tolist()
+        if max_count > 0:
+            symbols = symbols[:max_count]
+        self.log_signal.emit(f"✅ 获取到 {len(symbols)} 只股票")
+        return symbols
+
     def _get_existing_stocks(self, conn, table_name, date_col='end_date', code_col='ts_code'):
         """查询表中每个股票的最新日期，用于增量判断"""
         try:
@@ -521,7 +534,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             years = self.kwargs.get('years', 5)
             target_end_date = f"{datetime.now().year}1231"
 
@@ -657,7 +670,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             years = self.kwargs.get('years', 5)
 
             self.log_signal.emit("=" * 60)
@@ -751,7 +764,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             start_date = self.kwargs.get('start_date', (datetime.now() - timedelta(days=30)).strftime('%Y%m%d'))
             end_date = self.kwargs.get('end_date', datetime.now().strftime('%Y%m%d'))
 
@@ -832,7 +845,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             years = self.kwargs.get('years', 5)
 
             self.log_signal.emit("开始下载股东数据...")
@@ -1033,7 +1046,7 @@ class TushareDownloadThread(QThread):
             db_path = self.kwargs.get('db_path') or self._get_db_path()
             start_date = self.kwargs.get('start_date', '20230101')
             end_date = self.kwargs.get('end_date', '20241231')
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
 
             self.log_signal.emit("=" * 60)
             self.log_signal.emit("开始下载日线行情数据（Tushare）")
@@ -1401,7 +1414,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             start_date = self.kwargs.get('start_date', '')
             end_date = self.kwargs.get('end_date', '')
 
@@ -1533,7 +1546,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             start_date = self.kwargs.get('start_date', '')
             end_date = self.kwargs.get('end_date', '')
 
@@ -1660,7 +1673,7 @@ class TushareDownloadThread(QThread):
         try:
             pro = self._get_tushare_pro()
             db_path = self.kwargs.get('db_path') or self._get_db_path()
-            symbols = self.kwargs.get('symbols', [])
+            symbols = self.kwargs.get('symbols') or self._get_active_stock_symbols(pro, self.kwargs.get('max_count', 0))
             start_date = self.kwargs.get('start_date', '')
             end_date = self.kwargs.get('end_date', '')
 
@@ -3465,23 +3478,13 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         years = self.fi_years_spin.value()
         start_date = f"{datetime.now().year - years}0101"
         end_date = datetime.now().strftime('%Y%m%d')
 
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载财务指标数据...")
-        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append(f"  股票池将在后台加载，日期: {start_date} ~ {end_date}")
         self.log_text.append("=" * 60)
 
         self.progress_bar.setVisible(True)
@@ -3490,7 +3493,6 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'financial_indicator',
             token=token,
-            symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
@@ -3505,23 +3507,13 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         years = self.bs_years_spin.value()
         start_date = f"{datetime.now().year - years}0101"
         end_date = datetime.now().strftime('%Y%m%d')
 
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载资产负债表数据...")
-        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append(f"  股票池将在后台加载，日期: {start_date} ~ {end_date}")
         self.log_text.append("=" * 60)
 
         self.progress_bar.setVisible(True)
@@ -3530,7 +3522,6 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'balancesheet',
             token=token,
-            symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
@@ -3545,23 +3536,13 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         years = self.cf_years_spin.value()
         start_date = f"{datetime.now().year - years}0101"
         end_date = datetime.now().strftime('%Y%m%d')
 
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载现金流量表数据...")
-        self.log_text.append(f"  股票数: {len(symbols)}, 日期: {start_date} ~ {end_date}")
+        self.log_text.append(f"  股票池将在后台加载，日期: {start_date} ~ {end_date}")
         self.log_text.append("=" * 60)
 
         self.progress_bar.setVisible(True)
@@ -3570,7 +3551,6 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'cashflow_data',
             token=token,
-            symbols=symbols,
             start_date=start_date,
             end_date=end_date
         )
@@ -3606,17 +3586,6 @@ class TushareDataWidget(QWidget):
         # 构建任务列表
         task_list = []
 
-        # 获取股票列表
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()[:self.quick_stock_spin.value()]
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         if self.chk_daily.isChecked():
             # 计算日期范围（也供后续任务使用）
             years_back = self.quick_years_spin.value()
@@ -3627,7 +3596,6 @@ class TushareDataWidget(QWidget):
                 'name': '日线行情',
                 'type': 'daily',
                 'params': {
-                    'symbols': symbols,
                     'start_date': start_date,
                     'end_date': end_date,
                     'max_count': self.quick_stock_spin.value()
@@ -3649,8 +3617,8 @@ class TushareDataWidget(QWidget):
                 'name': '财务数据',
                 'type': 'financial',
                 'params': {
-                    'symbols': symbols,
-                    'years': self.quick_years_spin.value()
+                    'years': self.quick_years_spin.value(),
+                    'max_count': self.quick_stock_spin.value()
                 }
             })
 
@@ -3659,7 +3627,7 @@ class TushareDataWidget(QWidget):
                 'name': '分红数据',
                 'type': 'dividend',
                 'params': {
-                    'symbols': symbols,
+                    'max_count': min(100, self.quick_stock_spin.value()),
                     'years': self.quick_years_spin.value()
                 }
             })
@@ -3678,8 +3646,8 @@ class TushareDataWidget(QWidget):
                 'name': '股东数据',
                 'type': 'holders',
                 'params': {
-                    'symbols': symbols,
-                    'years': self.quick_years_spin.value()
+                    'years': self.quick_years_spin.value(),
+                    'max_count': self.quick_stock_spin.value()
                 }
             })
 
@@ -3694,9 +3662,9 @@ class TushareDataWidget(QWidget):
                 'name': '财务指标（ROE/ROA等）',
                 'type': 'financial_indicator',
                 'params': {
-                    'symbols': symbols,
                     'start_date': start_date,
-                    'end_date': end_date
+                    'end_date': end_date,
+                    'max_count': self.quick_stock_spin.value()
                 }
             })
 
@@ -3705,9 +3673,9 @@ class TushareDataWidget(QWidget):
                 'name': '资产负债表',
                 'type': 'balancesheet',
                 'params': {
-                    'symbols': symbols,
                     'start_date': start_date,
-                    'end_date': end_date
+                    'end_date': end_date,
+                    'max_count': self.quick_stock_spin.value()
                 }
             })
 
@@ -3716,9 +3684,9 @@ class TushareDataWidget(QWidget):
                 'name': '现金流量表',
                 'type': 'cashflow_data',
                 'params': {
-                    'symbols': symbols,
                     'start_date': start_date,
-                    'end_date': end_date
+                    'end_date': end_date,
+                    'max_count': self.quick_stock_spin.value()
                 }
             })
 
@@ -3835,18 +3803,7 @@ class TushareDataWidget(QWidget):
 
         # 获取股票列表
         stock_str = self.financial_stock_edit.text().strip()
-        if stock_str:
-            symbols = [s.strip() for s in stock_str.split(',')]
-        else:
-            try:
-                import tushare as ts
-                ts.set_token(token)
-                pro = ts.pro_api()
-                stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-                symbols = stock_list['ts_code'].tolist()
-            except Exception as e:
-                QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-                return
+        symbols = [s.strip() for s in stock_str.split(',') if s.strip()] if stock_str else []
 
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载财务数据...")
@@ -3872,17 +3829,6 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        # 获取股票列表
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载分红数据...")
         self.log_text.append("=" * 60)
@@ -3893,7 +3839,6 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'dividend',
             token=token,
-            symbols=symbols,
             years=self.dividend_years_spin.value()
         )
         self._start_download_thread(thread)
@@ -3907,17 +3852,6 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        # 获取股票列表
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()[:100]  # 限制数量
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载资金流向...")
         self.log_text.append("=" * 60)
@@ -3928,7 +3862,7 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'moneyflow',
             token=token,
-            symbols=symbols,
+            max_count=100,
             days_back=self.moneyflow_days_spin.value()
         )
         self._start_download_thread(thread)
@@ -3942,17 +3876,6 @@ class TushareDataWidget(QWidget):
 
         os.environ['TUSHARE_TOKEN'] = token
 
-        # 获取股票列表
-        try:
-            import tushare as ts
-            ts.set_token(token)
-            pro = ts.pro_api()
-            stock_list = pro.stock_basic(exchange='', list_status='L', fields='ts_code')
-            symbols = stock_list['ts_code'].tolist()
-        except Exception as e:
-            QMessageBox.critical(self, "错误", f"获取股票列表失败: {e}")
-            return
-
         self.log_text.append("=" * 60)
         self.log_text.append("🚀 开始下载股东数据...")
         self.log_text.append("=" * 60)
@@ -3963,7 +3886,6 @@ class TushareDataWidget(QWidget):
         thread = TushareDownloadThread(
             'holders',
             token=token,
-            symbols=symbols,
             years=self.holders_years_spin.value()
         )
         self._start_download_thread(thread)

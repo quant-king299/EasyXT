@@ -188,3 +188,26 @@ def test_save_daily_dataframe_ignores_extra_columns(db_conn):
     rows = db_conn.execute("SELECT * FROM stock_daily").fetchdf()
     assert len(rows) == 1
     assert 'extra_col' not in rows.columns
+
+
+def test_active_stock_symbols_are_loaded_by_download_thread():
+    """股票池请求由下载线程的 helper 执行，供 UI 入口无阻塞地启动任务。"""
+    class FakePro:
+        def stock_basic(self, **kwargs):
+            assert kwargs == {
+                'exchange': '', 'list_status': 'L', 'fields': 'ts_code'
+            }
+            return pd.DataFrame({'ts_code': ['000001.SZ', '000002.SZ']})
+
+    thread = TushareDownloadThread('financial', token='test-token')
+
+    assert thread._get_active_stock_symbols(FakePro(), max_count=1) == ['000001.SZ']
+
+
+def test_gui_download_handlers_do_not_call_tushare_directly():
+    """回归保护：按钮处理器只创建线程，网络请求不能留在 GUI 主线程。"""
+    source = (PROJECT_ROOT / 'gui_app/widgets/tushare_data_widget.py').read_text()
+    ui_handlers = source[source.index('    def start_download_financial_indicator'):]
+
+    assert 'pro_api(' not in ui_handlers
+    assert "stock_basic(exchange='', list_status='L', fields='ts_code')" not in ui_handlers
