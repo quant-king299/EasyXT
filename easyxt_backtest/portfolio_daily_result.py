@@ -4,7 +4,7 @@
 
 参考vnpy的设计，实现逐日盯市的盈亏计算。
 """
-from typing import Dict, List
+from typing import Dict, List, Optional
 from datetime import date, datetime
 from dataclasses import dataclass, field
 import pandas as pd
@@ -18,7 +18,7 @@ class TradeRecord:
     volume: float
     price: float
     datetime: datetime
-    commission: float = 0.0
+    commission: Optional[float] = None
 
 
 @dataclass
@@ -123,7 +123,11 @@ class PortfolioDailyResult:
             self.turnover += trade_turnover
 
             # 计算手续费
-            trade_commission = trade_turnover * commission_rate
+            trade_commission = (
+                trade.commission
+                if trade.commission is not None
+                else trade_turnover * commission_rate
+            )
             self.commission += trade_commission
 
             # 更新持仓
