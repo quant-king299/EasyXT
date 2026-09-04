@@ -126,11 +126,11 @@ def main():
 
     # 5. DuckDB数据库检查
     logger.info("\n[5] DuckDB数据库检查")
+    from config.env_config import get_default_db_path
     duckdb_paths = [
-        'D:/StockData/stock_data.ddb',
-        'd:/stockdata/stock_data.ddb',
+        get_default_db_path(),
         './data/stock_data.ddb',
-        '~/StockData/stock_data.ddb'
+        '~/StockData/stock_data.ddb',
     ]
 
     db_found = False
