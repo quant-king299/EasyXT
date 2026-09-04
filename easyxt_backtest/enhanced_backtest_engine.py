@@ -156,7 +156,8 @@ class EnhancedBacktestEngine:
                  commission: float = 0.001,
                  slippage: float = 0.0,
                  data_manager=None,
-                 adjust: str = 'back'):
+                 adjust: str = 'back',
+                 signal_lag_days: int = 1):
         """
         初始化回测引擎
 
@@ -167,12 +168,18 @@ class EnhancedBacktestEngine:
             data_manager: 数据管理器
             adjust: 复权类型 ('none'=不复权, 'back'=后复权, 'front'=前复权)
                     默认 'back'（后复权），适合回测场景
+            signal_lag_days: 信号到成交的交易日间隔，当前强制为 1
         """
+        if signal_lag_days != 1:
+            raise ValueError("signal_lag_days 必须为 1，以避免日线回测未来函数")
+        if slippage < 0:
+            raise ValueError("slippage 不能为负数")
         self.initial_cash = initial_cash
         self.commission = commission
         self.slippage = slippage
         self.data_manager = data_manager
         self.adjust = adjust
+        self.signal_lag_days = signal_lag_days
 
         # 新增：仓位管理器
         self.position_manager = PositionManager(
@@ -243,45 +250,63 @@ class EnhancedBacktestEngine:
         # 记录交易历史
         all_trade_records: List[Dict] = []
 
-        for i, rebalance_date in enumerate(rebalance_dates, 1):
-            logger.info(f"\n[INFO] 调仓 {i}/{len(rebalance_dates)}: {rebalance_date}")
-            dt = datetime.strptime(rebalance_date, '%Y%m%d')
+        normalized_trading_dates = [self._normalize_date_to_str(d) for d in trading_dates]
+        sorted_trading_dates = sorted(d for d in normalized_trading_dates if d)
+
+        for i, signal_date in enumerate(rebalance_dates, 1):
+            signal_date = self._normalize_date_to_str(signal_date)
+            if signal_date is None:
+                logger.warning("[WARN] 调仓日期格式无效，跳过")
+                continue
+            execution_date = next(
+                (d for d in sorted_trading_dates if d > signal_date),
+                None,
+            )
+            if execution_date is None:
+                logger.warning(f"[WARN] 信号日 {signal_date} 之后无交易日，跳过")
+                continue
+
+            logger.info(
+                f"\n[INFO] 调仓 {i}/{len(rebalance_dates)}: "
+                f"信号日 {signal_date} -> 成交日 {execution_date}"
+            )
+            dt = datetime.strptime(execution_date, '%Y%m%d')
 
             # 2.1 选股
-            selected_stocks = strategy.select_stocks(rebalance_date)
+            selected_stocks = strategy.select_stocks(signal_date)
             logger.info(f"[INFO] 选中股票: {len(selected_stocks)} 只")
             if not selected_stocks:
                 logger.warning("[WARN] 未选中股票，跳过本次调仓")
                 # 保持上一次的持仓
                 if rebalance_positions:
                     last_date = max(rebalance_positions.keys())
-                    rebalance_positions[rebalance_date] = rebalance_positions[last_date].copy()
-                    rebalance_cash[rebalance_date] = rebalance_cash[last_date]
+                    rebalance_positions[execution_date] = rebalance_positions[last_date].copy()
+                    rebalance_cash[execution_date] = rebalance_cash[last_date]
                 continue
 
             # 2.2 获取目标权重
-            target_weights = strategy.get_target_weights(rebalance_date, selected_stocks)
+            target_weights = strategy.get_target_weights(signal_date, selected_stocks)
             logger.info(f"[INFO] 目标权重: {len(target_weights)} 只")
             if not target_weights:
                 logger.warning("[WARN] 目标权重为空，跳过本次调仓")
                 if rebalance_positions:
                     last_date = max(rebalance_positions.keys())
-                    rebalance_positions[rebalance_date] = rebalance_positions[last_date].copy()
-                    rebalance_cash[rebalance_date] = rebalance_cash[last_date]
+                    rebalance_positions[execution_date] = rebalance_positions[last_date].copy()
+                    rebalance_cash[execution_date] = rebalance_cash[last_date]
                 continue
 
             # 2.3 获取当前价格
-            current_prices = self._get_current_prices(
+            current_prices = self._get_execution_prices(
                 list(target_weights.keys()) + list(self.position_manager.positions.keys()),
-                rebalance_date
+                execution_date,
             )
 
             if not current_prices:
                 logger.warning(f"[WARN] 无法获取价格数据，跳过本次调仓")
                 if rebalance_positions:
                     last_date = max(rebalance_positions.keys())
-                    rebalance_positions[rebalance_date] = rebalance_positions[last_date].copy()
-                    rebalance_cash[rebalance_date] = rebalance_cash[last_date]
+                    rebalance_positions[execution_date] = rebalance_positions[last_date].copy()
+                    rebalance_cash[execution_date] = rebalance_cash[last_date]
                 continue
 
             # 2.4 更新市值
@@ -299,7 +324,7 @@ class EnhancedBacktestEngine:
             # 2.6 执行调仓
             executed_orders = self.position_manager.execute_rebalance(
                 current_prices,
-                price_tolerance=0.001
+                price_tolerance=self.slippage,
             )
 
             # 2.7 记录交易
@@ -319,11 +344,11 @@ class EnhancedBacktestEngine:
                       f"{order['volume']:.0f} shares @ {order['price']:.2f}")
 
             # 2.8 记录调仓后的持仓快照和现金（过滤微小残余仓位）
-            rebalance_positions[rebalance_date] = {
+            rebalance_positions[execution_date] = {
                 s: v for s, v in self.position_manager.positions.items()
                 if v >= 100  # 至少1手（100股）
             }
-            rebalance_cash[rebalance_date] = self.position_manager.cash
+            rebalance_cash[execution_date] = self.position_manager.cash
 
             # 记录到历史
             self.trades_history[dt] = trades
@@ -334,6 +359,7 @@ class EnhancedBacktestEngine:
             for order in executed_orders:
                 all_trade_records.append({
                     'date': dt,
+                    'signal_date': datetime.strptime(signal_date, '%Y%m%d'),
                     'symbol': order['symbol'],
                     'direction': 'long' if order['action'] == 'buy' else 'short',
                     'volume': order['volume'],
@@ -774,6 +800,79 @@ class EnhancedBacktestEngine:
 
         except Exception as e:
             logger.warning(f"[WARN] 获取价格失败: {e}")
+        return prices
+
+    def _get_execution_prices(self, symbols: List[str], date: str) -> Dict[str, float]:
+        """获取 T+1 成交日开盘价，缺失时不回填收盘价。"""
+        unique_symbols = list(dict.fromkeys(symbols))
+        strategy = getattr(self, '_active_strategy', None)
+
+        if strategy is not None and hasattr(strategy, 'get_open_prices_for_date'):
+            try:
+                prices = strategy.get_open_prices_for_date(unique_symbols, date)
+                prices = {
+                    symbol: float(price)
+                    for symbol, price in prices.items()
+                    if price is not None and float(price) > 0
+                }
+                if prices:
+                    return prices
+            except Exception as exc:
+                logger.warning(f"[WARN] 策略开盘价查询失败: {exc}")
+
+        manager = self.data_manager
+        if manager is None:
+            logger.warning(f"[WARN] {date} 无可用开盘价数据源")
+            return {}
+
+        try:
+            if hasattr(manager, 'get_stock_price_data'):
+                data = manager.get_stock_price_data(
+                    codes=unique_symbols,
+                    start_date=date,
+                    end_date=date,
+                )
+                return self._extract_price_field(data, unique_symbols, 'open')
+            if hasattr(manager, 'get_price'):
+                data = manager.get_price(
+                    symbol=unique_symbols,
+                    start_date=date,
+                    end_date=date,
+                )
+                return self._extract_price_field(data, unique_symbols, 'open')
+        except Exception as exc:
+            logger.warning(f"[WARN] {date} 开盘价查询失败: {exc}")
+        return {}
+
+    @staticmethod
+    def _extract_price_field(data, symbols: List[str], field: str) -> Dict[str, float]:
+        """从字典或 DataFrame 中提取指定价格字段。"""
+        prices: Dict[str, float] = {}
+        if isinstance(data, dict):
+            for symbol in symbols:
+                frame = data.get(symbol)
+                if frame is not None and not frame.empty and field in frame.columns:
+                    value = frame[field].iloc[-1]
+                    if pd.notna(value) and float(value) > 0:
+                        prices[symbol] = float(value)
+            return prices
+
+        if data is None or data.empty or field not in data.columns:
+            return prices
+        frame = data.reset_index() if isinstance(data.index, pd.MultiIndex) else data
+        symbol_col = next((c for c in ('symbol', 'stock_code', 'ts_code') if c in frame.columns), None)
+        if symbol_col is None and len(symbols) == 1:
+            value = frame[field].iloc[-1]
+            if pd.notna(value) and float(value) > 0:
+                prices[symbols[0]] = float(value)
+            return prices
+        if symbol_col:
+            for symbol in symbols:
+                rows = frame[frame[symbol_col] == symbol]
+                if not rows.empty:
+                    value = rows[field].iloc[-1]
+                    if pd.notna(value) and float(value) > 0:
+                        prices[symbol] = float(value)
         return prices
 
     @staticmethod

@@ -108,7 +108,13 @@ class SimpleFunctionAdapter(StrategyBase):
                 if self.adjust != 'none':
                     # 后复权：adj_close = close / factor_today * factor_latest（复用股票 adj_factor 表）
                     query = f"""
-                        SELECT e.ts_code, e.trade_date, e.open, e.high, e.low,
+                        SELECT e.ts_code, e.trade_date,
+                               e.open / COALESCE(f_today.adj_factor, 1.0)
+                                      * COALESCE(f_latest.adj_factor, 1.0) AS open,
+                               e.high / COALESCE(f_today.adj_factor, 1.0)
+                                      * COALESCE(f_latest.adj_factor, 1.0) AS high,
+                               e.low / COALESCE(f_today.adj_factor, 1.0)
+                                     * COALESCE(f_latest.adj_factor, 1.0) AS low,
                                e.close / COALESCE(f_today.adj_factor, 1.0)
                                       * COALESCE(f_latest.adj_factor, 1.0) AS close,
                                e.vol, e.amount, e.pct_chg
@@ -204,6 +210,27 @@ class SimpleFunctionAdapter(StrategyBase):
         if self.category == 'stock':
             return self._query_stock_prices_for_date(symbols, date)
 
+        return {}
+
+    def get_open_prices_for_date(self, symbols: List[str], date: str) -> Dict[str, float]:
+        """批量查询多个标的在某日的开盘价，供 T+1 成交使用。"""
+        if self._category_data is not None and not self._category_data.empty:
+            date_dt = self._date_to_ts(date)
+            day_data = self._category_data[
+                (self._category_data['trade_date'] == date_dt) &
+                (self._category_data['ts_code'].isin(symbols))
+            ]
+            if 'open' not in day_data.columns:
+                return {}
+            return dict(zip(day_data['ts_code'], day_data['open'].astype(float)))
+
+        if self.category == 'stock':
+            batch = self._query_stock_prices_batch(symbols, date, date)
+            result = {}
+            for symbol, frame in batch.items():
+                if frame is not None and not frame.empty and 'open' in frame.columns:
+                    result[symbol] = float(frame['open'].iloc[-1])
+            return result
         return {}
 
     def _query_stock_prices_for_date(self, symbols: List[str], date: str) -> Dict[str, float]:
@@ -408,7 +435,12 @@ class SimpleFunctionAdapter(StrategyBase):
                     # 后复权：adj_close = close / factor_today * factor_latest
                     df = con.execute(f"""
                         SELECT s.stock_code AS ts_code, s.date AS trade_date,
-                               s.open, s.high, s.low,
+                               s.open / COALESCE(f_today.adj_factor, 1.0)
+                                      * COALESCE(f_latest.adj_factor, 1.0) AS open,
+                               s.high / COALESCE(f_today.adj_factor, 1.0)
+                                      * COALESCE(f_latest.adj_factor, 1.0) AS high,
+                               s.low / COALESCE(f_today.adj_factor, 1.0)
+                                     * COALESCE(f_latest.adj_factor, 1.0) AS low,
                                s.close / COALESCE(f_today.adj_factor, 1.0)
                                       * COALESCE(f_latest.adj_factor, 1.0) AS close,
                                s.volume, s.amount
