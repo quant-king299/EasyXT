@@ -199,24 +199,7 @@ class TushareDownloadThread(QThread):
         return need_download, skipped
 
     def _get_db_path(self):
-        """获取DuckDB数据库路径（自动检测）"""
-        import os
-        # 优先使用环境变量
-        env_path = os.environ.get('DUCKDB_PATH')
-        if env_path and os.path.exists(env_path):
-            return env_path
-        # 常见路径自动检测
-        common_paths = [
-            get_default_db_path(),
-            'C:/StockData/stock_data.ddb',
-            'E:/StockData/stock_data.ddb',
-            './data/stock_data.ddb',
-        ]
-        for path in common_paths:
-            abs_path = os.path.abspath(path)
-            if os.path.exists(abs_path):
-                return abs_path
-        # 默认路径（会自动创建目录）
+        """获取项目统一配置的 DuckDB 路径。"""
         return get_default_db_path()
 
     def _test_connection(self):
@@ -4337,12 +4320,6 @@ class TushareDataWidget(QWidget):
         """查询 DuckDB 并刷新仪表盘状态"""
         # 自动检测 DuckDB 路径
         db_path = get_default_db_path()
-        if not os.path.exists(db_path):
-            for p in ['D:/StockData/stock_data.ddb', 'C:/StockData/stock_data.ddb',
-                       'E:/StockData/stock_data.ddb']:
-                if os.path.exists(p):
-                    db_path = p
-                    break
         tables_info = [
             ('stock_daily', 'stock_daily', 'date', 'stock_code'),
         ]
