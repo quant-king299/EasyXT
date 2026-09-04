@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 import pandas as pd
 from typing import Callable, List, Dict, Optional
+from config.env_config import get_default_db_path
 from .strategy_base import StrategyBase
 
 
@@ -34,6 +35,7 @@ class SimpleFunctionAdapter(StrategyBase):
                  data_manager=None,
                  category: str = 'stock',
                  adjust: str = 'none',
+                 db_path: Optional[str] = None,
                  **extra_kwargs):
         super().__init__(data_manager)
         self.func = func
@@ -44,6 +46,8 @@ class SimpleFunctionAdapter(StrategyBase):
         self._extra = extra_kwargs
         self.category = category
         self.adjust = adjust  # 复权类型（仅 stock 类别使用）
+        # 与 GUI/Tushare 下载器共享同一默认数据库；调用方也可显式指定快照。
+        self._db_path = str(db_path or get_default_db_path())
 
         # 预加载并缓存该类别的全部日线数据（供选股和价格查询共用）
         self._category_data: Optional[pd.DataFrame] = None
@@ -61,7 +65,7 @@ class SimpleFunctionAdapter(StrategyBase):
             return
 
         import duckdb
-        db_path = 'D:/StockData/stock_data.ddb'
+        db_path = self._db_path
 
         # YYYYMMDD → YYYY-MM-DD
         if len(self._start) == 8 and self._start.isdigit():
@@ -239,7 +243,7 @@ class SimpleFunctionAdapter(StrategyBase):
         date_fmt = self._norm_date(date)
         con = None
         try:
-            con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+            con = duckdb.connect(self._db_path, read_only=True)
             clean_codes = [s.replace('.SZ', '').replace('.SH', '') for s in symbols]
             all_codes = list(set(symbols + clean_codes))
             in_clause = ','.join(f"'{c}'" for c in all_codes)
@@ -330,7 +334,7 @@ class SimpleFunctionAdapter(StrategyBase):
         date_fmt = self._norm_date(date)
         con = None
         try:
-            con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+            con = duckdb.connect(self._db_path, read_only=True)
             code_clean = symbol.replace('.SZ', '').replace('.SH', '')
 
             if self.adjust != 'none':
@@ -427,7 +431,7 @@ class SimpleFunctionAdapter(StrategyBase):
         con = None
         result = {}
         try:
-            con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+            con = duckdb.connect(self._db_path, read_only=True)
             for symbol in symbols:
                 code_clean = symbol.replace('.SZ', '').replace('.SH', '')
 
@@ -530,7 +534,7 @@ class SimpleFunctionAdapter(StrategyBase):
         date_fmt = self._norm_date(date)
         con = None
         try:
-            con = duckdb.connect('D:/StockData/stock_data.ddb', read_only=True)
+            con = duckdb.connect(self._db_path, read_only=True)
             df = con.execute(f"""
                 SELECT stock_code AS ts_code, date AS trade_date,
                        close,
@@ -584,7 +588,7 @@ class SimpleFunctionAdapter(StrategyBase):
         """
         import duckdb
         try:
-            db_path = 'D:/StockData/stock_data.ddb'
+            db_path = self._db_path
             con = duckdb.connect(db_path, read_only=True)
             exists = con.execute(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_call'"
@@ -643,7 +647,7 @@ class SimpleFunctionAdapter(StrategyBase):
         """
         import duckdb
         try:
-            db_path = 'D:/StockData/stock_data.ddb'
+            db_path = self._db_path
             con = duckdb.connect(db_path, read_only=True)
             exists = con.execute(
                 "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'cb_share'"
