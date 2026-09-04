@@ -22,6 +22,12 @@ warnings.filterwarnings('ignore')
 # 导入新功能
 from easyxt_backtest.portfolio_daily_result import DailyResultManager, TradeRecord
 from easyxt_backtest.position_manager import PositionManager
+from easyxt_backtest.metrics import (
+    DEFAULT_RISK_FREE_RATE,
+    TRADING_DAYS_PER_YEAR,
+    annualized_return,
+    annualized_sharpe,
+)
 
 
 class EnhancedBacktestResult:
@@ -157,7 +163,8 @@ class EnhancedBacktestEngine:
                  slippage: float = 0.0,
                  data_manager=None,
                  adjust: str = 'back',
-                 signal_lag_days: int = 1):
+                 signal_lag_days: int = 1,
+                 risk_free_rate: float = DEFAULT_RISK_FREE_RATE):
         """
         初始化回测引擎
 
@@ -180,6 +187,7 @@ class EnhancedBacktestEngine:
         self.data_manager = data_manager
         self.adjust = adjust
         self.signal_lag_days = signal_lag_days
+        self.risk_free_rate = risk_free_rate
 
         # 新增：仓位管理器
         self.position_manager = PositionManager(
@@ -570,7 +578,7 @@ class EnhancedBacktestEngine:
 
     def _calculate_statistics_from_daily(self, portfolio_df: pd.DataFrame,
                                           daily_df: pd.DataFrame,
-                                          annual_days: int = 240) -> Dict:
+                                          annual_days: int = TRADING_DAYS_PER_YEAR) -> Dict:
         """
         从每日净值数据计算统计指标（参考vnpy）
 
@@ -618,17 +626,19 @@ class EnhancedBacktestEngine:
         # 收益率
         total_net_pnl = end_balance - self.initial_cash
         total_return = (end_balance / self.initial_cash - 1) * 100
-        annual_return = total_return / total_days * annual_days if total_days > 0 else 0
+        annual_return = annualized_return(
+            total_return / 100,
+            total_days,
+            annual_days,
+        ) * 100
 
         # 波动率和夏普比率
         daily_returns = df['daily_return']
-        daily_return_mean = daily_returns.mean() * 100
-        return_std = daily_returns.std() * 100
-
-        if return_std > 0:
-            sharpe_ratio = daily_return_mean / return_std * (annual_days ** 0.5)
-        else:
-            sharpe_ratio = 0.0
+        sharpe_ratio = annualized_sharpe(
+            daily_returns,
+            self.risk_free_rate,
+            annual_days,
+        )
 
         # 收益回撤比
         if max_drawdown != 0:
