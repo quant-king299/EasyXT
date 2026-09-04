@@ -19,7 +19,9 @@ from typing import Callable, Dict, Any, List, Optional
 from easyxt_backtest.research.universe import universe_as_of
 from easyxt_backtest.research.audit import build_experiment_manifest
 
-DB_PATH = 'D:/StockData/stock_data.ddb'
+from config.env_config import get_default_db_path
+
+DB_PATH = get_default_db_path()
 DATA_MODE_DUCKDB_ONLY = 'duckdb_only'
 
 # 各类资产配置
