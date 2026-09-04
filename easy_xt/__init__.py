@@ -75,33 +75,38 @@ api = None
 extended_api = None
 advanced_api = None
 ai_assistant = None
+_api_lock = threading.RLock()
 
 def get_api():
     """获取全局API实例"""
     global api
-    if api is None:
-        api = _get_api()
+    with _api_lock:
+        if api is None:
+            api = _get_api()
     return api
 
 def get_extended_api():
     """获取扩展API实例（包含完整的trader功能）"""
     global extended_api
-    if extended_api is None:
-        extended_api = _get_extended_api()
+    with _api_lock:
+        if extended_api is None:
+            extended_api = _get_extended_api()
     return extended_api
 
 def get_advanced_api():
     """获取高级交易API实例"""
     global advanced_api
-    if advanced_api is None:
-        advanced_api = _get_advanced_api()
+    with _api_lock:
+        if advanced_api is None:
+            advanced_api = _get_advanced_api()
     return advanced_api
 
 def get_ai_assistant(token=None):
     """获取AI助手实例"""
     global ai_assistant
-    if ai_assistant is None:
-        ai_assistant = _get_ai_assistant()
+    with _api_lock:
+        if ai_assistant is None:
+            ai_assistant = _get_ai_assistant()
     return ai_assistant
 
 # 为了向后兼容，在模块级别提供类的导入

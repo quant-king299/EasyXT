@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 """
 
 import pandas as pd
+import threading
 from typing import Dict, List, Optional, Union
 from datetime import datetime
 
@@ -391,13 +392,15 @@ def create_enhanced_api() -> EnhancedDataAPI:
 
 # 全局单例
 _api_instance = None
+_api_instance_lock = threading.RLock()
 
 
 def get_api() -> EnhancedDataAPI:
     """获取全局API实例（单例模式）"""
     global _api_instance
-    if _api_instance is None:
-        _api_instance = EnhancedDataAPI()
+    with _api_instance_lock:
+        if _api_instance is None:
+            _api_instance = EnhancedDataAPI()
     return _api_instance
 
 

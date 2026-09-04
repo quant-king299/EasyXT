@@ -7,6 +7,7 @@ import functools
 from typing import Any, Callable, Optional, Dict, Union
 from datetime import datetime, timedelta
 import logging
+import threading
 from .data_types import EasyXTError, ConnectionError, TradeError, DataError
 from .validators import ValidationError
 
@@ -48,36 +49,33 @@ class SimpleCache:
     def __init__(self, max_size: int = 1000):
         self.cache: Dict[str, Dict[str, Any]] = {}
         self.max_size = max_size
+        self._lock = threading.RLock()
     
     def get(self, key: str, ttl: int = 300) -> Optional[Any]:
         """获取缓存值"""
-        if key not in self.cache:
-            return None
-        
-        entry = self.cache[key]
-        if datetime.now() > entry['expires']:
-            del self.cache[key]
-            return None
-        
-        return entry['value']
+        with self._lock:
+            if key not in self.cache:
+                return None
+            entry = self.cache[key]
+            if datetime.now() > entry['expires']:
+                del self.cache[key]
+                return None
+            return entry['value']
     
     def set(self, key: str, value: Any, ttl: int = 300) -> None:
         """设置缓存值"""
         # 如果缓存已满，删除最旧的条目
-        if len(self.cache) >= self.max_size:
-            oldest_key = min(self.cache.keys(), 
-                           key=lambda k: self.cache[k]['created'])
-            del self.cache[oldest_key]
-        
-        self.cache[key] = {
-            'value': value,
-            'created': datetime.now(),
-            'expires': datetime.now() + timedelta(seconds=ttl)
-        }
+        with self._lock:
+            if key not in self.cache and len(self.cache) >= self.max_size:
+                oldest_key = min(self.cache, key=lambda k: self.cache[k]['created'])
+                del self.cache[oldest_key]
+            self.cache[key] = {'value': value, 'created': datetime.now(),
+                               'expires': datetime.now() + timedelta(seconds=ttl)}
     
     def clear(self) -> None:
         """清空缓存"""
-        self.cache.clear()
+        with self._lock:
+            self.cache.clear()
 
 # 全局缓存实例
 _cache = SimpleCache()
