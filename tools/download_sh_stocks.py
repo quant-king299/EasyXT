@@ -8,8 +8,11 @@
 import os
 import sys
 import argparse
+import logging
 from datetime import datetime, timedelta
 import time
+
+logger = logging.getLogger(__name__)
 
 # 添加项目根目录到Python路径
 project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -24,10 +27,6 @@ except ImportError as e:
 
 def get_sh_stock_list():
     """
-import logging
-
-logger = logging.getLogger(__name__)
-
     获取上海股票列表
     
     Returns:
