@@ -175,7 +175,10 @@ class EnhancedBacktestEngine:
         self.adjust = adjust
 
         # 新增：仓位管理器
-        self.position_manager = PositionManager(initial_cash)
+        self.position_manager = PositionManager(
+            initial_cash,
+            commission_rate=commission,
+        )
 
         # 新增：每日结果管理器
         self.daily_result_manager = DailyResultManager(initial_cash)
@@ -308,7 +311,7 @@ class EnhancedBacktestEngine:
                     volume=order['volume'],
                     price=order['price'],
                     datetime=dt,
-                    commission=order['volume'] * order['price'] * self.commission
+                    commission=order['commission']
                 )
                 trades.append(trade)
 
@@ -335,7 +338,7 @@ class EnhancedBacktestEngine:
                     'direction': 'long' if order['action'] == 'buy' else 'short',
                     'volume': order['volume'],
                     'price': order['price'],
-                    'commission': order['volume'] * order['price'] * self.commission
+                    'commission': order['commission']
                 })
 
         # ========== 阶段3：逐日计算净值（参考vnpy load_data + new_bars） ==========

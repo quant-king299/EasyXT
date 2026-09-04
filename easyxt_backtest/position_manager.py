@@ -19,15 +19,20 @@ class PositionManager:
     4. 执行交易
     """
 
-    def __init__(self, initial_cash: float = 1000000):
+    def __init__(self, initial_cash: float = 1000000,
+                 commission_rate: float = 0.001):
         """
         初始化
 
         Args:
             initial_cash: 初始资金
+            commission_rate: 单边交易佣金率
         """
+        if commission_rate < 0:
+            raise ValueError("commission_rate 不能为负数")
         self.initial_cash = initial_cash
         self.cash = initial_cash
+        self.commission_rate = commission_rate
 
         # 当前持仓 {symbol: volume}
         self.positions: Dict[str, float] = {}
@@ -180,7 +185,8 @@ class PositionManager:
         price = order['price']
 
         turnover = volume * price
-        commission = turnover * 0.0003  # 万三佣金
+        commission = turnover * self.commission_rate
+        order['commission'] = commission
 
         if action == 'buy':
             # 买入
@@ -228,10 +234,17 @@ class PositionManager:
         for order in orders:
             if order['action'] == 'buy':
                 # 买入时检查资金
-                required_cash = order['volume'] * order['price'] * 1.001
+                required_cash = (
+                    order['volume'] * order['price'] *
+                    (1 + self.commission_rate)
+                )
                 if required_cash > self.cash:
                     # 资金不足，调整为可买的整手（100股）数量
-                    max_volume = int(self.cash / (order['price'] * 1.001) / 100) * 100
+                    max_volume = int(
+                        self.cash /
+                        (order['price'] * (1 + self.commission_rate)) /
+                        100
+                    ) * 100
                     if max_volume <= 0:
                         continue  # 完全买不起，跳过
                     order['volume'] = max_volume
