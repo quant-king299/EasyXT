@@ -20,7 +20,7 @@ class TushareConfig:
             from config.env_config import get_default_db_path
             return get_default_db_path()
         except ImportError:
-            return 'D:/StockData/stock_data.ddb'
+            return str(Path(__file__).parent.parent / 'data' / 'stock_data.ddb')
 
     def __init__(self, config_path: Optional[str] = None):
         """
