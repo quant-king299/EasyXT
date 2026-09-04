@@ -222,6 +222,11 @@ check_*.py
 compare_*.py
 comprehensive_*.py
 
+# 正式单元测试必须可追踪；保留上述规则对散落的临时脚本生效
+!unit_tests/
+!unit_tests/**/
+!unit_tests/**/*.py
+
 # ==================== 例外规则：保留重要文件 ====================
 # Alpha分析平台的核心文件
 !easy_xt/alpha_analysis/test_alpha_analysis.py
