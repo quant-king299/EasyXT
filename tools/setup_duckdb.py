@@ -182,8 +182,7 @@ try:
     except ImportError:
         default_path = 'D:/StockData/stock_data.ddb'
     db_path = None
-    for candidate in [default_path, 'D:/StockData/stock_data.ddb', 'C:/StockData/stock_data.ddb',
-                     'E:/StockData/stock_data.ddb', './data/stock_data.ddb']:
+    for candidate in [default_path, './data/stock_data.ddb']:
         if os.path.exists(candidate):
             db_path = candidate
             break
