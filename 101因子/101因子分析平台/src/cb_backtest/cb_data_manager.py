@@ -5,8 +5,15 @@
 """
 
 import os
+import sys
+from pathlib import Path
 import duckdb
 import pandas as pd
+
+workspace_dir = Path(__file__).resolve().parents[4]
+if str(workspace_dir) not in sys.path:
+    sys.path.insert(0, str(workspace_dir))
+from config.env_config import get_default_db_path
 
 
 class CBDataManager:
@@ -19,16 +26,7 @@ class CBDataManager:
 
     @staticmethod
     def _auto_detect_db_path():
-        common = [
-            os.environ.get('DUCKDB_PATH', ''),
-            'D:/StockData/stock_data.ddb',
-            'C:/StockData/stock_data.ddb',
-            'E:/StockData/stock_data.ddb',
-        ]
-        for p in common:
-            if p and os.path.exists(p):
-                return p
-        return 'D:/StockData/stock_data.ddb'
+        return get_default_db_path()
 
     def _get_conn(self):
         return duckdb.connect(self.db_path, read_only=True)
