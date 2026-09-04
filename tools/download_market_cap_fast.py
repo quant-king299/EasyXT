@@ -24,6 +24,7 @@ from pathlib import Path
 # 添加项目路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
+from config.env_config import get_default_db_path
 
 try:
     import tushare as ts
@@ -33,7 +34,7 @@ except ImportError:
 
 
 # 默认数据库路径常量
-DEFAULT_DB_PATH = 'D:/StockData/stock_data.ddb'
+DEFAULT_DB_PATH = get_default_db_path()
 
 # 常见数据库搜索路径（按优先级）
 _COMMON_DB_PATHS = [
@@ -59,10 +60,10 @@ def get_db_path(db_path=None):
     if db_path:
         return db_path
 
-    # 尝试环境变量
-    env_path = os.environ.get('DUCKDB_PATH')
-    if env_path and os.path.exists(env_path):
-        return env_path
+    # 共享项目 .env / 环境变量配置
+    configured_path = get_default_db_path()
+    if configured_path:
+        return configured_path
 
     # 自动检测常见路径
     for path in _COMMON_DB_PATHS:
@@ -142,7 +143,8 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             WHERE date BETWEEN '{start_fmt}' AND '{end_fmt}'
         """).fetchone()
         logger.info(f"已有数据: {existing[0]} 个交易日")
-    except (ValueError, TypeError):        print("已有数据: 0 个交易日")
+    except (ValueError, TypeError):
+        logger.info("已有数据: 0 个交易日")
         existing = (0,)
 
     # 获取交易日历
@@ -171,7 +173,8 @@ def download_market_cap(start_date='20240101', end_date=None, db_path=None,
             logger.info("所有数据已存在！无需下载")
             conn.close()
             return {'total_inserted': 0, 'total_days': 0, 'elapsed': 0}
-    except (ValueError, TypeError):        missing_dates = all_dates
+    except (ValueError, TypeError):
+        missing_dates = all_dates
         logger.info(f"需要下载: {len(missing_dates)} 个交易日")
 
     # 开始下载

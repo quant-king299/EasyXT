@@ -12,7 +12,9 @@ from datetime import datetime
 import time
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, current_dir)
+project_root = os.path.dirname(current_dir)
+sys.path.insert(0, project_root)
+from config.env_config import get_default_db_path
 
 # 读取.env
 env_file = '.env'
@@ -34,7 +36,7 @@ if not TOKEN:
 ts.set_token(TOKEN)
 pro = ts.pro_api()
 
-DUCKDB_PATH = os.getenv('DUCKDB_PATH', 'D:/StockData/stock_data.ddb')
+DUCKDB_PATH = get_default_db_path()
 
 logger.info("="*70)
 logger.info("批量检查股票上市日期（稳健版）")
