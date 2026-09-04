@@ -18,7 +18,18 @@ from pydantic import BaseModel
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DUCKDB_PATH = os.environ.get("DUCKDB_PATH", "D:/StockData/stock_data.ddb")
+
+
+def _default_duckdb_path() -> str:
+    """Use the same .env-aware path contract as the desktop application."""
+    try:
+        from config.env_config import get_default_db_path
+        return get_default_db_path()
+    except ImportError:
+        return os.environ.get("DUCKDB_PATH", str(PROJECT_ROOT / "data" / "stock_data.ddb"))
+
+
+DEFAULT_DUCKDB_PATH = _default_duckdb_path()
 DEFAULT_NODE_ID = os.environ.get("EASYXT_DATA_NODE_ID", "win_data_node_1")
 
 
