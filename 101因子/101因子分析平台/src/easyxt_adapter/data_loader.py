@@ -36,6 +36,8 @@ if workspace_dir not in sys.path:
     sys.path.insert(0, workspace_dir)
     print(f"[DEBUG] 已将workspace_dir添加到sys.path")
 
+from config.env_config import get_default_db_path
+
 # 尝试导入真实的EasyXT实例
 real_easyxt_instance = None
 try:
@@ -102,12 +104,8 @@ class EasyXTDataLoader:
         try:
             from src.data_manager.duckdb_data_manager import DuckDBDataManager
 
-            # 配置DuckDB路径 - 使用GUI下载的数据
-            # GUI数据路径: D:/StockData/stock_data.ddb
-            # 包含：PE、PB、市值、换手率等完整数据
-
-            # 使用GUI的数据库（只读模式）
-            gui_db_path = Path('D:/StockData/stock_data.ddb')
+            # 使用与 GUI 下载器相同的数据库（只读模式）
+            gui_db_path = Path(get_default_db_path())
 
             if gui_db_path.exists():
                 # 使用GUI数据库
@@ -245,7 +243,7 @@ class EasyXTDataLoader:
         """
         try:
             import duckdb
-            db_path = Path('D:/StockData/stock_data.ddb')
+            db_path = Path(get_default_db_path())
             if not db_path.exists():
                 print("[INFO] DuckDB 数据库不存在，跳过缓存")
                 return pd.DataFrame()

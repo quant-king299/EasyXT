@@ -32,6 +32,7 @@ import warnings
 
 # 从data_api导入DuckDBDataReader
 from .data_api import DuckDBDataReader
+from config.env_config import get_default_db_path
 
 warnings.filterwarnings('ignore')
 
@@ -1439,7 +1440,7 @@ if __name__ == "__main__":
     # 示例1：初始化
     logger.info("\n[示例1] 初始化EasyFactor")
     logger.info("-" * 90)
-    duckdb_path = r'D:/StockData/stock_data.ddb'
+    duckdb_path = get_default_db_path()
 
     try:
         ef = create_easy_factor(duckdb_path)
