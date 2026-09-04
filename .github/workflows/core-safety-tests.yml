@@ -1,0 +1,28 @@
+name: Core safety tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  core-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: pip
+      - name: Install focused test dependencies
+        run: python -m pip install pytest pandas numpy backtrader
+      - name: Run trading and backtest safety suite
+        run: |
+          python -m pytest -q \
+            unit_tests/easy_xt/test_trade_api_safety.py \
+            unit_tests/easyxt_backtest/test_position_manager_commission.py \
+            unit_tests/easyxt_backtest/test_enhanced_engine_t_plus_one.py \
+            unit_tests/easyxt_backtest/test_metrics_consistency.py \
+            unit_tests/easyxt_backtest/strategies/test_small_cap_strategy.py
