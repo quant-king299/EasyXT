@@ -7,7 +7,7 @@ name = "easyxt-backtest"
 version = "0.2.0"
 description = "Universal backtesting framework for quantitative trading strategies"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.9"
 license = {text = "MIT"}
 authors = [
     { name = "EasyXT Team", email = "noreply@example.com" }

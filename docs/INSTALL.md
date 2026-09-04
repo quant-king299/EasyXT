@@ -23,7 +23,7 @@
 ### 前提条件
 
 - Windows 10/11 用户
-- Python 3.8+ 已安装（推荐 Python 3.11）
+- Python 3.9+ 已安装（推荐 Python 3.11）
 - 有 Git（可选，用于克隆项目）
 
 ### 一键安装步骤
@@ -151,7 +151,7 @@ python easy_xt/check_xtquant.py
 python --version
 ```
 
-**要求**：Python 3.8 或更高版本
+**要求**：Python 3.9 或更高版本
 
 **推荐版本**：Python 3.11 ⭐
 - 兼容性最好，性能优秀
