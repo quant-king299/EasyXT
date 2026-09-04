@@ -22,6 +22,7 @@ sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / 'data_manager'))
 
 from duckdb_connection_pool import get_db_manager
+from config.env_config import get_default_db_path
 
 
 class SafeDataUpdater:
@@ -34,9 +35,9 @@ class SafeDataUpdater:
     3. 使用连接管理器安全更新
     """
 
-    def __init__(self, duckdb_path: str = r'D:/StockData/stock_data.ddb'):
-        self.duckdb_path = duckdb_path
-        self.manager = get_db_manager(duckdb_path)
+    def __init__(self, duckdb_path: str = None):
+        self.duckdb_path = duckdb_path or get_default_db_path()
+        self.manager = get_db_manager(self.duckdb_path)
 
     def find_gui_processes(self):
         """查找正在运行的GUI进程"""
