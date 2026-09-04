@@ -30,8 +30,60 @@ from datetime import datetime, timedelta
 import sys
 import os
 import threading  # 添加线程锁支持
+import multiprocessing as mp
+from queue import Empty
 
 logger = logging.getLogger(__name__)
+
+
+class QMTCallTimeoutError(ConnectionError):
+    """QMT native call exceeded its hard process deadline."""
+
+
+def _xtdata_process_worker(result_queue, method_name, args, kwargs):
+    """Run one local xtdata call in an independently terminable process."""
+    try:
+        from xtquant import xtdata
+        result_queue.put((True, getattr(xtdata, method_name)(*args, **kwargs)))
+    except BaseException as exc:
+        result_queue.put((False, f"{type(exc).__name__}: {exc}"))
+
+
+def _run_xtdata_with_timeout(method_name, *args, timeout, **kwargs):
+    """Execute a native QMT call in a child process and terminate it on timeout.
+
+    Threads cannot safely stop a blocked native xtdata call.  The spawned process
+    is deliberately short-lived so a wedged QMT request cannot hold the caller's
+    download lock or GUI worker forever.
+    """
+    context = mp.get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_xtdata_process_worker,
+        args=(result_queue, method_name, args, kwargs),
+        daemon=True,
+    )
+    process.start()
+    try:
+        success, payload = result_queue.get(timeout=timeout)
+    except Empty:
+        if process.is_alive():
+            process.terminate()
+        process.join(timeout=1)
+        raise QMTCallTimeoutError(
+            f"QMT {method_name} timed out after {timeout:g}s; child process terminated"
+        )
+    finally:
+        if process.is_alive():
+            process.join(timeout=1)
+            if process.is_alive():
+                process.terminate()
+                process.join(timeout=1)
+        result_queue.close()
+
+    if not success:
+        raise ConnectionError(f"QMT {method_name} failed: {payload}")
+    return payload
 
 # 添加xtquant路径
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -439,6 +491,13 @@ class DataAPI:
         self._eastmoney_provider = None
         self._fallback_fetcher = None  # 多级降级获取器（懒加载）
 
+    def _call_qmt(self, method_name, *args, **kwargs):
+        """Call local QMT with a real deadline; keep remote adapters in-process."""
+        timeout = float(config.get('data.timeout', 30))
+        if self._active_source == 'qmt':
+            return _run_xtdata_with_timeout(method_name, *args, timeout=timeout, **kwargs)
+        return getattr(self.xt, method_name)(*args, **kwargs)
+
     def connect(self) -> bool:
         """连接数据服务 - 自动选择最佳数据源"""
         logger.info("\n[Connecting to data source...]")
@@ -744,7 +803,7 @@ class DataAPI:
             # 开盘前已下载过数据的情况下，本地缓存应该已有数据
             # 只有本地缓存为空时才触发下载
             # ============================================================
-            data = self.xt.get_market_data_ex(
+            data = self._call_qmt('get_market_data_ex',
                 field_list=fields,
                 stock_list=codes,
                 period=period,
@@ -782,7 +841,7 @@ class DataAPI:
 
                     # 使用线程锁保护下载操作，防止并发调用导致卡死
                     with DataAPI._download_lock:
-                        self.xt.download_history_data2(
+                        self._call_qmt('download_history_data2',
                             stock_list=codes,
                             period=period,
                             start_time=download_start,
@@ -791,7 +850,7 @@ class DataAPI:
                     logger.info("历史数据下载完成")
 
                     # 下载后重新获取数据
-                    data = self.xt.get_market_data_ex(
+                    data = self._call_qmt('get_market_data_ex',
                         field_list=fields,
                         stock_list=codes,
                         period=period,
@@ -1746,7 +1805,7 @@ class DataAPI:
             # 使用线程锁保护下载操作，防止并发调用导致卡死
             with DataAPI._download_lock:
                 for code in codes:
-                    self.xt.download_history_data(code, period, start_date, end_date)
+                    self._call_qmt('download_history_data', code, period, start_date, end_date)
             return True
         
         except Exception as e:
@@ -1787,7 +1846,7 @@ class DataAPI:
         # 批量下载数据（使用线程锁保护，防止并发调用导致卡死）
         with DataAPI._download_lock:  # 获取类级别锁
             try:
-                self.xt.download_history_data2(
+                self._call_qmt('download_history_data2',
                     stock_list=stock_list,
                     period=period,
                     start_time=start_time,
@@ -1820,7 +1879,7 @@ class DataAPI:
                 for stock in stock_list:
                     try:
                         # 逐个下载时也需要锁保护（已经在with块中）
-                        self.xt.download_history_data2(
+                        self._call_qmt('download_history_data2',
                             stock_list=[stock],
                             period=period,
                             start_time=start_time,
@@ -1951,7 +2010,7 @@ class DataAPI:
                 # 【修复】先尝试从本地缓存读取，避免每次调用都重新下载
                 # 只有本地缓存为空时才触发下载
                 # ============================================================
-                data = self.xt.get_market_data_ex(
+                data = self._call_qmt('get_market_data_ex',
                     field_list=fields,
                     stock_list=codes,
                     period=period,
@@ -1985,7 +2044,7 @@ class DataAPI:
 
                         # 使用线程锁保护下载操作，防止并发调用导致卡死
                         with DataAPI._download_lock:
-                            self.xt.download_history_data2(
+                            self._call_qmt('download_history_data2',
                                 stock_list=codes,
                                 period=period,
                                 start_time=download_start,
@@ -1994,7 +2053,7 @@ class DataAPI:
                         logger.info("历史数据下载完成")
 
                         # 下载后重新获取数据
-                        data = self.xt.get_market_data_ex(
+                        data = self._call_qmt('get_market_data_ex',
                             field_list=fields,
                             stock_list=codes,
                             period=period,
