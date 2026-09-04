@@ -92,7 +92,7 @@ pip uninstall pyarrow
 
 ## 系统要求
 
-- Python 3.8+
+- Python 3.9+
 - Windows 10+ / Linux / macOS
 - 至少2GB可用内存
 
