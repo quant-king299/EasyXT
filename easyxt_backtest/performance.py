@@ -5,6 +5,7 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
+from .metrics import annualized_return, annualized_sharpe, TRADING_DAYS_PER_YEAR
 
 
 class PerformanceAnalyzer:
@@ -128,13 +129,7 @@ class PerformanceAnalyzer:
         total_return = self._calculate_total_return(returns)
 
         # 假设一年有252个交易日
-        trading_days_per_year = 252
-        years = n_days / trading_days_per_year
-
-        if years == 0:
-            return 0.0
-
-        return (1 + total_return) ** (1 / years) - 1
+        return annualized_return(total_return, n_days)
 
     # ==================== 风险指标计算 ====================
 
@@ -181,7 +176,7 @@ class PerformanceAnalyzer:
 
         if annualize:
             # 年化：乘以sqrt(252)
-            vol = vol * np.sqrt(252)
+            vol = vol * np.sqrt(TRADING_DAYS_PER_YEAR)
 
         return vol
 
@@ -206,12 +201,7 @@ class PerformanceAnalyzer:
             return 0.0
 
         # 计算年化收益率
-        annual_return = self._calculate_annual_return(returns, len(returns))
-
-        # 夏普比率
-        sharpe = (annual_return - self.risk_free_rate) / volatility
-
-        return sharpe
+        return annualized_sharpe(returns, self.risk_free_rate)
 
     def _calculate_calmar_ratio(self,
                                  annual_return: float,
@@ -376,13 +366,13 @@ class PerformanceAnalyzer:
         dd = (nav - cummax) / cummax
 
         total_return = nav[-1] - 1
-        ar = (nav[-1]) ** (252 / max(len(nav), 1)) - 1
+        ar = annualized_return(total_return, len(nav))
         max_dd = dd.min()
         daily_ret = np.diff(nav) / nav[:-1]
         std_ret = np.std(daily_ret) if len(daily_ret) > 0 else 1e-9
-        sharpe = np.mean(daily_ret) / std_ret * np.sqrt(252) if std_ret > 0 else 0
+        sharpe = annualized_sharpe(pd.Series(daily_ret), self.risk_free_rate)
         calmar = ar / abs(max_dd) if max_dd != 0 else 0
-        annual_vol = std_ret * np.sqrt(252)
+        annual_vol = std_ret * np.sqrt(TRADING_DAYS_PER_YEAR)
         final_value = nav[-1] * initial_cash
         buy_count = len(trades[trades["action"] == "BUY"])
         sell_count = len(trades[trades["action"] == "SELL"])
