@@ -9,6 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 from typing import List, Dict
 import pandas as pd
+from easyxt_backtest.research.universe import universe_as_of, validate_universe_history
 
 # 尝试相对导入，失败则使用绝对导入
 try:
@@ -43,7 +44,9 @@ class SmallCapStrategy(StrategyBase):
                  select_num: int = 5,
                  universe_size: int = None,
                  rebalance_freq: str = 'monthly',
-                 data_manager: DataManager = None):
+                 data_manager: DataManager = None,
+                 universe_history: pd.DataFrame = None,
+                 strict_point_in_time: bool = True):
         """
         初始化小市值策略
 
@@ -61,6 +64,10 @@ class SmallCapStrategy(StrategyBase):
         self.select_num = select_num
         self.universe_size = universe_size
         self.rebalance_freq = rebalance_freq
+        self.universe_history = universe_history
+        self.strict_point_in_time = strict_point_in_time
+        if universe_history is not None:
+            validate_universe_history(universe_history)
 
         logger.info(f"\n[小市值策略] 参数配置:")
         logger.info(f"  指数代码: {index_code}")
@@ -95,12 +102,23 @@ class SmallCapStrategy(StrategyBase):
 
         # 1. 获取股票池（全市场或指数成分股）
         universe = None
+        if self.universe_history is not None:
+            universe = universe_as_of(self.universe_history, date)
+            logger.info(f"    历史时点股票池: {len(universe)} 只")
         try:
             # 尝试获取指数成分股
-            index_cons = self.data_manager.get_index_components(self.index_code, date)
+            index_cons = (
+                self.data_manager.get_index_components(self.index_code, date)
+                if universe is None else universe
+            )
 
             if not index_cons:
                 logger.info(f"    [INFO] 未获取到指数成分股，使用全市场股票")
+                if self.strict_point_in_time:
+                    logger.warning(
+                        "    [WARNING] 缺少历史时点股票池，严格模式下停止选股"
+                    )
+                    return []
                 universe = None
             else:
                 print(f"    指数成分股: {len(index_cons)} 只")
@@ -108,6 +126,11 @@ class SmallCapStrategy(StrategyBase):
 
         except Exception as e:
             logger.info(f"    [INFO] 获取指数成分股失败: {e}，使用全市场股票")
+            if self.strict_point_in_time:
+                logger.warning(
+                    "    [WARNING] 指数成分查询失败且无历史股票池，停止选股"
+                )
+                return []
             universe = None
 
         # 2. 获取市值数据
@@ -235,7 +258,9 @@ class SmallCapStrategyV2(SmallCapStrategy):
                  select_num: int = 5,
                  rebalance_freq: str = 'monthly',
                  min_turnover: float = 0,  # 最小换手率
-                 data_manager: DataManager = None):
+                 data_manager: DataManager = None,
+                 universe_history: pd.DataFrame = None,
+                 strict_point_in_time: bool = True):
         """
         初始化小市值策略V2
 
@@ -246,7 +271,14 @@ class SmallCapStrategyV2(SmallCapStrategy):
             min_turnover: 最小换手率（过滤流动性差的股票）
             data_manager: 数据管理器
         """
-        super().__init__(index_code, select_num, rebalance_freq, data_manager)
+        super().__init__(
+            index_code=index_code,
+            select_num=select_num,
+            rebalance_freq=rebalance_freq,
+            data_manager=data_manager,
+            universe_history=universe_history,
+            strict_point_in_time=strict_point_in_time,
+        )
         self.min_turnover = min_turnover
 
         logger.info(f"\n[小市值策略V2] 增强配置:")
@@ -263,7 +295,11 @@ class SmallCapStrategyV2(SmallCapStrategy):
 
         # 1. 获取指数成分股
         try:
-            index_cons = self.data_manager.get_index_components(self.index_code, date)
+            index_cons = (
+                universe_as_of(self.universe_history, date)
+                if self.universe_history is not None
+                else self.data_manager.get_index_components(self.index_code, date)
+            )
 
             if not index_cons:
                 logger.info(f"    [WARNING] 未获取到指数成分股")
