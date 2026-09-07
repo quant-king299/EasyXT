@@ -1664,6 +1664,31 @@ class DataAPI:
             ErrorHandler.log_error(f"获取财务数据失败: {str(e)}")
             raise DataError(f"获取财务数据失败: {str(e)}")
     
+    def _get_stock_list_fallback(self) -> List[str]:
+        """非xtquant数据源（tdx/eastmoney）下获取A股列表（已过滤指数/基金/债券）"""
+        if self._active_source == 'tdx' and self._tdx_provider is not None:
+            try:
+                codes = self._tdx_provider.get_formatted_stock_list(kind='stock')
+                if codes:
+                    logger.info(f"[OK] 通过TDX获取A股列表: {len(codes)} 只")
+                    return codes
+            except Exception as e:
+                logger.warning(f"[WARN] TDX获取股票列表失败: {e}")
+        if (self._active_source == 'eastmoney'
+                and self._eastmoney_provider is not None
+                and hasattr(self._eastmoney_provider, 'get_formatted_stock_list')):
+            try:
+                codes = self._eastmoney_provider.get_formatted_stock_list(kind='stock')
+                if codes:
+                    logger.info(f"[OK] 通过东方财富获取A股列表: {len(codes)} 只")
+                    return codes
+            except Exception as e:
+                logger.warning(f"[WARN] 东方财富获取股票列表失败: {e}")
+        raise DataError(
+            f"当前数据源({self._active_source})无法获取股票列表；"
+            "请启动大QMT或miniQMT后重试"
+        )
+
     @ErrorHandler.handle_api_error
     def get_stock_list(self, sector: Optional[str] = None) -> List[str]:
         """
@@ -1698,6 +1723,11 @@ class DataAPI:
 
         if not self._connected:
             raise ConnectionError("数据服务未连接，请先调用init_data()并确保迅投客户端已启动")
+
+        # 按当前数据源路由：connect() 已降级到 TDX/东财时，
+        # 不能再直调 xtquant 板块接口（大QMT运行时 xtquant 必然不可连）
+        if self._active_source in ('tdx', 'eastmoney') and sector in (None, 'A股'):
+            return self._get_stock_list_fallback()
 
         try:
             if sector:

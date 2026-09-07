@@ -238,22 +238,41 @@ class MainWindow(QMainWindow):
         big_qmt_ok = self._check_big_qmt()
         self._update_big_qmt_status(big_qmt_ok)
 
-        # ── 2. 如果大QMT已连，跳过 miniQMT 重检测，停止定时器 ──
+        # ── 2. 大QMT运行 ≠ xtquant 可连；如实探测 miniQMT 数据服务状态 ──
         if big_qmt_ok:
-            logger.info("✅ 大QMT已运行，跳过 miniQMT 检测")
-            self.connection_status.setText("⚪ MiniQMT (大QMT已接管)")
-            self.connection_status.setStyleSheet("""
-                QLabel {
-                    background-color: #888888;
-                    color: white;
-                    padding: 4px 8px;
-                    border-radius: 4px;
-                    font-weight: bold;
-                }
-            """)
-            # 停止定时器——大QMT已连接，不再反复检测
+            try:
+                from data_manager.source_router import probe_xtquant_connected
+                mini_connected = probe_xtquant_connected(timeout=3.0)
+            except Exception:
+                mini_connected = False
+            if mini_connected:
+                logger.info("✅ 大QMT运行中，miniQMT (xtquant) 数据服务已连接")
+                self.connection_status.setText("🟢 MiniQMT已连接")
+                self.connection_status.setStyleSheet("""
+                    QLabel {
+                        background-color: #00cc00;
+                        color: white;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                    }
+                """)
+            else:
+                logger.info("大QMT运行中，miniQMT (xtquant) 未连接——数据将走大QMT路由（DAT/桥接）")
+                self.connection_status.setText("⚪ MiniQMT未连接（数据走大QMT路由）")
+                self.connection_status.setStyleSheet("""
+                    QLabel {
+                        background-color: #888888;
+                        color: white;
+                        padding: 4px 8px;
+                        border-radius: 4px;
+                        font-weight: bold;
+                    }
+                """)
+            # 停止定时器——状态已明确，不再反复检测
             self.connection_check_timer.stop()
-            self.status_bar.showMessage("大QMT已连接 ✓")
+            self.status_bar.showMessage(
+                "大QMT已运行 ✓ · MiniQMT" + ("已连接 ✓" if mini_connected else "未连接"))
             return
 
         # ── 3. 大QMT未连，检测 MiniQMT ──
@@ -261,29 +280,11 @@ class MainWindow(QMainWindow):
         mini_connected = False
 
         try:
-            if not EASYXT_AVAILABLE:
-                self.update_connection_status(False)
-                return
-
-            api = easy_xt.get_api()
-
-            if not hasattr(api, 'data'):
-                self.update_connection_status(False)
-                return
-
-            # 初始化数据服务
-            try:
-                api.init_data()
-            except Exception:
-                pass
-
-            # 验证数据连接（只测一只股票，减少等待）
-            try:
-                price_df = api.data.get_current_price(['000001.SZ'])
-                if price_df is not None and hasattr(price_df, 'empty') and not price_df.empty:
-                    mini_connected = True
-            except Exception:
-                pass
+            # 直接探测 xtquant 数据服务（get_current_price 会经 TDX 降级而误报成功）
+            from data_manager.source_router import probe_xtquant_connected
+            mini_connected = probe_xtquant_connected(timeout=5.0)
+        except Exception as e:
+            logger.debug(f"MiniQMT检测异常: {e}")
 
             # ── 4. MiniQMT 连上了也停止定时器 ──
             if mini_connected:

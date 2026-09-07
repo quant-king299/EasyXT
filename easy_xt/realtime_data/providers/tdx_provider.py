@@ -845,6 +845,60 @@ class TdxDataProvider(BaseDataProvider):
             self.logger.error(f"获取股票列表失败: {e}")
             return []
 
+    # 证券代码前缀分类（用于把 TDX 原始列表归一化为 EasyXT 代码格式）
+    _STOCK_PREFIXES = (
+        '600', '601', '603', '605',           # 上海主板
+        '000', '001', '002', '003',           # 深圳主板/中小板
+        '300', '301',                         # 创业板
+        '688', '689',                         # 科创板
+    )
+    _ETF_PREFIXES = ('51', '56', '58', '50',  # 上海基金/ETF
+                     '15', '16', '18')        # 深圳基金/ETF
+
+    def get_formatted_stock_list(self, kind: str = 'stock') -> List[str]:
+        """获取带市场后缀的证券代码列表（EasyXT 格式，如 000001.SZ）
+
+        供数据源路由在大QMT/miniQMT 均未连接时兜底取列表使用。
+
+        Args:
+            kind: 'stock' 只返回A股；'etf' 只返回ETF/基金
+
+        Returns:
+            List[str]: 代码列表（可能为空，表示获取失败）
+        """
+        if kind not in ('stock', 'etf'):
+            raise ValueError(f"未知列表类型: {kind}")
+
+        try:
+            if not self._ensure_connected():
+                return []
+
+            # pytdx 每页固定 1000 条，需按 start 翻页直到取空
+            market_suffix = {0: '.SZ', 1: '.SH'}
+            prefix_set = (self._STOCK_PREFIXES if kind == 'stock'
+                          else self._ETF_PREFIXES)
+            codes: List[str] = []
+            for market in (1, 0):  # 上海、深圳
+                start = 0
+                while True:
+                    page = self.api.get_security_list(market, start)
+                    if not page:
+                        break
+                    for item in page:
+                        code = (item.get('code') or '') if isinstance(item, dict) else ''
+                        if len(code) == 6 and code.isdigit() and code.startswith(prefix_set):
+                            codes.append(code + market_suffix[market])
+                    if len(page) < 1000:
+                        break
+                    start += 1000
+            unique = sorted(set(codes))
+            self.logger.info(f"[TDX] {kind} 列表获取成功: {len(unique)} 只")
+            return unique
+
+        except Exception as e:
+            self.logger.error(f"[TDX] 格式化列表获取失败 ({kind}): {e}")
+            return []
+
     def get_trading_calendar(self, market: int = 1) -> List[str]:
         """获取交易日历
 
