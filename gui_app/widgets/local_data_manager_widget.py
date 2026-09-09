@@ -503,18 +503,27 @@ class DataDownloadThread(QThread):
         success_count = 0
         failed_count = 0
         still_stale_list = []
+        failed_list = []
         batch_save_data = []
         FLUSH_ROWS = 5000
 
         def _flush():
+            nonlocal success_count, failed_count
             if batch_save_data:
+                symbols = sorted({r['stock_code'] for r in batch_save_data})
                 try:
                     df_batch = pd.DataFrame(list(batch_save_data))
-                    db_manager.insert_dataframe(df_batch, 'stock_daily',
-                                               conflict_handling='replace')
+                    written = db_manager.insert_dataframe(
+                        df_batch, 'stock_daily', conflict_handling='replace')
+                    if written != len(df_batch):
+                        raise RuntimeError(
+                            f"写入条数不一致: 预期 {len(df_batch)}, 返回 {written}")
+                    success_count += len(symbols)
                     self.log_signal.emit(
                         f"  💾 已写入 {len(batch_save_data)} 条增量数据")
                 except Exception as e:
+                    failed_count += len(symbols)
+                    failed_list.extend(symbols)
                     self.log_signal.emit(f"  ⚠️ 保存失败: {str(e)[:80]}")
                 batch_save_data.clear()
 
@@ -531,8 +540,11 @@ class DataDownloadThread(QThread):
             try:
                 df = reader.read_daily_data(
                     stock_code, start_date=start_dt.strftime('%Y-%m-%d'))
-            except Exception:
-                df = None
+            except Exception as exc:
+                failed_count += 1
+                failed_list.append(stock_code)
+                self.log_signal.emit(f"  ⚠️ {stock_code} 读取失败: {str(exc)[:80]}")
+                continue
 
             if df is None or df.empty:
                 # 大QMT本地也没有更新的数据（用户未在大QMT下载该区间）
@@ -554,8 +566,6 @@ class DataDownloadThread(QThread):
                     'created_at': datetime.now(),
                     'updated_at': datetime.now(),
                 })
-            success_count += 1
-
             if len(batch_save_data) >= FLUSH_ROWS:
                 _flush()
 
@@ -579,19 +589,21 @@ class DataDownloadThread(QThread):
             'success': success_count,
             'failed': failed_count,
             'skipped': len(still_stale_list),
-            'failed_list': still_stale_list[:100],
+            'failed_list': failed_list[:100],
+            'stale_list': still_stale_list[:100],
+            'cancelled': not self._is_running,
             'task_type': 'update_data',
         }
         self.finished_signal.emit(result)
         self.log_signal.emit(
-            f"✅ 补全完成! 成功: {success_count}, "
+            f"{'⚠️ 补全未全部成功' if failed_count or not self._is_running else '✅ 补全处理完成'}! "
+            f"成功: {success_count}, 失败: {failed_count}, "
             f"待大QMT补充下载: {len(still_stale_list)}")
 
     def _update_data(self):
         """更新缺失数据（智能补全）- 自动检测并补充所有缺失的历史数据"""
         try:
             from data_manager.duckdb_connection_pool import get_db_manager
-            from xtquant import xtdata
             import pandas as pd
             from data_manager.source_router import DataRoute
 
@@ -614,6 +626,7 @@ class DataDownloadThread(QThread):
                 return
 
             # ── miniQMT模式（xtquant 在线）──
+            from xtquant import xtdata
             self.log_signal.emit("✅ 数据管理器初始化成功")
             self.log_signal.emit("📋 正在检测缺失数据...")
 
