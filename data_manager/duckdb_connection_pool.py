@@ -78,7 +78,6 @@ class DuckDBConnectionManager:
             try:
                 con = duckdb.connect(self.duckdb_path, read_only=True)
                 self._connection_count += 1
-                yield con
                 break
             except Exception as e:
                 if "lock" in str(e).lower() or "already open" in str(e).lower():
@@ -87,13 +86,17 @@ class DuckDBConnectionManager:
                         time.sleep(retry_delay * (attempt + 1))
                         continue
                 raise
-            finally:
-                if con:
-                    try:
-                        con.close()
-                        self._connection_count -= 1
-                    except Exception:
-                        pass
+
+        # Retry connection acquisition only. A query error belongs to the
+        # caller and must never cause a second yield from this context manager.
+        try:
+            yield con
+        finally:
+            if con is not None:
+                try:
+                    con.close()
+                finally:
+                    self._connection_count -= 1
 
     @contextmanager
     def get_write_connection(self):
