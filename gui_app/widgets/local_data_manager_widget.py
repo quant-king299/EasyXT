@@ -964,6 +964,8 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
     )
 
     reader = QMTLocalReader(data_dir=datadir, big_data_dir=datadir)
+    if start_date and end_date and pd.Timestamp(start_date) > pd.Timestamp(end_date):
+        raise ValueError("开始日期不能晚于结束日期")
     log_emit(f"📂 使用大QMT数据目录: {datadir}")
 
     if not symbols:
@@ -980,6 +982,7 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
     skipped = 0
 
     BATCH_SIZE = 200
+    record_count = 0
 
     for batch_idx in range(0, total, BATCH_SIZE):
         if not is_running():
@@ -999,6 +1002,7 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
             )
 
         batch_save_data = []
+        batch_symbols = []
 
         for stock_code in batch_codes:
             if not is_running():
@@ -1019,8 +1023,9 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
                     skipped += 1
                     continue
 
+                stock_rows = []
                 for _, row in df.iterrows():
-                    batch_save_data.append({
+                    stock_rows.append({
                         'stock_code': stock_code,
                         'symbol_type': 'stock',
                         'date': row['time'].strftime('%Y-%m-%d') if hasattr(row['time'], 'strftime') else str(row['time'])[:10],
@@ -1035,7 +1040,8 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
                         'updated_at': datetime.now(),
                     })
 
-                success_count += 1
+                batch_save_data.extend(stock_rows)
+                batch_symbols.append(stock_code)
 
             except Exception as e:
                 failed_count += 1
@@ -1044,12 +1050,18 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
         if batch_save_data:
             try:
                 df_batch = pd.DataFrame(batch_save_data)
-                db_manager.insert_dataframe(df_batch, 'stock_daily',
-                                           conflict_handling='replace')
+                written = db_manager.insert_dataframe(
+                    df_batch, 'stock_daily', conflict_handling='replace')
+                if written != len(df_batch):
+                    raise RuntimeError(f"写入条数不一致: 预期 {len(df_batch)}, 返回 {written}")
+                success_count += len(batch_symbols)
+                record_count += written
                 log_emit(
                     f"  ✅ 批次 {batch_num}: {len(batch_save_data)} 条 → DuckDB"
                 )
             except Exception as e:
+                failed_count += len(batch_symbols)
+                failed_list.extend(f"{code} - 保存失败: {str(e)[:50]}" for code in batch_symbols)
                 log_emit(f"  ⚠️ 保存失败: {str(e)[:80]}")
 
     return {
@@ -1059,6 +1071,8 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
         'skipped': skipped,
         'failed_list': failed_list,
         'task_type': task_type,
+        'record_count': record_count,
+        'cancelled': not is_running(),
     }
 
 
@@ -1080,6 +1094,29 @@ class SingleStockDownloadThread(QThread):
     def run(self):
         """运行下载任务"""
         try:
+            from data_manager.source_router import probe_route, DataRoute
+            plan = probe_route()
+            self.log_signal.emit(f"数据来源: {plan.label}")
+            if plan.mode == DataRoute.BIG_QMT:
+                if self.period != '1d':
+                    self.error_signal.emit("大QMT本地导入目前仅支持日线，请选择日线数据。")
+                    return
+                result = run_datadir_daily_import(
+                    [self.stock_code], self.start_date, self.end_date, plan.datadir,
+                    self.log_signal.emit, self.progress_signal.emit,
+                    lambda: self._is_running, task_type='single_stock')
+                if result['success'] != 1 or result['cancelled']:
+                    self.error_signal.emit(
+                        '；'.join(result['failed_list']) or
+                        '指定区间没有可导入数据或任务已取消，请先在大QMT下载该区间日线。')
+                    return
+                self.finished_signal.emit(dict(
+                    success=True, symbol=self.stock_code,
+                    record_count=result['record_count'], file_size=0))
+                return
+            if plan.mode == DataRoute.FALLBACK:
+                self.error_signal.emit('当前没有可用的QMT历史数据通道：' + '；'.join(plan.reasons))
+                return
             from xtquant import xtdata
             from datetime import datetime
             import pandas as pd
