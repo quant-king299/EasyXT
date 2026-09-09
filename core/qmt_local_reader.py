@@ -12,7 +12,7 @@ import struct
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 
 
@@ -179,15 +179,19 @@ class QMTLocalReader:
             total_records = len(data) // rec_size
 
             records = []
+            # Keep the validity window current; the old 2026 cutoff silently
+            # discarded every newer trading day. Use UTC for the upper bound.
+            max_timestamp = (datetime.now(timezone.utc) + timedelta(days=1)).timestamp()
             for i in range(0, total_records, 2):  # 只取偶数索引
                 offset = i * rec_size
                 vals = struct.unpack_from('<IIIIIIII', data, offset)
                 ts = vals[0]
-                # 验证时间戳合理性 (1990-2026)
-                if not (631152000 < ts < 1767225600):
+                # Reject invalid dates without imposing a fixed expiry year.
+                if not (631152000 < ts <= max_timestamp):
                     continue
 
-                dt = datetime.fromtimestamp(ts)
+                # DAT trading dates must not depend on the reader host timezone.
+                dt = datetime.fromtimestamp(ts, timezone(timedelta(hours=8))).replace(tzinfo=None)
                 open_p = vals[1] / 1000.0
                 high_p = vals[2] / 1000.0
                 low_p = vals[3] / 1000.0
