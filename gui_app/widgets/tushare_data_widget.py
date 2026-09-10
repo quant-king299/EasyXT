@@ -94,6 +94,8 @@ class TushareDownloadThread(QThread):
                 self._batch_download()
             elif self.task_type == 'daily':
                 self._download_daily()
+            elif self.task_type == 'repair_daily_units':
+                self._repair_daily_units()
             elif self.task_type == 'index_data':
                 self._download_index_data()
             elif self.task_type == 'stock_basic':
@@ -1035,6 +1037,85 @@ class TushareDownloadThread(QThread):
             """)
         finally:
             conn.unregister('_tmp_daily')
+
+    @staticmethod
+    def _update_missing_daily_units(conn, df):
+        """用Tushare真值修复已有DAT行的量额，不覆盖OHLC或新增行情行。"""
+        from data_manager.tushare_daily_repair import update_missing_daily_units
+        return update_missing_daily_units(conn, df)
+
+    def _repair_daily_units(self):
+        """按交易日从Tushare补齐DAT导入行的真实成交量与成交额。"""
+        conn = None
+        try:
+            pro = self._get_tushare_pro()
+            db_path = self.kwargs.get('db_path') or self._get_db_path()
+            start_date = self.kwargs['start_date']
+            end_date = self.kwargs['end_date']
+            start_sql = datetime.strptime(start_date, '%Y%m%d').strftime('%Y-%m-%d')
+            end_sql = datetime.strptime(end_date, '%Y%m%d').strftime('%Y-%m-%d')
+            conn = duckdb.connect(db_path)
+            dates = [row[0] for row in conn.execute("""
+                SELECT DISTINCT CAST(date AS DATE)
+                FROM stock_daily
+                WHERE period = '1d'
+                  AND CAST(date AS DATE) BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+                  AND (amount IS NULL OR amount = 0)
+                ORDER BY 1
+            """, [start_sql, end_sql]).fetchall()]
+            pending = conn.execute("""
+                SELECT COUNT(*) FROM stock_daily
+                WHERE period = '1d'
+                  AND CAST(date AS DATE) BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+                  AND (amount IS NULL OR amount = 0)
+            """, [start_sql, end_sql]).fetchone()[0]
+            self.log_signal.emit(
+                f"🔧 待修复 {pending:,} 条，涉及 {len(dates)} 个交易日；"
+                "仅更新volume/amount，不覆盖OHLC。")
+            if not dates:
+                self.finished_signal.emit({'success': True, 'repaired': 0, 'remaining': 0})
+                return
+
+            repaired = 0
+            failed_dates = []
+            for index, trade_date in enumerate(dates, 1):
+                if not self._is_running:
+                    self._is_stopped = True
+                    break
+                date_text = trade_date.strftime('%Y%m%d')
+                try:
+                    df = pro.daily(
+                        trade_date=date_text,
+                        fields='ts_code,trade_date,open,high,low,close,vol,amount')
+                    if df is not None and not df.empty:
+                        df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
+                        df = self._normalize_daily_units(df)
+                        repaired += self._update_missing_daily_units(conn, df)
+                except Exception as exc:
+                    failed_dates.append(date_text)
+                    self.log_signal.emit(f"  ❌ {date_text}: {str(exc)[:100]}")
+                self.progress_signal.emit(index, len(dates))
+                self.log_signal.emit(
+                    f"[{index}/{len(dates)}] {date_text}，累计修复 {repaired:,} 条")
+
+            remaining = conn.execute("""
+                SELECT COUNT(*) FROM stock_daily
+                WHERE period = '1d'
+                  AND CAST(date AS DATE) BETWEEN CAST(? AS DATE) AND CAST(? AS DATE)
+                  AND (amount IS NULL OR amount = 0)
+            """, [start_sql, end_sql]).fetchone()[0]
+            self.log_signal.emit(
+                f"✅ Tushare量额修复完成：已修复 {repaired:,} 条，仍缺 {remaining:,} 条，"
+                f"失败交易日 {len(failed_dates)} 个。")
+            self.finished_signal.emit({
+                'success': not failed_dates, 'repaired': repaired, 'remaining': remaining,
+                'failed_dates': failed_dates, 'stopped': self._is_stopped})
+        except Exception as exc:
+            import traceback
+            self.error_signal.emit(f"Tushare量额修复失败: {exc}\n{traceback.format_exc()}")
+        finally:
+            if conn is not None:
+                conn.close()
 
     def _download_daily(self):
         """下载日线行情数据（使用Tushare，无需QMT）"""
@@ -4319,6 +4400,26 @@ class TushareDataWidget(QWidget):
         daily_btn.clicked.connect(lambda: self.start_download_factor_update(['stock_daily']))
         btn_layout.addWidget(daily_btn)
 
+        repair_dates = QHBoxLayout()
+        repair_dates.addWidget(QLabel("DAT量额修复区间:"))
+        self.repair_start_date_edit = QDateEdit()
+        self.repair_start_date_edit.setCalendarPopup(True)
+        self.repair_start_date_edit.setDate(QDate.currentDate().addDays(-30))
+        self.repair_start_date_edit.setDisplayFormat("yyyy-MM-dd")
+        self.repair_end_date_edit = QDateEdit()
+        self.repair_end_date_edit.setCalendarPopup(True)
+        self.repair_end_date_edit.setDate(QDate.currentDate())
+        self.repair_end_date_edit.setDisplayFormat("yyyy-MM-dd")
+        repair_dates.addWidget(self.repair_start_date_edit)
+        repair_dates.addWidget(QLabel("至"))
+        repair_dates.addWidget(self.repair_end_date_edit)
+        btn_layout.addLayout(repair_dates)
+
+        repair_btn = QPushButton("🩹 用Tushare修复DAT成交量/成交额（不覆盖OHLC）")
+        repair_btn.setFont(QFont("Microsoft YaHei", 9))
+        repair_btn.clicked.connect(self.start_repair_daily_units)
+        btn_layout.addWidget(repair_btn)
+
         layout.addWidget(btn_group)
 
         layout.addStretch()
@@ -4433,6 +4534,31 @@ class TushareDataWidget(QWidget):
             update_tables=update_tables
         )
         self._start_download_thread(thread)
+
+    def start_repair_daily_units(self):
+        """启动DAT量额真值修复；日期范围由用户明确选择。"""
+        token = self.token_edit.text().strip()
+        if not token:
+            QMessageBox.warning(self, "警告", "请输入Tushare Token")
+            return
+        start_date = self.repair_start_date_edit.date().toString("yyyyMMdd")
+        end_date = self.repair_end_date_edit.date().toString("yyyyMMdd")
+        if start_date > end_date:
+            QMessageBox.warning(self, "日期错误", "开始日期不能晚于结束日期")
+            return
+        answer = QMessageBox.question(
+            self, "确认修复",
+            "将从Tushare获取所选区间的真实成交量/成交额，只更新stock_daily中"
+            "amount为0或NULL的已有日线，不修改OHLC，也不新增行情行。\n\n是否继续？",
+            QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        if answer != QMessageBox.Yes:
+            return
+        os.environ['TUSHARE_TOKEN'] = token
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
+        self._start_download_thread(TushareDownloadThread(
+            'repair_daily_units', token=token,
+            start_date=start_date, end_date=end_date))
 
     def _on_factor_tab_activated(self):
         """因子数据 tab 被激活时自动刷新状态"""

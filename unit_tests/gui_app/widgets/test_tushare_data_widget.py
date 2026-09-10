@@ -205,6 +205,43 @@ def test_normalize_daily_units_keeps_lots_and_converts_thousand_yuan():
     assert normalized.loc[0, 'amount'] == pytest.approx(1_031_951_473.0)
 
 
+def test_repair_daily_units_updates_only_missing_amount_and_preserves_ohlc(db_conn):
+    _create_stock_daily_table(db_conn)
+    db_conn.execute("""
+        INSERT INTO stock_daily
+        (stock_code, symbol_type, date, period, open, high, low, close, volume, amount)
+        VALUES
+        ('000001.SZ', 'stock', '2026-08-18', '1d', 11, 12, 10, 11.05,
+         80893000, 0),
+        ('000002.SZ', 'stock', '2026-08-18', '1d', 9, 10, 8, 9.5,
+         1000, 123456)
+    """)
+    raw = pd.DataFrame({
+        'ts_code': ['000001.SZ', '000002.SZ', '000003.SZ'],
+        'trade_date': ['20260818'] * 3,
+        'date': pd.to_datetime(['20260818'] * 3, format='%Y%m%d'),
+        'vol': [808929.71, 2222.2, 3333.3],
+        'amount': [896326.74871, 222.2, 333.3],
+    })
+    normalized = TushareDownloadThread._normalize_daily_units(raw)
+
+    repaired = TushareDownloadThread._update_missing_daily_units(db_conn, normalized)
+
+    assert repaired == 1
+    damaged = db_conn.execute("""
+        SELECT open, high, low, close, volume, amount FROM stock_daily
+        WHERE stock_code='000001.SZ'
+    """).fetchone()
+    assert damaged[:4] == (11.0, 12.0, 10.0, 11.05)
+    assert damaged[4] == 808930
+    assert damaged[5] == pytest.approx(896326748.71)
+    untouched = db_conn.execute("""
+        SELECT volume, amount FROM stock_daily WHERE stock_code='000002.SZ'
+    """).fetchone()
+    assert untouched == (1000, 123456.0)
+    assert db_conn.execute("SELECT COUNT(*) FROM stock_daily").fetchone()[0] == 2
+
+
 def test_active_stock_symbols_are_loaded_by_download_thread():
     """股票池请求由下载线程的 helper 执行，供 UI 入口无阻塞地启动任务。"""
     class FakePro:
