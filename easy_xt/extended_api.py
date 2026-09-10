@@ -11,8 +11,7 @@ import time
 import math
 from datetime import datetime, timedelta
 from typing import Union, List, Optional, Dict, Any, Tuple
-from .data_api import DataAPI
-from .trade_api import TradeAPI
+from .api_runtime import get_shared_data_api, get_shared_trade_api
 from .config import config
 from .data_types import ConnectionError, DataError
 from .utils import StockCodeUtils, TimeUtils, ErrorHandler
@@ -21,9 +20,9 @@ from .enhanced_indicators import EnhancedIndicators
 class ExtendedAPI:
     """扩展API类，提供完整的交易和数据分析功能"""
     
-    def __init__(self):
-        self.data_api = DataAPI()
-        self.trade_api = TradeAPI()
+    def __init__(self, data_api=None, trade_api=None):
+        self.data_api = data_api or get_shared_data_api()
+        self.trade_api = trade_api or get_shared_trade_api()
         self.indicators = EnhancedIndicators(self.data_api)
         self._connected_data = False
         self._connected_trade = False

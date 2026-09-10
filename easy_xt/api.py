@@ -7,9 +7,8 @@ EasyXT主API入口
 """
 import pandas as pd
 from typing import Union, List, Optional, Dict, Any
-from .data_api import DataAPI
-from .trade_api import TradeAPI
 from .extended_api import ExtendedAPI
+from .api_runtime import get_shared_data_api, get_shared_trade_api
 from .config import config
 from .utils import ErrorHandler
 
@@ -20,7 +19,7 @@ class EasyXT:
     """
     
     def __init__(self):
-        self.data = DataAPI()
+        self.data = get_shared_data_api()
         self._trade = None  # 延迟加载，只在需要时创建
         self._data_connected = False
         self._trade_connected = False
@@ -29,7 +28,7 @@ class EasyXT:
     def trade(self):
         """延迟加载交易API，只在需要时创建"""
         if self._trade is None:
-            self._trade = TradeAPI()
+            self._trade = get_shared_trade_api()
         return self._trade
     
     def init_data(self) -> bool:
