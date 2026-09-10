@@ -31,6 +31,9 @@ EXTRA_CODES = ()
 # 0 表示不限制；排障时可改为小正数，只更新前 N 只证券。
 MAX_SYMBOLS = 0
 PAUSE_SECONDS = 0.03
+# QMT guarantees that after_init runs after strategy initialization. Keep a
+# short extra delay for the quote connection to finish its cold start.
+INITIAL_READY_DELAY_SECONDS = 3
 
 # EasyXT writes its exact jobs beside this script. Set an absolute path here
 # only when the strategy is pasted into the QMT editor instead of run as a file.
@@ -94,8 +97,8 @@ def _collect_codes(C):
     return unique_codes[:MAX_SYMBOLS] if MAX_SYMBOLS else unique_codes
 
 
-def init(C):
-    """大QMT策略启动时执行一次日线增量下载。"""
+def _run_downloads(C):
+    """Run once after QMT has finished strategy initialization."""
     manifest_jobs, manifest_path = _load_manifest_jobs()
     if manifest_jobs:
         jobs = manifest_jobs
@@ -139,3 +142,21 @@ def init(C):
     if failed:
         print("失败代码（最多50只）：%s" % ", ".join(failed[:50]))
     print("下一步：在 EasyXT 数据管理中运行“一键补全数据”导入 DAT。")
+
+
+def init(C):
+    """Do not download here: quote services may not be ready during init."""
+    print("EasyXT DAT updater initialized; waiting for after_init.")
+
+
+def after_init(C):
+    """QMT calls this once after init and before bar processing."""
+    if INITIAL_READY_DELAY_SECONDS:
+        print("Waiting %s seconds for QMT quote services..." % INITIAL_READY_DELAY_SECONDS)
+        time.sleep(INITIAL_READY_DELAY_SECONDS)
+    _run_downloads(C)
+
+
+def handlebar(C):
+    """No trading or per-bar work is performed by this updater."""
+    return

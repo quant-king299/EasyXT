@@ -31,6 +31,9 @@ GUI 日志显示的清单绝对路径。
 
 脚本只调用大QMT内置的 `download_history_data`，没有账户、委托、成交或 DuckDB 写入逻辑。不要在普通 Windows PowerShell 或 miniQMT环境运行它。
 
+下载任务在大QMT的 `after_init` 生命周期回调中执行，而不是 `init`。这是为了让
+行情服务先完成策略初始化；脚本默认再等待 3 秒后才开始提交下载请求。
+
 `download_history_data` 调用不抛异常只表示大QMT接受了下载请求，并不能证明每只
 DAT 已经写到 EasyXT 读取的目录。若导入后仍有缺口，运行
 `python tools/diagnose_qmt_dat_coverage.py`；它会只读比较大QMT与miniQMT目录中
