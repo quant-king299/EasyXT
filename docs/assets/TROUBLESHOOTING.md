@@ -1147,7 +1147,7 @@ for i in range(0, (len(data) - header_size) // rec_size, 2):  # 步长为2（奇
     high_price = vals[2] / 1000.0
     low_price = vals[3] / 1000.0
     close_price = vals[4] / 1000.0
-    volume = vals[6] * 100  # 手转股
+    volume = vals[6]  # stock_daily 日线成交量统一保存为手
     
     print(f"{dt.date()} | 开:{open_price:.2f} 高:{high_price:.2f} 低:{low_price:.2f} 收:{close_price:.2f} 量:{volume}")
 ```

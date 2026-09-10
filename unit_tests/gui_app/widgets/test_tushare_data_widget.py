@@ -190,6 +190,21 @@ def test_save_daily_dataframe_ignores_extra_columns(db_conn):
     assert 'extra_col' not in rows.columns
 
 
+def test_normalize_daily_units_keeps_lots_and_converts_thousand_yuan():
+    """Tushare vol 是手，amount 是千元；库内分别保存为手和元。"""
+    raw = pd.DataFrame({
+        'ts_code': ['000001.SZ'],
+        'vol': [808_930],
+        'amount': [1_031_951.473],
+    })
+
+    normalized = TushareDownloadThread._normalize_daily_units(raw)
+
+    assert normalized.loc[0, 'stock_code'] == '000001.SZ'
+    assert normalized.loc[0, 'volume'] == 808_930
+    assert normalized.loc[0, 'amount'] == pytest.approx(1_031_951_473.0)
+
+
 def test_active_stock_symbols_are_loaded_by_download_thread():
     """股票池请求由下载线程的 helper 执行，供 UI 入口无阻塞地启动任务。"""
     class FakePro:

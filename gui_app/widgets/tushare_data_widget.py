@@ -986,6 +986,21 @@ class TushareDownloadThread(QThread):
             self.error_signal.emit(f"批量下载失败: {str(e)}\n{traceback.format_exc()}")
 
     @staticmethod
+    def _normalize_daily_units(df):
+        """将 Tushare 日线字段转换为 stock_daily 的统一单位。
+
+        stock_daily.volume 使用“手”，与 Tushare ``vol`` 和 QMT 日线字段一致；
+        stock_daily.amount 使用“元”，而 Tushare ``amount`` 的单位是千元。
+        """
+        normalized = df.copy()
+        normalized.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+        if 'amount' in normalized.columns:
+            normalized['amount'] = pd.to_numeric(normalized['amount'], errors='coerce') * 1000
+        if 'volume' in normalized.columns:
+            normalized['volume'] = pd.to_numeric(normalized['volume'], errors='coerce')
+        return normalized
+
+    @staticmethod
     def _save_daily_dataframe(conn, df):
         """
         将日线 DataFrame 保存到 stock_daily 表。
@@ -1145,7 +1160,7 @@ class TushareDownloadThread(QThread):
 
                     if df is not None and not df.empty:
                         df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
-                        df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+                        df = self._normalize_daily_units(df)
                         df['symbol_type'] = 'stock'
                         df['period'] = '1d'
 
@@ -2585,7 +2600,7 @@ class TushareDownloadThread(QThread):
                 if df is not None and not df.empty:
                     # 列映射：Tushare → stock_daily
                     df['date'] = pd.to_datetime(df['trade_date'], format='%Y%m%d')
-                    df.rename(columns={'ts_code': 'stock_code', 'vol': 'volume'}, inplace=True)
+                    df = self._normalize_daily_units(df)
                     df['symbol_type'] = 'stock'
                     df['period'] = '1d'
                     # 复用已有的批量写入方法

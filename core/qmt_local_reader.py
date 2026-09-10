@@ -211,7 +211,9 @@ class QMTLocalReader:
                     'high': high_p,
                     'low': low_p,
                     'close': close_p,
-                    'volume': volume_lots * 100,  # 手转股
+                    # stock_daily 的日线成交量统一以“手”为单位。DAT 的 vals[6]
+                    # 本身已经是手，不能再乘 100；下单数量才使用“股”。
+                    'volume': volume_lots,
                     # This DAT layout does not expose a verified amount field.
                     # Keep it unknown instead of manufacturing a zero turnover.
                     'amount': None,

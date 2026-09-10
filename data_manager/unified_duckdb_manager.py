@@ -365,7 +365,8 @@ class UnifiedDuckDBManager:
 
             # 确保amount列存在
             if 'amount' not in df.columns and 'volume' in df.columns and 'close' in df.columns:
-                df['amount'] = df['volume'] * df['close']
+                # 日线 volume 的统一单位是“手”，而 amount 的统一单位是“元”。
+                df['amount'] = df['volume'] * 100 * df['close']
 
             # 添加元数据
             df['symbol'] = symbol

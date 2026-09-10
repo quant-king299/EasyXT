@@ -34,6 +34,7 @@ class DailyDatesTest(unittest.TestCase):
         result = self.read_fixture(dates)
         self.assertEqual(list(result.time.dt.strftime('%Y-%m-%d')),
                          sorted({date.strftime('%Y-%m-%d') for date in dates}))
+        self.assertTrue((result.volume == 100).all())
         self.assertTrue(result.amount.isna().all())
 
     def test_rejects_implausible_future_record(self):
