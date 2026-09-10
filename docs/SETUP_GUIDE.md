@@ -123,7 +123,7 @@ Copy-Item .env.example .env
     "account": {
       // QMT 路径配置（使用 QMT 交易时必需）
       "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini",
-      "account_id": "39020958",
+      "account_id": "YOUR_ACCOUNT_ID",
       "auto_detect_qmt": true
     },
     "logging": {

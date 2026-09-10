@@ -264,7 +264,7 @@ from strategies.grid_trading.高频分时网格策略 import 高频分时网格�
 
 # 配置参数
 params = {
-    '账户ID': '39020958',  # 修改为你的账户
+    '账户ID': 'YOUR_ACCOUNT_ID',  # 修改为你的账户
     '账户类型': 'STOCK',
     '股票池': ['511130.SH', '511090.SH'],
     '买入涨跌幅': -0.2,  # 下跌0.2%买入
@@ -294,7 +294,7 @@ from strategies.grid_trading.ATR动态网格策略 import ATR动态网格策略
 
 # 配置参数
 params = {
-    '账户ID': '39020958',  # 修改为你的账户
+    '账户ID': 'YOUR_ACCOUNT_ID',  # 修改为你的账户
     '账户类型': 'STOCK',
     '股票池': ['511090.SH', '511130.SH'],
     'ATR周期': 14,              # ATR计算周期

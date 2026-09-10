@@ -44,14 +44,14 @@
 - 策略 config（覆盖）：strategies/xueqiu_follow/config/unified_config.json
   {
     "settings": {
-      "account": { "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini", "account_id": "39020958" },
+      "account": { "qmt_path": "D:\\\\国金QMT交易端模拟\\\\userdata_mini", "account_id": "YOUR_ACCOUNT_ID" },
       "risk": { "max_position_ratio": 0.10 }
     }
   }
 
 加载结果
 - account.qmt_path → 使用策略值 D:\\国金QMT交易端模拟\\userdata_mini
-- account.account_id → 使用策略值 39020958
+- account.account_id → 使用策略值 YOUR_ACCOUNT_ID
 - risk.max_position_ratio → 使用策略值 0.10
 - 若策略缺失某键，则回退到根 config 或子系统默认。
 

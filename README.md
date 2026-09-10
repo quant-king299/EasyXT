@@ -125,14 +125,14 @@ python tools/setup_duckdb.py
 
 ### 📂 不确定路径配置？
 
-→ 📁 **[路径配置指南](PATH_GUIDE.md)** ← **新手必读！**
+→ 📁 **[路径配置指南](docs/SETUP_GUIDE.md#15-qmt-路径配置)** ← **新手必读！**
 - 什么是"项目根目录"？
 - 从 GitHub 下载后文件夹是什么名字？
 - 如何正确配置路径？
 
 ### 🏗️ 我想了解系统架构
 
-→ 📐 **[系统架构文档 (ARCHITECTURE)](ARCHITECTURE.md)** - 了解项目整体设计、模块关系和技术选型
+→ 📐 **[系统架构文档 (ARCHITECTURE)](docs/ARCHITECTURE.md)** - 了解项目整体设计、模块关系和技术选型
 
 ---
 
@@ -578,10 +578,10 @@ gui_app/main_window.py
 ## ⚙️ 安装指南
 
 > 📖 **安装文档**：
-> - **[INSTALL.md](INSTALL.md)** - 快速安装指南
-> - **[SETUP_GUIDE.md](SETUP_GUIDE.md)** - 🆕 增强版配置指南（包含详细的 xtquant、数据源、IDE 配置说明）
+> - **[INSTALL.md](docs/INSTALL.md)** - 快速安装指南
+> - **[SETUP_GUIDE.md](docs/SETUP_GUIDE.md)** - 🆕 增强版配置指南（包含详细的 xtquant、数据源、IDE 配置说明）
 >
-> ⚠️ **遇到 `cannot import name 'datacenter' from 'xtquant'` 错误？** 查看 [SETUP_GUIDE.md - xtquant 配置](SETUP_GUIDE.md#1-xtquant-配置)
+> ⚠️ **遇到 `cannot import name 'datacenter' from 'xtquant'` 错误？** 查看 [SETUP_GUIDE.md - xtquant 配置](docs/SETUP_GUIDE.md#15-qmt-路径配置)
 
 ### 环境要求
 
@@ -774,7 +774,7 @@ python -c "import easyxt_backtest; print('✓ easyxt_backtest OK')"
 python -c "from dotenv import load_dotenv; load_dotenv(); import os; print('✓ Tushare Token:', os.getenv('TUSHARE_TOKEN')[:10] + '...') if os.getenv('TUSHARE_TOKEN') else print('✗ Token未配置')"
 ```
 
-**如果第 1 步报错**（`cannot import name 'datacenter' from 'xtquant'`），请查看 **[SETUP_GUIDE.md - xtquant 配置](SETUP_GUIDE.md#1-xtquant-配置)** 获取详细解决方案。
+**如果第 1 步报错**（`cannot import name 'datacenter' from 'xtquant'`），请查看 **[SETUP_GUIDE.md - xtquant 配置](docs/SETUP_GUIDE.md#15-qmt-路径配置)** 获取详细解决方案。
 
 ---
 

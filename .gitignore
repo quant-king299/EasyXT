@@ -128,6 +128,9 @@ logs/
 *.csv
 *.xlsx
 *.xls
+# 允许测试代码及其小型CSV fixture进入版本库。
+!unit_tests/**/*.csv
+!tests/**/*.csv
 
 # 配置文件（包含敏感信息）
 config/user_config.py
@@ -181,7 +184,6 @@ xtquant/
 # Tushare基础数据下载模块（重要，GUI依赖）
 !tushare_manager/download_basic_data.py
 
-*test*.py
 *debug*.py
 *fix*.py
 create_*.py
@@ -310,7 +312,6 @@ backup/
 integration_test_logs/
 logs/
 reports/
-tests/
 .worktrees/
 demo*/
 
@@ -445,7 +446,6 @@ tushare_skills_charts/
 
 # AI助手生成的数据文件
 maotai_daily_*.csv
-*.csv
 
 # AI助手临时文件
 一键复制推文.py
