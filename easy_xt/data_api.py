@@ -36,6 +36,16 @@ from queue import Empty
 logger = logging.getLogger(__name__)
 
 
+def _log_missing_qmt_history(codes):
+    """Emit one actionable warning without writing directly to stdout."""
+    logger.warning(
+        "QMT本地没有历史数据，准备自动降级到备用数据源 | codes=%s | "
+        "解决方式: 运行EasyXT数据管理补数，或安装pytdx；详见 "
+        "docs/assets/TROUBLESHOOTING.md 第3节",
+        codes,
+    )
+
+
 class QMTCallTimeoutError(ConnectionError):
     """QMT native call exceeded its hard process deadline."""
 
@@ -250,27 +260,20 @@ class DuckDBDataReader:
             table_names = {t[0] for t in tables}
 
             if 'stock_daily' not in table_names:
-                print()
                 logger.info("=" * 60)
                 logger.warning("[WARN] 数据库中缺少 stock_daily 表（日线行情数据）")
                 logger.info("=" * 60)
-                print()
                 logger.info("当前数据库中只有以下表: %s", ', '.join(sorted(table_names)) if table_names else '（空）')
-                print()
                 logger.info("你需要先下载日线数据，以下任选一种方式：")
-                print()
                 logger.info("  方式1（推荐，不需要QMT）：")
                 logger.info("    python run_gui.py")
                 logger.info("    → 切换到「Tushare下载」标签页")
                 logger.info("    → 勾选「日线行情」→ 设置股票数量和年份 → 点击下载")
-                print()
                 logger.info("  方式2（命令行，需要Tushare Token）：")
                 logger.info("    python tools/setup_duckdb.py")
-                print()
                 logger.info("  方式3（需要QMT）：")
                 logger.info("    python run_gui.py")
                 logger.info("    → 切换到「数据管理」标签页 → 下载股票数据")
-                print()
                 logger.info("=" * 60)
                 return
 
@@ -713,12 +716,10 @@ class DataAPI:
             try:
                 if source_name != self._active_source:
                     logger.info(f"[降级] 尝试使用 {source_name.upper()} 数据源...")
-                    print(f"[降级] 正在尝试 {source_name.upper()} 数据源...")
                 result = source_method(codes, start, end, period, count, fields, adjust)
 
                 if source_name != self._active_source:
                     logger.info(f"[OK] {source_name.upper()} 数据源获取成功")
-                    print(f"[OK] {source_name.upper()} 数据源获取成功！")
                 # 添加数据来源标记
                 if result is not None and hasattr(result, '__len__') and len(result) > 0:
                     if isinstance(result, pd.DataFrame):
@@ -875,28 +876,7 @@ class DataAPI:
                     break
             
             if all_empty:
-                print("\n" + "="*60)
-                print("⚠️  QMT本地没有历史数据")
-                print("="*60)
-                print()
-                print("📌 正在尝试自动降级到备用数据源...")
-                print()
-                print("💡 如果备用数据源也不可用，您可以：")
-                print()
-                print("  【方案1】使用一键下载脚本（推荐）")
-                print("    python tools/download_all_stocks.py")
-                print()
-                print("  【方案2】使用GUI下载（无需命令行）")
-                print("    1. 运行: python run_gui.py")
-                print("    2. 切换到「数据管理」标签页")
-                print("    3. 点击「下载股票数据」")
-                print()
-                print("  【方案3】安装免费在线数据源（无需QMT）")
-                print("    pip install pytdx")
-                print("    # 安装后会自动使用通达信在线数据")
-                print()
-                print("="*60)
-                print()
+                _log_missing_qmt_history(codes)
                 # 抛出异常让降级机制处理
                 raise DataError(
                     f"无法获取股票 {codes} 的数据。\n\n"
@@ -970,28 +950,7 @@ class DataAPI:
                         break
                 
                 if not has_data:
-                    print("\n" + "="*60)
-                    print("⚠️  QMT本地没有历史数据")
-                    print("="*60)
-                    print()
-                    print("📌 正在尝试自动降级到备用数据源...")
-                    print()
-                    print("💡 如果备用数据源也不可用，您可以：")
-                    print()
-                    print("  【方案1】使用一键下载脚本（推荐）")
-                    print("    python tools/download_all_stocks.py")
-                    print()
-                    print("  【方案2】使用GUI下载（无需命令行）")
-                    print("    1. 运行: python run_gui.py")
-                    print("    2. 切换到「数据管理」标签页")
-                    print("    3. 点击「下载股票数据」")
-                    print()
-                    print("  【方案3】安装免费在线数据源（无需QMT）")
-                    print("    pip install pytdx")
-                    print("    # 安装后会自动使用通达信在线数据")
-                    print()
-                    print("="*60)
-                    print()
+                    _log_missing_qmt_history(codes)
                     raise DataError(
                         f"无法获取股票 {codes} 的数据。\n\n"
                         f"🔧 快速解决方案（推荐）：\n"
@@ -2138,28 +2097,7 @@ class DataAPI:
                             break
                     
                     if not has_data:
-                        print("\n" + "="*60)
-                        print("⚠️  QMT本地没有历史数据")
-                        print("="*60)
-                        print()
-                        print("📌 正在尝试自动降级到备用数据源...")
-                        print()
-                        print("💡 如果备用数据源也不可用，您可以：")
-                        print()
-                        print("  【方案1】使用一键下载脚本（推荐）")
-                        print("    python tools/download_all_stocks.py")
-                        print()
-                        print("  【方案2】使用GUI下载（无需命令行）")
-                        print("    1. 运行: python run_gui.py")
-                        print("    2. 切换到「数据管理」标签页")
-                        print("    3. 点击「下载股票数据」")
-                        print()
-                        print("  【方案3】安装免费在线数据源（无需QMT）")
-                        print("    pip install pytdx")
-                        print("    # 安装后会自动使用通达信在线数据")
-                        print()
-                        print("="*60)
-                        print()
+                        _log_missing_qmt_history(codes)
                         raise DataError(
                             f"无法获取股票 {codes} 的数据 - QMT本地没有历史数据。\\n\\n"
                             f"💡 QMT是本地运行的，需要先下载历史数据。\\n\\n"
