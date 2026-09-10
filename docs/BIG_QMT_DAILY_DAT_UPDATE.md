@@ -31,6 +31,11 @@ GUI 日志显示的清单绝对路径。
 
 脚本只调用大QMT内置的 `download_history_data`，没有账户、委托、成交或 DuckDB 写入逻辑。不要在普通 Windows PowerShell 或 miniQMT环境运行它。
 
+`download_history_data` 调用不抛异常只表示大QMT接受了下载请求，并不能证明每只
+DAT 已经写到 EasyXT 读取的目录。若导入后仍有缺口，运行
+`python tools/diagnose_qmt_dat_coverage.py`；它会只读比较大QMT与miniQMT目录中
+样本 DAT 的最后日期、修改时间与文件大小，用于判断下载未落盘还是路径不一致。
+
 ## 首次验收
 
 执行后，在大QMT `datadir` 中抽查原先缺失的 A 股 DAT 最新日期；确认已到最近交易日后，再运行 EasyXT 一键补全。对于 DAT 仍无更新的证券，查看大QMT脚本输出的失败代码，并按证券类型选择大QMT数据管理或备用源。

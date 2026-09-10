@@ -114,24 +114,28 @@ def init(C):
     print("仅下载大QMT本地DAT；不下单、不写DuckDB")
     print("=" * 60)
 
-    success = 0
+    accepted = 0
     failed = []
     for index, (code, start_date, end_date) in enumerate(jobs, 1):
         try:
             # 此函数由大QMT内置Python提供；不要从 xtquant 导入，也不要在
             # 外部命令行直接运行本脚本。
             download_history_data(code, "1d", start_date, end_date)
-            success += 1
+            # 迅投下载函数不返回“DAT 已经落盘”的确认；这里只能表示调用已
+            # 被大QMT接受。实际覆盖范围由随后 EasyXT DAT 导入再次核验。
+            accepted += 1
         except Exception as exc:
             failed.append(code)
             print("[FAIL] %s: %s" % (code, exc))
 
         if index % 100 == 0 or index == len(jobs):
-            print("进度 %d/%d，成功 %d，失败 %d" % (index, len(jobs), success, len(failed)))
+            print("进度 %d/%d，下载请求已接受 %d，失败 %d" %
+                  (index, len(jobs), accepted, len(failed)))
         if PAUSE_SECONDS:
             time.sleep(PAUSE_SECONDS)
 
-    print("完成：成功 %d，失败 %d" % (success, len(failed)))
+    print("完成：下载请求已接受 %d，失败 %d" % (accepted, len(failed)))
+    print("提示：请求被接受不等于DAT已落盘；请随后运行EasyXT一键补全进行核验。")
     if failed:
         print("失败代码（最多50只）：%s" % ", ".join(failed[:50]))
     print("下一步：在 EasyXT 数据管理中运行“一键补全数据”导入 DAT。")
