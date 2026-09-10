@@ -284,11 +284,11 @@ def rate_limit(calls_per_second: float = 10.0):
         def wrapper(*args, **kwargs):
             # 锁只覆盖节流时间槽分配；实际API调用仍可并发执行。
             with call_lock:
-                elapsed = time.monotonic() - last_called[0]
+                elapsed = time.perf_counter() - last_called[0]
                 left_to_wait = min_interval - elapsed
                 if left_to_wait > 0:
                     time.sleep(left_to_wait)
-                last_called[0] = time.monotonic()
+                last_called[0] = time.perf_counter()
             return func(*args, **kwargs)
         
         return wrapper

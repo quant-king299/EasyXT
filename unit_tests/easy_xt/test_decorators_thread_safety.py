@@ -22,7 +22,7 @@ def test_rate_limit_serializes_time_slots_across_threads():
     @rate_limit(calls_per_second=50)
     def record_start():
         with starts_lock:
-            starts.append(time.monotonic())
+            starts.append(time.perf_counter())
 
     def worker():
         ready.wait()
