@@ -1,12 +1,11 @@
 # -*- coding: utf-8 -*-
-import logging
-
-logger = logging.getLogger(__name__)
 """
 混合数据管理器
 
 统一的数据管理接口，支持多数据源自动选择和优雅降级
 """
+import logging
+
 import pandas as pd
 from typing import Optional, List, Dict, Union
 from datetime import datetime
@@ -19,6 +18,8 @@ from .utils import (
     normalize_symbols,
     validate_date,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class HybridDataManager:
@@ -72,7 +73,7 @@ class HybridDataManager:
 
     def _initialize_sources(self):
         """初始化所有数据源"""
-        print("[HybridDataManager] 正在初始化数据源...")
+        logger.info("[HybridDataManager] 正在初始化数据源...")
 
         # 初始化DuckDB
         if 'duckdb' in self.source_priority:
@@ -81,11 +82,11 @@ class HybridDataManager:
                 duckdb_source = DuckDBSource(duckdb_config)
                 if duckdb_source.connect():
                     self.sources['duckdb'] = duckdb_source
-                    print("[HybridDataManager] [OK] DuckDB数据源已连接")
+                    logger.info("[HybridDataManager] [OK] DuckDB数据源已连接")
                 else:
-                    print("[HybridDataManager] [FAIL] DuckDB数据源连接失败")
+                    logger.warning("[HybridDataManager] [FAIL] DuckDB数据源连接失败")
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] DuckDB初始化失败: {e}")
+                logger.warning("[HybridDataManager] [FAIL] DuckDB初始化失败: %s", e)
 
         # 初始化Tushare
         if 'tushare' in self.source_priority:
@@ -95,13 +96,13 @@ class HybridDataManager:
                     tushare_source = TushareSource(tushare_config)
                     if tushare_source.connect():
                         self.sources['tushare'] = tushare_source
-                        print("[HybridDataManager] [OK] Tushare数据源已连接")
+                        logger.info("[HybridDataManager] [OK] Tushare数据源已连接")
                     else:
-                        print("[HybridDataManager] [FAIL] Tushare数据源连接失败")
+                        logger.warning("[HybridDataManager] [FAIL] Tushare数据源连接失败")
                 else:
-                    print("[HybridDataManager] [FAIL] Tushare Token未提供")
+                    logger.info("[HybridDataManager] Tushare Token未提供，跳过该数据源")
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] Tushare初始化失败: {e}")
+                logger.warning("[HybridDataManager] [FAIL] Tushare初始化失败: %s", e)
 
         # 初始化QMT
         if 'qmt' in self.source_priority:
@@ -110,11 +111,11 @@ class HybridDataManager:
                 qmt_source = QMTSource(qmt_config)
                 if qmt_source.connect():
                     self.sources['qmt'] = qmt_source
-                    print("[HybridDataManager] [OK] QMT数据源已连接")
+                    logger.info("[HybridDataManager] [OK] QMT数据源已连接")
                 else:
-                    print("[HybridDataManager] [FAIL] QMT数据源连接失败")
+                    logger.warning("[HybridDataManager] [FAIL] QMT数据源连接失败")
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] QMT初始化失败: {e}")
+                logger.warning("[HybridDataManager] [FAIL] QMT初始化失败: %s", e)
 
         # 初始化 BaoStock（免费、免 Token 的历史数据兜底源）
         if 'baostock' in self.source_priority:
@@ -124,13 +125,15 @@ class HybridDataManager:
                     baostock_source = BaoStockSource(baostock_config)
                     if baostock_source.connect():
                         self.sources['baostock'] = baostock_source
-                        print("[HybridDataManager] [OK] BaoStock数据源已连接")
+                        logger.info("[HybridDataManager] [OK] BaoStock数据源已连接")
                     else:
-                        print("[HybridDataManager] [FAIL] BaoStock数据源连接失败")
+                        logger.warning("[HybridDataManager] [FAIL] BaoStock数据源连接失败")
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] BaoStock初始化失败: {e}")
+                logger.warning("[HybridDataManager] [FAIL] BaoStock初始化失败: %s", e)
 
-        print(f"[HybridDataManager] 数据源初始化完成，可用数据源: {list(self.sources.keys())}")
+        logger.info(
+            "[HybridDataManager] 数据源初始化完成，可用数据源: %s",
+            list(self.sources.keys()))
 
     def get_price(self,
                   symbol: Union[str, List[str]],
@@ -181,7 +184,7 @@ class HybridDataManager:
 
             try:
                 if verbose:
-                    print(f"[HybridDataManager] 尝试从 {source_name} 获取价格数据...")
+                    logger.info("[HybridDataManager] 尝试从 %s 获取价格数据...", source_name)
 
                 # 批量获取多只股票的数据
                 all_data = []
@@ -202,16 +205,20 @@ class HybridDataManager:
                     # 更新统计
                     self.stats[f'{source_name}_queries'] += 1
                     if verbose:
-                        print(f"[HybridDataManager] [OK] 从 {source_name} 获取价格数据成功 ({len(result)}条记录)")
+                        logger.info(
+                            "[HybridDataManager] [OK] 从 %s 获取价格数据成功 (%d条记录)",
+                            source_name, len(result))
                     return result
 
             except Exception as e:
                 if verbose:
-                    print(f"[HybridDataManager] [FAIL] {source_name} 获取价格数据失败: {e}")
+                    logger.warning(
+                        "[HybridDataManager] [FAIL] %s 获取价格数据失败: %s",
+                        source_name, e)
                 continue
 
         if verbose:
-            print(f"[HybridDataManager] [FAIL] 所有数据源均无法获取价格数据")
+            logger.error("[HybridDataManager] [FAIL] 所有数据源均无法获取价格数据")
         return None
 
     def get_fundamentals(self,
@@ -263,7 +270,7 @@ class HybridDataManager:
                     self.stats['successful_queries'] = self.stats.get('successful_queries', 0) + 1
                     return pd.DataFrame(result).dropna(subset=['circ_mv'])
             except Exception as e:
-                print(f"[HybridDataManager] 全市场市值查询失败: {e}")
+                logger.warning("[HybridDataManager] 全市场市值查询失败: %s", e)
             return None
 
         self.stats['total_queries'] += 1
@@ -280,7 +287,7 @@ class HybridDataManager:
         # ✅ 优化：如果查询日期是非交易日，自动使用最近的交易日数据
         actual_date = self._find_nearest_trading_date_with_data(date, symbols, fields)
         if actual_date != date:
-            print(f"[HybridDataManager] {date}非交易日，使用{actual_date}数据")
+            logger.info("[HybridDataManager] %s无数据，使用此前交易日%s数据", date, actual_date)
 
         # 确定要尝试的数据源顺序
         if preferred_source and preferred_source in self.sources:
@@ -295,7 +302,7 @@ class HybridDataManager:
                 continue
 
             try:
-                print(f"[HybridDataManager] 尝试从 {source_name} 获取基本面数据...")
+                logger.info("[HybridDataManager] 尝试从 %s 获取基本面数据...", source_name)
 
                 # 使用实际日期（可能是最近的交易日）查询
                 result = source.get_fundamentals(symbols, actual_date, fields)
@@ -305,21 +312,25 @@ class HybridDataManager:
                     self.fundamental_cache[cache_key] = result.copy()
                     # 更新统计
                     self.stats[f'{source_name}_queries'] += 1
-                    print(f"[HybridDataManager] [OK] 从 {source_name} 获取基本面数据成功 ({len(result)}只股票)")
+                    logger.info(
+                        "[HybridDataManager] [OK] 从 %s 获取基本面数据成功 (%d只股票)",
+                        source_name, len(result))
                     return result
 
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] {source_name} 获取基本面数据失败: {e}")
+                logger.warning(
+                    "[HybridDataManager] [FAIL] %s 获取基本面数据失败: %s",
+                    source_name, e)
                 continue
 
-        print(f"[HybridDataManager] [FAIL] 所有数据源均无法获取基本面数据")
+        logger.error("[HybridDataManager] [FAIL] 所有数据源均无法获取基本面数据")
         return None
 
     def _find_nearest_trading_date_with_data(self, date: str, symbols: List[str], fields: List[str], max_days: int = 10) -> str:
         """
         查找最近的交易日（有基本面数据的日期）
 
-        优先向后查找（使用最近的数据），如果向后找不到则向前查找（使用未来的数据）
+        仅向历史方向查找，避免把未来基本面数据带入回测。
 
         Args:
             date: 查询日期 (YYYYMMDD)
@@ -351,22 +362,12 @@ class HybridDataManager:
                     if result is not None and not result.empty:
                         # 找到有数据的日期
                         if i > 0:
-                            print(f"[HybridDataManager] {date}无数据，使用最近的交易日{check_date}")
+                            logger.info(
+                                "[HybridDataManager] %s无数据，使用此前交易日%s数据",
+                                date, check_date)
                             return check_date
                         else:
                             return date
-
-                # 2. 向后找不到，向前查找（使用未来的数据）
-                # 这种情况发生在查询日期早于数据起始日期（如查询2024-01-01，但数据从2024-01-02开始）
-                for i in range(1, max_days + 1):
-                    check_date = (date_obj + timedelta(days=i)).strftime('%Y%m%d')
-
-                    # 尝试获取数据
-                    result = source.get_fundamentals(symbols[:5], check_date, fields)
-
-                    if result is not None and not result.empty:
-                        print(f"[HybridDataManager] {date}早于数据起始日期，使用{check_date}数据")
-                        return check_date
 
         # 如果DuckDB找不到，返回原日期
         return date
@@ -406,7 +407,7 @@ class HybridDataManager:
                 continue
 
             try:
-                print(f"[HybridDataManager] 尝试从 {source_name} 获取交易日历...")
+                logger.info("[HybridDataManager] 尝试从 %s 获取交易日历...", source_name)
 
                 result = source.get_trading_dates(start_date, end_date)
 
@@ -415,14 +416,18 @@ class HybridDataManager:
                     self.trading_dates_cache = result.copy()
                     # 更新统计
                     self.stats[f'{source_name}_queries'] += 1
-                    print(f"[HybridDataManager] [OK] 从 {source_name} 获取交易日历成功 ({len(result)}个交易日)")
+                    logger.info(
+                        "[HybridDataManager] [OK] 从 %s 获取交易日历成功 (%d个交易日)",
+                        source_name, len(result))
                     return result
 
             except Exception as e:
-                print(f"[HybridDataManager] [FAIL] {source_name} 获取交易日历失败: {e}")
+                logger.warning(
+                    "[HybridDataManager] [FAIL] %s 获取交易日历失败: %s",
+                    source_name, e)
                 continue
 
-        print(f"[HybridDataManager] [FAIL] 所有数据源均无法获取交易日历")
+        logger.error("[HybridDataManager] [FAIL] 所有数据源均无法获取交易日历")
         return None
 
     def clear_cache(self):
@@ -435,7 +440,7 @@ class HybridDataManager:
         for source in self.sources.values():
             source.clear_cache()
 
-        print("[HybridDataManager] 所有缓存已清空")
+        logger.info("[HybridDataManager] 所有缓存已清空")
 
     def get_cache_info(self) -> Dict:
         """
@@ -478,7 +483,7 @@ class HybridDataManager:
         """关闭所有数据源连接"""
         for source in self.sources.values():
             source.close()
-        print("[HybridDataManager] 所有数据源连接已关闭")
+        logger.info("[HybridDataManager] 所有数据源连接已关闭")
 
     def __enter__(self):
         """上下文管理器入口"""
@@ -505,7 +510,7 @@ class HybridDataManager:
                     df.index = pd.to_datetime(df.index)
                 return df
         except Exception as e:
-            print(f"  [ERROR] 加载数据失败 {stock_code}: {e}")
+            logger.error("[HybridDataManager] 加载数据失败 %s: %s", stock_code, e)
         return pd.DataFrame()
 
     @staticmethod
@@ -541,7 +546,7 @@ class HybridDataManager:
                     codes.append(c + ('.SS' if s == 'SH' else '.' + s))
                 return codes
         except Exception as e:
-            print(f"    [get_index_components] 获取失败: {e}")
+            logger.warning("[HybridDataManager] 获取指数成分股失败: %s", e)
         return []
 
     def get_fundamentals_compat(self, codes=None, date=None, fields=None):
