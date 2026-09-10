@@ -108,36 +108,8 @@ class DuckDBSource(BaseDataSource):
             start = convert_date_format(start_date)
             end = convert_date_format(end_date)
 
-            symbols_str = "', '".join(symbols)
-
-            # 构建查询（同时查询 stock_daily 和 etf_daily）
-            # ETF(5xxxxx/15xxxx/16xxxx/588xxx) 数据在 etf_daily 表中
-            query = f"""
-                SELECT date, stock_code as symbol, open, high, low, close, volume, amount
-                FROM stock_daily
-                WHERE stock_code IN ('{symbols_str}')
-                  AND date >= '{start}' AND date <= '{end}'
-                UNION ALL
-                SELECT trade_date as date, ts_code as symbol, open, high, low, close, vol as volume, amount
-                FROM etf_daily
-                WHERE ts_code IN ('{symbols_str}')
-                  AND trade_date >= '{start}' AND trade_date <= '{end}'
-                ORDER BY date, symbol
-            """
-
-            # 执行查询
-            try:
-                df = self.connection.execute(query).df()
-            except Exception:
-                # 如果 etf_daily 表不存在，只用 stock_daily
-                query = f"""
-                    SELECT date, stock_code as symbol, open, high, low, close, volume, amount
-                    FROM stock_daily
-                    WHERE stock_code IN ('{symbols_str}')
-                      AND date >= '{start}' AND date <= '{end}'
-                    ORDER BY date, stock_code
-                """
-                df = self.connection.execute(query).df()
+            from ..local_price_reader import read_daily_prices
+            df = read_daily_prices(self.connection, symbols, start, end)
 
             if df.empty:
                 if verbose:

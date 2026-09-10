@@ -209,7 +209,14 @@ class UnifiedDataInterface:
                     self.adjustment_cache = AdjustmentCache(self.duckdb_path)
 
                 # 使用缓存管理器获取数据
-                if period == '1d':
+                if period == '1d' and adjust == 'none':
+                    data = self._read_from_duckdb(
+                        stock_code, start_date, end_date, period, adjust)
+                    if data is not None and not data.empty:
+                        logger.info(
+                            f"  [OK] 从统一DuckDB读取层获取成功 {len(data)} 条记录 "
+                            f"[股票:{stock_code}]")
+                elif period == '1d':
                     data = self.adjustment_cache.get_adjusted_data(
                         stock_code=stock_code,
                         start_date=start_date,
@@ -310,6 +317,16 @@ class UnifiedDataInterface:
     ) -> Optional[pd.DataFrame]:
         """从DuckDB读取数据 - 修复版（添加表存在性检查）"""
         try:
+            if period == '1d' and adjust == 'none':
+                from core.data_manager.local_price_reader import read_daily_prices
+                df = read_daily_prices(
+                    self.con, [stock_code], start_date, end_date, include_etf=True)
+                if df.empty:
+                    return df
+                df = df.rename(columns={'symbol': 'stock_code', 'date': 'datetime'})
+                df['datetime'] = pd.to_datetime(df['datetime'])
+                return df.set_index('datetime')
+
             # 确定表名
             table_map = {
                 '1d': 'stock_daily',
