@@ -34,6 +34,10 @@ GUI 日志显示的清单绝对路径。
 下载任务在大QMT的 `after_init` 生命周期回调中执行，而不是 `init`。这是为了让
 行情服务先完成策略初始化；脚本默认再等待 3 秒后才开始提交下载请求。
 
+不同券商大QMT版本对内置下载函数的兼容性不同。脚本优先使用迅投保留的兼容入口
+`down_history_data`，仅当该入口不存在时才回退到 `download_history_data`，并在
+启动日志明确打印实际使用的函数名。
+
 `download_history_data` 调用不抛异常只表示大QMT接受了下载请求，并不能证明每只
 DAT 已经写到 EasyXT 读取的目录。若导入后仍有缺口，运行
 `python tools/diagnose_qmt_dat_coverage.py`；它会只读比较大QMT与miniQMT目录中

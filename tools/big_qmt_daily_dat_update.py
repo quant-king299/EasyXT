@@ -97,6 +97,24 @@ def _collect_codes(C):
     return unique_codes[:MAX_SYMBOLS] if MAX_SYMBOLS else unique_codes
 
 
+def _get_download_api():
+    """Prefer the legacy broker-QMT entry point, then use the newer alias.
+
+    Some broker builds expose both names but silently ignore requests sent via
+    ``download_history_data``.  ThinkTrader documents ``down_history_data`` as
+    a compatible entry point for older builds, so prefer it when available.
+    """
+    legacy = globals().get("down_history_data")
+    if callable(legacy):
+        return legacy, "down_history_data"
+    current = globals().get("download_history_data")
+    if callable(current):
+        return current, "download_history_data"
+    raise RuntimeError(
+        "This QMT build exposes neither down_history_data nor download_history_data."
+    )
+
+
 def _run_downloads(C):
     """Run once after QMT has finished strategy initialization."""
     manifest_jobs, manifest_path = _load_manifest_jobs()
@@ -115,6 +133,8 @@ def _run_downloads(C):
     else:
         print("范围: %s ~ %s；证券数: %d" % (start_date, end_date, len(jobs)))
     print("仅下载大QMT本地DAT；不下单、不写DuckDB")
+    download_api, download_api_name = _get_download_api()
+    print("下载接口: %s" % download_api_name)
     print("=" * 60)
 
     accepted = 0
@@ -123,7 +143,7 @@ def _run_downloads(C):
         try:
             # 此函数由大QMT内置Python提供；不要从 xtquant 导入，也不要在
             # 外部命令行直接运行本脚本。
-            download_history_data(code, "1d", start_date, end_date)
+            download_api(code, "1d", start_date, end_date)
             # 迅投下载函数不返回“DAT 已经落盘”的确认；这里只能表示调用已
             # 被大QMT接受。实际覆盖范围由随后 EasyXT DAT 导入再次核验。
             accepted += 1
