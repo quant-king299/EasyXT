@@ -279,7 +279,6 @@ api.buy(account_id='xxx', code='600000.SH', volume=100, price=12.5)
 
 ### 📖 相关文档
 
-- [📢 听说miniQMT要关停，别慌！EasyXT已全面支持大QMT](docs/公众号推文_听说miniqmt要关停别慌EasyXT已全面支持大QMT.md)
 - [📖 QMT版本说明](docs/assets/QMT_VERSIONS.md)
 - [📖 QMT自动登录](docs/assets/QMT_AUTOLOGIN_SECTION.md)
 
@@ -299,10 +298,15 @@ EasyXT/                          # 项目根目录（从 GitHub 下载后的文�
 │   ├── advanced_trade_api.py  # 高级交易接口
 │   └── utils.py               # 工具函数
 ├── easyxt_backtest/           # 回测框架
-│   ├── data_manager.py        # 数据管理器
-│   ├── engine.py              # 回测引擎
+│   ├── enhanced_backtest_engine.py  # 事件驱动回测引擎
+│   ├── vectorized_engine.py   # 向量化回测引擎
+│   ├── metrics.py             # 统一绩效指标
 │   ├── performance.py         # 性能分析
 │   └── strategies/            # 策略实现
+├── core/data_manager/         # 回测与研究共用的数据管理器
+│   ├── hybrid_manager.py      # 多数据源管理
+│   ├── local_price_reader.py  # 规范化本地日线读取
+│   └── sources/               # DuckDB/QMT/Tushare/BaoStock适配器
 ├── 101因子/                    # 因子分析平台
 │   └── 101因子分析平台/       # Streamlit应用
 ├── strategies/                 # 策略集合

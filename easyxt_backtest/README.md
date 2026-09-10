@@ -88,21 +88,26 @@ python small_cap_backtest.py --start 20220101 --end 20231231 --num 10 --cash 500
 ```
 easyxt_backtest/
 ├── __init__.py                 # 模块导出
-├── data_manager.py             # 数据管理器（多数据源）
 ├── strategy_base.py            # 策略基类
-├── engine.py                   # 回测引擎
+├── enhanced_backtest_engine.py # 事件驱动回测引擎（默认）
+├── vectorized_engine.py        # 向量化回测引擎
+├── metrics.py                  # 统一年化收益与夏普计算
 ├── performance.py              # 性能分析器
+├── research/                   # 时点股票池与审计工具
 ├── strategies/
 │   ├── __init__.py
 │   └── small_cap_strategy.py   # 小市值策略
 ├── examples/
-│   ├── __init__.py
-│   └── small_cap_backtest.py   # 使用示例
+│   ├── test_simple_strategy_v2.py
+│   └── test_yaml_config.py
 └── output/                     # 输出目录（自动创建）
     ├── trades.csv              # 交易记录
     ├── portfolio_history.csv   # 持仓历史
     └── returns.csv             # 收益率序列
 ```
+
+多数据源管理器位于项目级 `core/data_manager/`，并由
+`easyxt_backtest.DataManager` 对外导出。
 
 ## 创建自定义策略
 
