@@ -5,8 +5,8 @@ EasyXT 在“大QMT模式”下读取的是大QMT本机 `datadir` 中已有的�
 
 ## 安装一次
 
-1. 从仓库打开 `tools/big_qmt_daily_dat_update.py`，把全部内容复制到大QMT的“量化 → Python编辑器”新建策略中。
-2. 将策略设置为收盘后运行一次，建议在 15:20 以后；它会下载最近 21 个自然日的沪深A股日线。
+1. 从仓库打开 `tools/big_qmt_daily_dat_update.py`，把全部内容复制到大QMT的“量化 → Python编辑器”新建策略中，建议命名为“EasyXT大QMT精确补缺”。
+2. 将策略设置为收盘后运行一次，建议在 15:20 以后；它只执行 EasyXT GUI 生成的精确补数清单，没有清单时安全退出。
 3. 先手工运行一次。日志应显示“仅下载大QMT本地DAT；不下单、不写DuckDB”。
 4. 回到 EasyXT，点击“数据管理 → 一键补全数据”，将已更新 DAT 导入 DuckDB。
 
@@ -21,13 +21,21 @@ EasyXT 在“大QMT模式”下读取的是大QMT本机 `datadir` 中已有的�
 若脚本被复制到大QMT编辑器而非以 `.py` 文件运行，请把 `MANIFEST_PATH` 设置为
 GUI 日志显示的清单绝对路径。
 
+## 全市场自定义区间下载
+
+需要主动下载整个沪深A股市场时，使用独立脚本
+`tools/big_qmt_full_market_range_download.py`，建议在大QMT中另存为
+“EasyXT大QMT全市场区间下载”。修改文件顶部的 `START_DATE`、`END_DATE`、
+`SECTOR_NAMES` 即可自由设置日期和市场；`END_DATE = ""` 表示当天。
+
+两个脚本不要保存为同一个大QMT策略：精确补缺脚本没有清单时会安全退出，
+全市场脚本从不读取清单，因此不会再发生一种用途覆盖另一种用途的问题。
+
 ## 市场范围
 
-默认只更新 `沪深A股`，因为不同券商大QMT的 ETF、北交所板块名称和数据权限并不一致。
-
-- ETF：确认大QMT板块名称后，把它加入 `OPTIONAL_SECTOR_NAMES`；若大QMT没有对应 DAT，改用 Tushare 的基金日线数据。
-- 北交所：若大QMT不生成 `.BJ` DAT，不能通过本脚本补齐，应配置 Tushare 等备用源。
-- 单个证券：可把代码加入 `EXTRA_CODES`。
+精确补缺清单只包含 `沪深A股`。全市场区间脚本也默认使用 `沪深A股`；不同券商
+大QMT的 ETF、北交所板块名称和数据权限并不一致，确认本机板块名后再修改
+`SECTOR_NAMES`，或用 Tushare 等备用源。
 
 脚本只调用大QMT内置的 `download_history_data`，没有账户、委托、成交或 DuckDB 写入逻辑。不要在普通 Windows PowerShell 或 miniQMT环境运行它。
 

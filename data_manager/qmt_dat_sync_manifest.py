@@ -46,6 +46,52 @@ def default_manifest_path(datadir: Optional[Path]) -> Path:
     return Path(__file__).resolve().parent.parent / ".easyxt" / MANIFEST_FILENAME
 
 
+def load_manifest(*, datadir: Optional[Path]) -> Optional[dict]:
+    """Load the last exact-download manifest, returning ``None`` if unusable."""
+    path = default_manifest_path(datadir)
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def rebuilt_without_new_bar_codes(*, datadir: Optional[Path],
+                                  target_date: Optional[date] = None) -> set[str]:
+    """Return symbols whose DAT was rebuilt after the last manifest.
+
+    When a full-file rebuild advances the file mtime but produces no bar newer
+    than DuckDB, the symbol has no new trading record (normally suspension),
+    rather than a failed download.  Only manifests for the same target date are
+    accepted so a resumed symbol is reconsidered on the next update day.
+    """
+    if not datadir:
+        return set()
+    payload = load_manifest(datadir=datadir)
+    target = (target_date or date.today()).strftime("%Y%m%d")
+    if not payload or payload.get("target_date") != target:
+        return set()
+    try:
+        generated_at = datetime.fromisoformat(str(payload["generated_at"])).timestamp()
+    except (KeyError, TypeError, ValueError):
+        return set()
+
+    rebuilt = set()
+    root = Path(datadir)
+    for job in payload.get("jobs", []):
+        code = str(job.get("stock_code", ""))
+        pure, _, market = code.partition(".")
+        if market not in {"SH", "SZ"} or not pure:
+            continue
+        dat_path = root / market / "86400" / f"{pure}.DAT"
+        try:
+            if dat_path.stat().st_mtime > generated_at:
+                rebuilt.add(code)
+        except OSError:
+            continue
+    return rebuilt
+
+
 def write_manifest(stale_rows: Iterable[Mapping[str, object]], *, datadir: Optional[Path],
                    target_date: Optional[date] = None) -> tuple[Path, dict]:
     """Write one exact download job per stale symbol."""

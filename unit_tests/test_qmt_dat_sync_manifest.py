@@ -1,7 +1,8 @@
-from datetime import date
+from datetime import date, datetime
 import json
 from pathlib import Path
 import tempfile
+import os
 
 from data_manager import qmt_dat_sync_manifest as manifest
 
@@ -28,3 +29,26 @@ def test_manifest_uses_first_missing_date_and_groups_symbols(monkeypatch):
         by_code = {job["stock_code"]: job for job in saved["jobs"]}
         assert by_code["000001.SZ"]["start_date"] == "20260818"
         assert by_code["000001.SZ"]["end_date"] == "20260910"
+
+
+def test_detects_dat_rebuilt_after_same_day_manifest():
+    with tempfile.TemporaryDirectory() as directory:
+        root = Path(directory)
+        datadir = root / "datadir"
+        python_dir = root / "python"
+        dat_path = datadir / "SZ" / "86400" / "000001.DAT"
+        dat_path.parent.mkdir(parents=True)
+        python_dir.mkdir()
+        dat_path.write_bytes(b"rebuilt")
+        (python_dir / manifest.MANIFEST_FILENAME).write_text(json.dumps({
+            "generated_at": "2026-09-10T10:00:00",
+            "target_date": "20260910",
+            "jobs": [{"stock_code": "000001.SZ"}],
+        }), encoding="utf-8")
+        rebuilt_time = datetime(2026, 9, 10, 11, 0).timestamp()
+        os.utime(dat_path, (rebuilt_time, rebuilt_time))
+
+        assert manifest.rebuilt_without_new_bar_codes(
+            datadir=datadir, target_date=date(2026, 9, 10)) == {"000001.SZ"}
+        assert manifest.rebuilt_without_new_bar_codes(
+            datadir=datadir, target_date=date(2026, 9, 11)) == set()

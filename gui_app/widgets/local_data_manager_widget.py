@@ -496,7 +496,8 @@ class DataDownloadThread(QThread):
 
         # 大QMT的默认补数范围就是“沪深A股”。stock_daily 还会混有 ETF、
         # 北交所、指数等，不能把它们伪装成股票后交给大QMT脚本盲目下载。
-        from data_manager.qmt_dat_sync_manifest import classify_security, is_a_share
+        from data_manager.qmt_dat_sync_manifest import (
+            classify_security, is_a_share, rebuilt_without_new_bar_codes)
         all_stale_counts = {}
         for code in df_stocks['stock_code']:
             kind = classify_security(code)
@@ -513,11 +514,13 @@ class DataDownloadThread(QThread):
 
         reader = QMTLocalReader(data_dir=plan.datadir, big_data_dir=plan.datadir)
         db_manager = get_db_manager(get_default_db_path())
+        rebuilt_no_bar_candidates = rebuilt_without_new_bar_codes(datadir=plan.datadir)
 
         success_count = 0
         failed_count = 0
         still_stale_list = []
         stale_rows = []
+        no_new_bar_list = []
         failed_list = []
         batch_save_data = []
         FLUSH_ROWS = 5000
@@ -562,9 +565,15 @@ class DataDownloadThread(QThread):
                 continue
 
             if df is None or df.empty:
-                # 大QMT本地也没有更新的数据（用户未在大QMT下载该区间）
-                still_stale_list.append(stock_code)
-                stale_rows.append({'stock_code': stock_code, 'latest_date': latest_dt})
+                if stock_code in rebuilt_no_bar_candidates:
+                    # The prior exact task rebuilt this complete DAT file after
+                    # its manifest was emitted.  No later record therefore
+                    # means no new K line exists (normally suspension), not a
+                    # download failure.
+                    no_new_bar_list.append(stock_code)
+                else:
+                    still_stale_list.append(stock_code)
+                    stale_rows.append({'stock_code': stock_code, 'latest_date': latest_dt})
                 continue
 
             for _, r in df.iterrows():
@@ -591,21 +600,31 @@ class DataDownloadThread(QThread):
 
         _flush()
 
+        # Always replace the consumed manifest.  An empty job list is meaningful:
+        # the precise QMT updater must do nothing instead of falling back to an
+        # accidental full-market download.
+        manifest_message = ""
+        try:
+            from data_manager.qmt_dat_sync_manifest import write_manifest
+            manifest_path, summary = write_manifest(stale_rows, datadir=plan.datadir)
+            manifest_message = (
+                f"\n   已生成大QMT精确补数清单: {manifest_path}"
+                f"\n   大QMT任务：沪深A股 {summary['qmt_a_share']}；"
+                f"ETF/基金 {summary['etf']}、北交所 {summary['bse']}、其他 "
+                f"{summary['other']} 不进入大QMT任务。")
+        except Exception as exc:
+            self.log_signal.emit(f"⚠️ 生成大QMT精确补数清单失败: {str(exc)[:100]}")
+
+        if no_new_bar_list:
+            preview = '、'.join(no_new_bar_list[:10])
+            more = f" 等 {len(no_new_bar_list)} 只" if len(no_new_bar_list) > 10 else ""
+            self.log_signal.emit(
+                f"ℹ️ {len(no_new_bar_list)} 只证券已完成DAT全量核验，当前没有新K线"
+                f"（通常为停牌：{preview}{more}），不再列入补数任务。")
+
         if still_stale_list:
             preview = '、'.join(still_stale_list[:10])
             more = f" 等 {len(still_stale_list)} 只" if len(still_stale_list) > 10 else ""
-            manifest_message = ""
-            try:
-                from data_manager.qmt_dat_sync_manifest import write_manifest
-                manifest_path, summary = write_manifest(stale_rows, datadir=plan.datadir)
-                manifest_message = (
-                    f"\n   已生成大QMT精确补数清单: {manifest_path}"
-                    f"\n   大QMT任务：沪深A股 {summary['qmt_a_share']}；"
-                    f"ETF/基金 {summary['etf']}、北交所 {summary['bse']}、其他 "
-                    f"{summary['other']} 不进入大QMT任务。"
-                    "大QMT日线更新脚本下次运行会优先处理该清单。")
-            except Exception as exc:
-                self.log_signal.emit(f"⚠️ 生成大QMT精确补数清单失败: {str(exc)[:100]}")
             self.log_signal.emit(
                 f"⚠️ {len(still_stale_list)} 只证券的大QMT本地数据也没有更新"
                 f"（{preview}{more}）。\n"
@@ -618,6 +637,7 @@ class DataDownloadThread(QThread):
             'skipped': len(still_stale_list),
             'failed_list': failed_list[:100],
             'stale_list': still_stale_list[:100],
+            'no_new_bar': len(no_new_bar_list),
             'cancelled': not self._is_running,
             'task_type': 'update_data',
         }
@@ -625,7 +645,8 @@ class DataDownloadThread(QThread):
         self.log_signal.emit(
             f"{'⚠️ 补全未全部成功' if failed_count or not self._is_running else '✅ 补全处理完成'}! "
             f"成功: {success_count}, 失败: {failed_count}, "
-            f"待大QMT补充下载: {len(still_stale_list)}")
+            f"待大QMT补充下载: {len(still_stale_list)}, "
+            f"无新K线: {len(no_new_bar_list)}")
 
     def _update_data(self):
         """更新缺失数据（智能补全）- 自动检测并补充所有缺失的历史数据"""

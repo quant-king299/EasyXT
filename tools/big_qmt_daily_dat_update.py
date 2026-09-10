@@ -10,26 +10,11 @@ Python 策略。把策略安排在收盘后运行一次（建议 15:20 以后）
 “数据管理 -> 一键补全数据”中导入 DuckDB。
 """
 
-from datetime import datetime, timedelta
 import json
 import os
 import time
 
 
-# 每日重复下载最近若干自然日，覆盖周末、节假日及偶发的当日延迟。
-LOOKBACK_CALENDAR_DAYS = 21
-
-# 大QMT常见的板块名称。默认仅启用沪深A股，最稳定地修复 DAT 落后问题。
-# ETF/北交所是否可通过本券商大QMT下载存在差异；确认板块名称和权限后再
-# 加入 OPTIONAL_SECTOR_NAMES，避免一个不支持的市场中断主任务。
-SECTOR_NAMES = ("沪深A股",)
-OPTIONAL_SECTOR_NAMES = ()  # 例如：("沪深ETF", "北交所A股")
-
-# 无法从板块接口取得的代码可在这里手工补充，格式如 "510300.SH"。
-EXTRA_CODES = ()
-
-# 0 表示不限制；排障时可改为小正数，只更新前 N 只证券。
-MAX_SYMBOLS = 0
 PAUSE_SECONDS = 0.03
 # QMT guarantees that after_init runs after strategy initialization. Keep a
 # short extra delay for the quote connection to finish its cold start.
@@ -50,7 +35,7 @@ def _load_manifest_jobs():
     if not path and globals().get("__file__"):
         path = os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_FILENAME)
     if not path or not os.path.isfile(path):
-        return [], ""
+        return None, ""
     try:
         with open(path, "r", encoding="utf-8") as handle:
             payload = json.load(handle)
@@ -62,48 +47,16 @@ def _load_manifest_jobs():
         return jobs, path
     except Exception as exc:
         print("[WARN] Cannot read EasyXT manifest %s: %s" % (path, exc))
-        return [], ""
-
-
-def _get_sector_codes(C, sector_name):
-    """兼容不同大QMT版本的板块代码查询入口。"""
-    resolver = globals().get("get_stock_list_in_sector")
-    if callable(resolver):
-        return resolver(sector_name) or []
-
-    context_resolver = getattr(C, "get_stock_list_in_sector", None)
-    if callable(context_resolver):
-        return context_resolver(sector_name) or []
-
-    raise RuntimeError(
-        "当前大QMT Python环境没有 get_stock_list_in_sector；"
-        "请将需更新代码填入 EXTRA_CODES，或用大QMT数据管理界面下载。"
-    )
-
-
-def _collect_codes(C):
-    """收集并去重目标证券；单个可选市场失败不会影响沪深A股更新。"""
-    codes = []
-    for sector_name in SECTOR_NAMES:
-        sector_codes = _get_sector_codes(C, sector_name)
-        if not sector_codes:
-            raise RuntimeError("板块 %s 未返回任何证券代码" % sector_name)
-        codes.extend(sector_codes)
-
-    for sector_name in OPTIONAL_SECTOR_NAMES:
-        try:
-            codes.extend(_get_sector_codes(C, sector_name))
-        except Exception as exc:
-            print("[SKIP] 可选板块 %s 不可用: %s" % (sector_name, exc))
-
-    codes.extend(EXTRA_CODES)
-    unique_codes = sorted(set(code for code in codes if isinstance(code, str) and "." in code))
-    return unique_codes[:MAX_SYMBOLS] if MAX_SYMBOLS else unique_codes
+        return None, ""
 
 
 def _run_downloads(C):
     """Run once after QMT has finished strategy initialization."""
     manifest_jobs, manifest_path = _load_manifest_jobs()
+    if manifest_jobs is None:
+        print("未找到 EasyXT 精确补数清单；本脚本不会自动下载全市场。")
+        print("请先在 EasyXT 数据管理中运行“一键补全数据”。")
+        return
     if manifest_jobs:
         # Keep the manifest intelligent about *which symbols* need repair, but
         # request a complete daily file for each of those few symbols.  This
@@ -111,16 +64,12 @@ def _run_downloads(C):
         jobs = [(code, FULL_DAT_START_DATE, end) for code, _start, end in manifest_jobs]
         print("EasyXT exact DAT manifest: %s" % manifest_path)
     else:
-        end_date = datetime.now().strftime("%Y%m%d")
-        start_date = (datetime.now() - timedelta(days=LOOKBACK_CALENDAR_DAYS)).strftime("%Y%m%d")
-        jobs = [(code, start_date, end_date) for code in _collect_codes(C)]
+        print("EasyXT 精确补数清单没有待下载证券，本次无需执行。")
+        return
 
     print("=" * 60)
     print("EasyXT 大QMT DAT 日线更新")
-    if manifest_jobs:
-        print("模式: EasyXT精确补数清单；证券数: %d" % len(jobs))
-    else:
-        print("范围: %s ~ %s；证券数: %d" % (start_date, end_date, len(jobs)))
+    print("模式: EasyXT精确补数清单；证券数: %d" % len(jobs))
     print("仅下载大QMT本地DAT；不下单、不写DuckDB")
     print("下载接口: download_history_data")
     if manifest_jobs:
