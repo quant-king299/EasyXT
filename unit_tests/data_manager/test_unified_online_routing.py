@@ -64,6 +64,13 @@ def test_online_source_connects_only_when_no_source_is_active():
     assert api._active_source == 'eastmoney'
 
 
+def test_constructor_does_not_probe_legacy_qmt_runtime():
+    interface = UnifiedDataInterface(data_api=FakeDataAPI(frame=pd.DataFrame()))
+
+    assert not hasattr(interface, 'qmt_available')
+    assert not hasattr(interface, '_qmt_recovery_attempted')
+
+
 def test_public_get_stock_data_uses_online_router_when_local_db_is_unavailable():
     api = FakeDataAPI(active_source='tdx', frame=pd.DataFrame({
         'date': ['2026-09-10'],

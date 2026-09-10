@@ -45,7 +45,6 @@ class UnifiedDataInterface:
             duckdb_path = get_default_db_path()
         self.duckdb_path = duckdb_path
         self.con = None
-        self.qmt_available = False
         self._tables_initialized = False  # 记录表是否已初始化
         self.db_manager = None  # 使用连接池管理器
         self.data_api = data_api  # 延迟获取共享实例，初始化时不触发任何在线连接
@@ -58,18 +57,6 @@ class UnifiedDataInterface:
         except ImportError:
             self.duckdb_available = False
             logger.warning("[WARNING] DuckDB 不可用，将仅使用QMT数据")
-
-        # 尝试导入QMT
-        try:
-            from xtquant import xtdata
-            self.qmt_available = True
-            logger.info("[INFO] QMT xtdata 可用")
-        except ImportError:
-            self.qmt_available = False
-            logger.info("[INFO] QMT xtdata 不可用，在线行情将由DataAPI选择备用源")
-
-        # 自动恢复标记（避免无限重试）
-        self._qmt_recovery_attempted = False
 
     def _get_online_data_api(self):
         """延迟取得进程级共享DataAPI，避免构造接口时产生连接副作用。"""
@@ -85,36 +72,6 @@ class UnifiedDataInterface:
             return True
         connect = getattr(api, 'connect', None)
         return bool(connect()) if callable(connect) else True
-
-    def _ensure_qmt_alive(self) -> bool:
-        """确保 QMT 可用，不可用时自动启动并登录"""
-        if self.qmt_available:
-            # 探测是否真的能连通
-            try:
-                from xtquant import xtdata
-                xtdata.get_trading_dates('SH', '', '', count=1)
-                return True
-            except Exception:
-                self.qmt_available = False
-
-        # 已经尝试过恢复，不再重试
-        if self._qmt_recovery_attempted:
-            return False
-
-        self._qmt_recovery_attempted = True
-        logger.info("[INFO] QMT 未连接，尝试自动启动...")
-        try:
-            from core.auto_login import QMTAutoLogin
-            login = QMTAutoLogin()
-            if login.login(restart=False, timeout=60):
-                from xtquant import xtdata
-                self.qmt_available = True
-                logger.info("[OK] QMT 已自动恢复")
-                return True
-        except Exception as e:
-            logger.warning(f"[WARN] QMT 自动启动失败: {e}")
-
-        return False
 
     def connect(self, read_only: bool = False):
         """
