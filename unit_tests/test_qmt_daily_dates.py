@@ -34,6 +34,7 @@ class DailyDatesTest(unittest.TestCase):
         result = self.read_fixture(dates)
         self.assertEqual(list(result.time.dt.strftime('%Y-%m-%d')),
                          sorted({date.strftime('%Y-%m-%d') for date in dates}))
+        self.assertTrue(result.amount.isna().all())
 
     def test_rejects_implausible_future_record(self):
         result = self.read_fixture([datetime.now(timezone.utc) + timedelta(days=30)])

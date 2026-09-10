@@ -42,7 +42,7 @@ class ImportRangeTest(unittest.TestCase):
         self.assertEqual(df.stock_code.tolist(), ['600519.SH'])
         self.assertEqual(result['record_count'], 1)
         self.assertEqual(result['success'], 1)
-        self.assertEqual(manager.insert_dataframe.call_args.kwargs['conflict_handling'], 'replace')
+        self.assertEqual(manager.insert_dataframe.call_args.kwargs['conflict_handling'], 'ignore')
 
     def test_failed_save_never_reports_success(self):
         result, _ = self.run_import(RuntimeError('locked'))

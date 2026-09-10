@@ -562,7 +562,7 @@ class DataDownloadThread(QThread):
                     'low': float(r['low']),
                     'close': float(r['close']),
                     'volume': int(r['volume']),
-                    'amount': float(r.get('amount', 0)),
+                    'amount': None if pd.isna(r.get('amount')) else float(r['amount']),
                     'created_at': datetime.now(),
                     'updated_at': datetime.now(),
                 })
@@ -1035,7 +1035,7 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
                         'low': float(row['low']),
                         'close': float(row['close']),
                         'volume': int(row['volume']),
-                        'amount': float(row.get('amount', 0)),
+                        'amount': None if pd.isna(row.get('amount')) else float(row['amount']),
                         'created_at': datetime.now(),
                         'updated_at': datetime.now(),
                     })
@@ -1051,7 +1051,7 @@ def run_datadir_daily_import(symbols, start_date, end_date, datadir,
             try:
                 df_batch = pd.DataFrame(batch_save_data)
                 written = db_manager.insert_dataframe(
-                    df_batch, 'stock_daily', conflict_handling='replace')
+                    df_batch, 'stock_daily', conflict_handling='ignore')
                 if written != len(df_batch):
                     raise RuntimeError(f"写入条数不一致: 预期 {len(df_batch)}, 返回 {written}")
                 success_count += len(batch_symbols)

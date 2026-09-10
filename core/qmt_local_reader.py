@@ -212,7 +212,9 @@ class QMTLocalReader:
                     'low': low_p,
                     'close': close_p,
                     'volume': volume_lots * 100,  # 手转股
-                    'amount': 0,  # 日线格式不含成交额
+                    # This DAT layout does not expose a verified amount field.
+                    # Keep it unknown instead of manufacturing a zero turnover.
+                    'amount': None,
                 })
 
             if not records:
