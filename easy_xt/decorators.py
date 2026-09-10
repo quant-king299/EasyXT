@@ -272,19 +272,23 @@ def rate_limit(calls_per_second: float = 10.0):
     Args:
         calls_per_second: 每秒允许的调用次数
     """
+    if calls_per_second <= 0:
+        raise ValueError("calls_per_second 必须大于0")
+
     min_interval = 1.0 / calls_per_second
     last_called = [0.0]
+    call_lock = threading.Lock()
     
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
-            elapsed = time.time() - last_called[0]
-            left_to_wait = min_interval - elapsed
-            
-            if left_to_wait > 0:
-                time.sleep(left_to_wait)
-            
-            last_called[0] = time.time()
+            # 锁只覆盖节流时间槽分配；实际API调用仍可并发执行。
+            with call_lock:
+                elapsed = time.monotonic() - last_called[0]
+                left_to_wait = min_interval - elapsed
+                if left_to_wait > 0:
+                    time.sleep(left_to_wait)
+                last_called[0] = time.monotonic()
             return func(*args, **kwargs)
         
         return wrapper
