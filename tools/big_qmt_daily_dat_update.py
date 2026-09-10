@@ -11,6 +11,8 @@ Python 策略。把策略安排在收盘后运行一次（建议 15:20 以后）
 """
 
 from datetime import datetime, timedelta
+import json
+import os
 import time
 
 
@@ -29,6 +31,31 @@ EXTRA_CODES = ()
 # 0 表示不限制；排障时可改为小正数，只更新前 N 只证券。
 MAX_SYMBOLS = 0
 PAUSE_SECONDS = 0.03
+
+# EasyXT writes its exact jobs beside this script. Set an absolute path here
+# only when the strategy is pasted into the QMT editor instead of run as a file.
+MANIFEST_PATH = ""
+MANIFEST_FILENAME = "easyxt_qmt_dat_update_manifest.json"
+
+
+def _load_manifest_jobs():
+    path = MANIFEST_PATH
+    if not path and globals().get("__file__"):
+        path = os.path.join(os.path.dirname(os.path.abspath(__file__)), MANIFEST_FILENAME)
+    if not path or not os.path.isfile(path):
+        return [], ""
+    try:
+        with open(path, "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        jobs = []
+        for job in payload.get("jobs", []):
+            code, start, end = job.get("stock_code", ""), job.get("start_date", ""), job.get("end_date", "")
+            if isinstance(code, str) and "." in code and len(start) == 8 and len(end) == 8:
+                jobs.append((code, start, end))
+        return jobs, path
+    except Exception as exc:
+        print("[WARN] Cannot read EasyXT manifest %s: %s" % (path, exc))
+        return [], ""
 
 
 def _get_sector_codes(C, sector_name):
@@ -69,19 +96,27 @@ def _collect_codes(C):
 
 def init(C):
     """大QMT策略启动时执行一次日线增量下载。"""
-    end_date = datetime.now().strftime("%Y%m%d")
-    start_date = (datetime.now() - timedelta(days=LOOKBACK_CALENDAR_DAYS)).strftime("%Y%m%d")
-    codes = _collect_codes(C)
+    manifest_jobs, manifest_path = _load_manifest_jobs()
+    if manifest_jobs:
+        jobs = manifest_jobs
+        print("EasyXT exact DAT manifest: %s" % manifest_path)
+    else:
+        end_date = datetime.now().strftime("%Y%m%d")
+        start_date = (datetime.now() - timedelta(days=LOOKBACK_CALENDAR_DAYS)).strftime("%Y%m%d")
+        jobs = [(code, start_date, end_date) for code in _collect_codes(C)]
 
     print("=" * 60)
     print("EasyXT 大QMT DAT 日线更新")
-    print("范围: %s ~ %s；证券数: %d" % (start_date, end_date, len(codes)))
+    if manifest_jobs:
+        print("模式: EasyXT精确补数清单；证券数: %d" % len(jobs))
+    else:
+        print("范围: %s ~ %s；证券数: %d" % (start_date, end_date, len(jobs)))
     print("仅下载大QMT本地DAT；不下单、不写DuckDB")
     print("=" * 60)
 
     success = 0
     failed = []
-    for index, code in enumerate(codes, 1):
+    for index, (code, start_date, end_date) in enumerate(jobs, 1):
         try:
             # 此函数由大QMT内置Python提供；不要从 xtquant 导入，也不要在
             # 外部命令行直接运行本脚本。
@@ -91,8 +126,8 @@ def init(C):
             failed.append(code)
             print("[FAIL] %s: %s" % (code, exc))
 
-        if index % 100 == 0 or index == len(codes):
-            print("进度 %d/%d，成功 %d，失败 %d" % (index, len(codes), success, len(failed)))
+        if index % 100 == 0 or index == len(jobs):
+            print("进度 %d/%d，成功 %d，失败 %d" % (index, len(jobs), success, len(failed)))
         if PAUSE_SECONDS:
             time.sleep(PAUSE_SECONDS)
 

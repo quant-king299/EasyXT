@@ -494,8 +494,22 @@ class DataDownloadThread(QThread):
                                        'skipped': 0, 'task_type': 'update_data'})
             return
 
+        # 大QMT的默认补数范围就是“沪深A股”。stock_daily 还会混有 ETF、
+        # 北交所、指数等，不能把它们伪装成股票后交给大QMT脚本盲目下载。
+        from data_manager.qmt_dat_sync_manifest import classify_security, is_a_share
+        all_stale_counts = {}
+        for code in df_stocks['stock_code']:
+            kind = classify_security(code)
+            all_stale_counts[kind] = all_stale_counts.get(kind, 0) + 1
+        df_stocks = df_stocks[df_stocks['stock_code'].map(is_a_share)].copy()
         total = len(df_stocks)
-        self.log_signal.emit(f"📊 发现 {total} 只股票需要更新")
+        deferred_total = sum(all_stale_counts.values()) - total
+        self.log_signal.emit(
+            f"📊 发现沪深A股 {total} 只需要由大QMT更新"
+            + (f"；另有 ETF/基金 {all_stale_counts.get('etf', 0)}、北交所 "
+               f"{all_stale_counts.get('bse', 0)}、其他证券 "
+               f"{all_stale_counts.get('other', 0)} 共 {deferred_total} 只，"
+               "将由备用数据源处理。" if deferred_total else ""))
 
         reader = QMTLocalReader(data_dir=plan.datadir, big_data_dir=plan.datadir)
         db_manager = get_db_manager(get_default_db_path())
@@ -503,6 +517,7 @@ class DataDownloadThread(QThread):
         success_count = 0
         failed_count = 0
         still_stale_list = []
+        stale_rows = []
         failed_list = []
         batch_save_data = []
         FLUSH_ROWS = 5000
@@ -549,6 +564,7 @@ class DataDownloadThread(QThread):
             if df is None or df.empty:
                 # 大QMT本地也没有更新的数据（用户未在大QMT下载该区间）
                 still_stale_list.append(stock_code)
+                stale_rows.append({'stock_code': stock_code, 'latest_date': latest_dt})
                 continue
 
             for _, r in df.iterrows():
@@ -578,11 +594,22 @@ class DataDownloadThread(QThread):
         if still_stale_list:
             preview = '、'.join(still_stale_list[:10])
             more = f" 等 {len(still_stale_list)} 只" if len(still_stale_list) > 10 else ""
+            manifest_message = ""
+            try:
+                from data_manager.qmt_dat_sync_manifest import write_manifest
+                manifest_path, summary = write_manifest(stale_rows, datadir=plan.datadir)
+                manifest_message = (
+                    f"\n   已生成大QMT精确补数清单: {manifest_path}"
+                    f"\n   大QMT任务：沪深A股 {summary['qmt_a_share']}；"
+                    f"ETF/基金 {summary['etf']}、北交所 {summary['bse']}、其他 "
+                    f"{summary['other']} 不进入大QMT任务。"
+                    "大QMT日线更新脚本下次运行会优先处理该清单。")
+            except Exception as exc:
+                self.log_signal.emit(f"⚠️ 生成大QMT精确补数清单失败: {str(exc)[:100]}")
             self.log_signal.emit(
-                f"⚠️ {len(still_stale_list)} 只股票的大QMT本地数据也没有更新"
+                f"⚠️ {len(still_stale_list)} 只证券的大QMT本地数据也没有更新"
                 f"（{preview}{more}）。\n"
-                f"   请打开大QMT → 数据管理 → 勾选日线 → 下载数据到最新交易日后，"
-                f"再点「一键补全数据」。")
+                f"   请运行大QMT日线更新脚本，再点「一键补全数据」。{manifest_message}")
 
         result = {
             'total': total,
