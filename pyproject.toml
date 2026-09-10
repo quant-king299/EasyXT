@@ -26,8 +26,8 @@ dependencies = [
 
 [project.optional-dependencies]
 data = ["duckdb>=0.9.0", "pyarrow>=10.0.0", "tushare>=1.2.60", "baostock>=0.9.3,<0.10", "qstock>=1.0.0", "akshare>=1.9.0", "python-dotenv>=1.0.0"]
-backtest = ["backtrader>=1.9.78", "PyYAML>=6.0", "matplotlib>=3.5.0", "duckdb>=0.9.0"]
-gui = ["PyQt5>=5.15.0", "pillow>=8.0.0", "streamlit>=1.30.0", "PyYAML>=6.0"]
+backtest = ["backtrader>=1.9.78", "PyYAML>=6.0", "matplotlib>=3.5.0", "plotly>=5.18.0", "duckdb>=0.9.0"]
+gui = ["PyQt5>=5.15.0", "pyqtgraph>=0.12.0", "mplfinance>=0.12.0", "pillow>=8.0.0", "streamlit>=1.30.0", "PyYAML>=6.0"]
 automation = ["pywinauto>=0.6.8; platform_system == 'Windows'", "pyautogui>=0.9.54"]
 dev = ["pytest>=7.4.0", "pytest-cov>=4.1.0", "black>=23.0.0", "flake8>=6.0.0"]
 realtime = [
@@ -43,6 +43,22 @@ realtime = [
 ]
 baostock = [
   "baostock>=0.9.3,<0.10",
+]
+xueqiu = [
+  "aiohttp>=3.8.0",
+  "asyncio-mqtt>=0.11.0",
+  "pandas>=2.0.0",
+  "numpy>=1.24.0",
+  "pillow>=10.0.0",
+  "beautifulsoup4>=4.12.0",
+  "lxml>=4.9.0",
+  "selenium>=4.15.0",
+  "cryptography>=41.0.0",
+  "PyYAML>=6.0",
+  "python-dotenv>=1.0.0",
+  "python-dateutil>=2.8.0",
+  "pywinauto>=0.6.8; platform_system == 'Windows'",
+  "pyautogui>=0.9.54",
 ]
 
 [project.urls]
