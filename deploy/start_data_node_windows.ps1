@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ($HostAddress -notin @("127.0.0.1", "::1", "localhost") -and -not $Token) {
-  throw "非本机监听必须通过 -Token 或 EASYXT_DATA_SERVICE_TOKEN 设置随机长 token。"
+  throw "A non-local listener requires -Token or EASYXT_DATA_SERVICE_TOKEN."
 }
 
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -24,8 +24,8 @@ $pythonExe = $pythonCandidates | Where-Object {
   if ($_ -eq "python") { return [bool](Get-Command python -ErrorAction SilentlyContinue) }
   Test-Path $_
 } | Select-Object -First 1
-if (-not $pythonExe) { throw "未找到 Python，请先安装项目运行环境。" }
-if (-not (Test-Path $DuckdbPath)) { throw "DuckDB 文件不存在: $DuckdbPath" }
+if (-not $pythonExe) { throw "Python was not found. Install the project runtime first." }
+if (-not (Test-Path $DuckdbPath)) { throw "DuckDB file does not exist: $DuckdbPath" }
 
 $env:EASYXT_DATA_SERVICE_HOST = $HostAddress
 $env:EASYXT_DATA_SERVICE_PORT = "$Port"
@@ -33,5 +33,5 @@ $env:EASYXT_DATA_NODE_ID = $NodeId
 $env:DUCKDB_PATH = $DuckdbPath
 $env:EASYXT_DATA_SERVICE_TOKEN = $Token
 
-Write-Host "EasyXT 数据节点: http://$HostAddress`:$Port"
+Write-Host "EasyXT data node: http://$HostAddress`:$Port"
 & $pythonExe -m easy_xt.data_service.server
