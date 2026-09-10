@@ -6,6 +6,7 @@ Run this on a Windows data node. The service is intentionally small: it exposes
 read-only research data endpoints and keeps live trading out of the data layer.
 """
 
+import hmac
 import os
 import socket
 import time
@@ -13,7 +14,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 
@@ -31,6 +33,28 @@ def _default_duckdb_path() -> str:
 
 DEFAULT_DUCKDB_PATH = _default_duckdb_path()
 DEFAULT_NODE_ID = os.environ.get("EASYXT_DATA_NODE_ID", "win_data_node_1")
+
+
+def _is_loopback_host(host: str) -> bool:
+    return host.strip().lower() in {"127.0.0.1", "::1", "localhost"}
+
+
+def _configured_token() -> str:
+    return os.environ.get("EASYXT_DATA_SERVICE_TOKEN", "").strip()
+
+
+def _token_is_valid(authorization: str, token: str) -> bool:
+    if not authorization.startswith("Bearer "):
+        return False
+    return hmac.compare_digest(authorization[7:], token)
+
+
+def _validate_bind_security(host: str) -> None:
+    if not _is_loopback_host(host) and not _configured_token():
+        raise RuntimeError(
+            "非本机数据节点必须设置 EASYXT_DATA_SERVICE_TOKEN；"
+            "请使用随机长 token，并由客户端以 Bearer token 发送。"
+        )
 
 
 def _normalize_symbol(symbol: str) -> str:
@@ -469,6 +493,14 @@ node = DataNode()
 app = FastAPI(title="EasyXT Data Node", version="0.1.0")
 
 
+@app.middleware("http")
+async def require_token(request: Request, call_next):
+    token = _configured_token()
+    if token and not _token_is_valid(request.headers.get("Authorization", ""), token):
+        return JSONResponse(status_code=401, content={"detail": "invalid data-node token"})
+    return await call_next(request)
+
+
 @app.get("/health")
 def health() -> Dict[str, Any]:
     return node.health()
@@ -560,8 +592,9 @@ def cb_events(
 def main() -> None:
     import uvicorn
 
-    host = os.environ.get("EASYXT_DATA_SERVICE_HOST", "0.0.0.0")
+    host = os.environ.get("EASYXT_DATA_SERVICE_HOST", "127.0.0.1")
     port = int(os.environ.get("EASYXT_DATA_SERVICE_PORT", "18820"))
+    _validate_bind_security(host)
     discovery = None
     try:
         from .discovery import publish_service

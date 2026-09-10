@@ -375,6 +375,9 @@ class VectorizedBacktestEngine:
             import requests
             session = requests.Session()
             session.trust_env = False
+            token = os.environ.get("EASYXT_DATA_SERVICE_TOKEN", "").strip()
+            if token:
+                session.headers["Authorization"] = f"Bearer {token}"
             url = f"http://{host}:{port}/daily/{self.category}"
             resp = session.get(
                 url,
@@ -547,6 +550,9 @@ class VectorizedBacktestEngine:
         import requests
         session = requests.Session()
         session.trust_env = False
+        token = os.environ.get("EASYXT_DATA_SERVICE_TOKEN", "").strip()
+        if token:
+            session.headers["Authorization"] = f"Bearer {token}"
         response = session.get(
             f"http://{host}:{port}/events/cb",
             params={"start_time": "19000101", "end_time": "29991231"},
