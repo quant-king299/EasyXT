@@ -2266,7 +2266,7 @@ class DataAPI:
         """
         获取多级降级数据获取器（懒加载）。
 
-        降级链: QMT xtdata → EastMoney HTTP → TDX pytdx → 兜底
+        降级链: QMT/xqshare → TDX pytdx → EastMoney HTTP → 兜底
 
         Returns:
             FallbackFetcher 实例
@@ -2291,9 +2291,9 @@ class DataAPI:
         多级降级获取价格数据（推荐用于策略回测）。
 
         按优先级依次尝试各数据源:
-          第1级: QMT xtdata        — 本地数据，最快，支持全部周期和复权方式
-          第2级: 东方财富 HTTP API  — 免费，无需 QMT，全网可达
-          第3级: TDX pytdx         — 免费 TCP 行情服务器
+          第1级: QMT/xqshare       — 本地或远程xtquant，支持完整字段
+          第2级: TDX pytdx         — 免费 TCP 行情服务器
+          第3级: 东方财富 HTTP API  — 免费，无需 QMT，全网可达
           第4级: 兜底返回空数据    — 不抛异常，返回 source='BACKUP_FAILED'
 
         Args:

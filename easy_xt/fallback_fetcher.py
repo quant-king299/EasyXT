@@ -9,8 +9,8 @@ logger = logging.getLogger(__name__)
 
 降级链优先级 (从快到慢 / 从主到备):
   第1级: QMT xtdata 本地数据 — 最快、功能最完整、支持全部周期和复权方式
-  第2级: 东方财富 HTTP API  — 免费、无需 QMT、全网可达
-  第3级: TDX pytdx 服务器   — 免费、TCP 协议、中等速度
+  第2级: TDX pytdx 服务器   — 免费、TCP 协议、中等速度
+  第3级: 东方财富 HTTP API  — 免费、无需 QMT、全网可达
   第4级: 保底兜底模式       — 返回空数据或部分数据，不抛异常
 
 设计原则:
@@ -49,14 +49,14 @@ logger = logging.getLogger(__name__)
 class SourceLevel:
     """数据源优先级常量（值越小越优先）"""
     QMT = 0         # QMT 本地数据（最快、功能最全、EasyXT 主数据源）
-    EASTMONEY = 1   # 东方财富 HTTP（免费、无需本地环境）
-    TDX = 2         # TDX 通达信（TCP 行情服务器）
+    TDX = 1         # TDX 通达信（TCP 行情服务器）
+    EASTMONEY = 2   # 东方财富 HTTP（免费、无需本地环境）
     BACKUP = 3      # 保底兜底（空数据 / 部分数据）
 
     _NAMES = {
         0: 'QMT',
-        1: 'EASTMONEY',
-        2: 'TDX',
+        1: 'TDX',
+        2: 'EASTMONEY',
         3: 'BACKUP',
     }
 
@@ -481,11 +481,14 @@ class FallbackFetcher:
 
                 if df is not None and not df.empty:
                     elapsed = (time.time() - t0) * 1000
-                    self._mark_success('QMT', elapsed)
-                    logger.info(f"[Fallback] QMT OK ({len(df)} rows, {elapsed:.0f}ms)")
+                    active = getattr(self.qmt_api, '_active_source', None)
+                    source_name = 'XQSHARE' if active == 'xqshare' else 'QMT'
+                    self._mark_success(source_name, elapsed)
+                    logger.info(
+                        f"[Fallback] {source_name} OK ({len(df)} rows, {elapsed:.0f}ms)")
                     # 添加 source 标记（如果还没有）
                     if 'source' not in df.columns:
-                        df['source'] = 'QMT'
+                        df['source'] = source_name
                     return df
 
                 # 空结果也视为失败，重试
@@ -588,7 +591,7 @@ class FallbackFetcher:
         """
         多级降级获取 K 线数据。
 
-        按优先级依次尝试: EastMoney → QMT → TDX → 兜底返回空数据。
+        按优先级依次尝试: QMT/xqshare → TDX → EastMoney → 兜底返回空数据。
         任一数据源成功即返回，结果包含 'source' 列标示来源。
 
         Args:
@@ -626,13 +629,13 @@ class FallbackFetcher:
         if result is not None and not result.empty:
             return result
 
-        # ---- 第 2 级: 东方财富 HTTP（免费备用） ----
-        result = self._try_eastmoney(codes, start, end, period, count, fields)
+        # ---- 第 2 级: TDX pytdx（与 DataAPI.connect 的顺序一致） ----
+        result = self._try_tdx(codes, start, end, period, count)
         if result is not None and not result.empty:
             return result
 
-        # ---- 第 3 级: TDX pytdx（TCP 行情备用） ----
-        result = self._try_tdx(codes, start, end, period, count)
+        # ---- 第 3 级: 东方财富 HTTP（最终公共网络备用） ----
+        result = self._try_eastmoney(codes, start, end, period, count, fields)
         if result is not None and not result.empty:
             return result
 
