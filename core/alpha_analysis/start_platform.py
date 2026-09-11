@@ -21,9 +21,10 @@ import pandas as pd
 from ic_ir_analysis import ICIRAnalyzer
 from factor_correlation import FactorCorrelationAnalyzer
 from layered_backtest import LayeredBacktester
+from paths import get_alpha_report_dir
 
 # 配置报告输出目录
-REPORT_DIR = r'C:\Users\Administrator\Desktop\EasyXT\101因子\101因子分析平台\reports'
+REPORT_DIR = str(get_alpha_report_dir())
 os.makedirs(REPORT_DIR, exist_ok=True)
 
 
