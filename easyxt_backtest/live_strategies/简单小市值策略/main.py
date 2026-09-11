@@ -7,6 +7,7 @@
 """
 
 import logging
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,7 @@ except ImportError:
 
 from strategy_logic import 简单小市值策略Strategy
 from risk_control import RiskController
+from core.live_trading_config import load_live_trading_settings
 
 
 class 简单小市值策略StrategyLive:
@@ -49,11 +51,33 @@ class 简单小市值策略StrategyLive:
         self.risk_controller = None
         self.data_manager = None
 
-        # 直接配置（不依赖JSON文件）
-        self.account_id = ""
-        self.qmt_path = r"D:\国金QMT交易端模拟\userdata_mini"
-        self.session_id = "mini_qmt"
-        self.auto_confirm = True  # ✅ 已启用自动执行，订单会发送到QMT
+        # 配置来自进程环境或项目根目录 .env；实盘委托默认关闭。
+        configured_qmt_path = ""
+        configured_account_id = ""
+        configured_session_id = "mini_qmt"
+        try:
+            from easy_xt.config import config as easyxt_config
+
+            configured_qmt_path = easyxt_config.get_userdata_path() or ""
+            configured_account_id = easyxt_config.get(
+                "settings.account.account_id", ""
+            ) or ""
+            configured_session_id = easyxt_config.get(
+                "trade.session_id", "mini_qmt"
+            ) or "mini_qmt"
+        except Exception as exc:
+            logger.debug("读取 EasyXT 统一配置失败，将仅使用环境配置: %s", exc)
+
+        settings = load_live_trading_settings(
+            dotenv_path=project_root / ".env",
+            configured_qmt_path=configured_qmt_path,
+            configured_account_id=configured_account_id,
+            configured_session_id=configured_session_id,
+        )
+        self.account_id = settings.account_id
+        self.qmt_path = settings.qmt_userdata_path
+        self.session_id = settings.session_id
+        self.auto_confirm = settings.auto_confirm
         self.is_connected = False
 
     def initialize(self):
@@ -61,6 +85,17 @@ class 简单小市值策略StrategyLive:
         logger.info(f"\n{'='*60}")
         logger.info(f"初始化简单小市值策略实盘策略...")
         logger.info(f"{'='*60}\n")
+        if not self.account_id:
+            logger.error("缺少 QMT_ACCOUNT_ID，请在项目根目录 .env 中配置")
+            return False
+        if not self.qmt_path:
+            logger.error(
+                "缺少 QMT_DATA_DIR（或 QMT_USERDATA_PATH），路径必须指向 userdata_mini"
+            )
+            return False
+        if not os.path.isdir(self.qmt_path):
+            logger.error("QMT userdata_mini 路径不存在: %s", self.qmt_path)
+            return False
         # 1. 初始化数据管理器
         logger.info("[1/4] 初始化数据管理器...")
         if DATAMANAGER_AVAILABLE:
@@ -78,7 +113,10 @@ class 简单小市值策略StrategyLive:
             try:
                 self.api = easy_xt.get_api()
 
-                logger.info(f"  [INFO] 账户ID: {self.account_id}")
+                masked_account = (
+                    "*" * max(0, len(self.account_id) - 4) + self.account_id[-4:]
+                )
+                logger.info(f"  [INFO] 账户ID: {masked_account}")
                 logger.info(f"  [INFO] QMT路径: {self.qmt_path}")
                 logger.info(f"  [INFO] Session ID: {self.session_id}")
                 # 初始化交易服务
@@ -93,7 +131,7 @@ class 简单小市值策略StrategyLive:
                 # 添加账户
                 success = self.api.add_account(self.account_id, 'STOCK')
                 if success:
-                    logger.info(f"  [OK] 账户添加成功: {self.account_id}")
+                    logger.info(f"  [OK] 账户添加成功: {masked_account}")
                     self.is_connected = True
                 else:
                     logger.warning(f"  [WARN] 账户添加失败")
@@ -101,8 +139,7 @@ class 简单小市值策略StrategyLive:
 
             except Exception as e:
                 logger.warning(f"  [WARN] easy_xt初始化失败: {e}")
-                import traceback
-                traceback.print_exc()
+                logger.exception("easy_xt 初始化异常")
                 self.is_connected = False
         else:
             logger.info("  [INFO] easy_xt模块未安装")
@@ -162,7 +199,9 @@ class 简单小市值策略StrategyLive:
 
         if not self.auto_confirm:
             logger.info("[INFO] auto_confirm = False，订单未发送到QMT")
-            logger.info("[TIPS] 修改 self.auto_confirm = True 可自动执行订单")
+            logger.info(
+                "[TIPS] 如确认承担实盘风险，在 .env 设置 EASYXT_LIVE_AUTO_CONFIRM=1"
+            )
             return []
 
         results = []
@@ -276,7 +315,10 @@ class 简单小市值策略StrategyLive:
                         logger.info(f"\n[OK] 订单执行: {success_count}/{len(orders)} 笔成功")
                     else:
                         logger.info(f"\n[INFO] 订单未发送到QMT（auto_confirm=False）")
-                        logger.info(f"[TIPS] 在代码中设置 self.auto_confirm = True 可自动执行")
+                        logger.info(
+                            "[TIPS] 如确认承担实盘风险，在 .env 设置 "
+                            "EASYXT_LIVE_AUTO_CONFIRM=1"
+                        )
                 else:
                     logger.info(f"\n[INFO] 未连接QMT，订单未发送")
             else:
@@ -334,7 +376,7 @@ class 简单小市值策略StrategyLive:
 
         logger.info(f"\n开始运行简单小市值策略实盘策略...")
         logger.info(f"{'='*60}")
-        logger.info(f"账户ID: {self.account_id}")
+        logger.info(f"账户ID: {'*' * max(0, len(self.account_id) - 4) + self.account_id[-4:]}")
         logger.info(f"QMT路径: {self.qmt_path}")
         logger.info(f"自动确认: {self.auto_confirm}")
         logger.info(f"QMT连接: {'已连接' if self.is_connected else '未连接'}")
@@ -347,7 +389,7 @@ class 简单小市值策略StrategyLive:
         logger.info(f"{'='*60}")
         logger.info(f"\n[TIPS] 启用真实交易:")
         logger.info(f"  1. 确保QMT交易端已启动并登录")
-        logger.info(f"  2. 在代码中设置 self.auto_confirm = True")
+        logger.info(f"  2. 在 .env 设置 EASYXT_LIVE_AUTO_CONFIRM=1")
         logger.info(f"  3. 重新运行: python main.py")
         logger.info(f"{'='*60}\n")
 
@@ -363,8 +405,7 @@ def main():
         logger.info(f"\n[INFO] 用户中断，程序退出")
     except Exception as e:
         logger.error(f"\n[ERROR] 运行出错: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("实盘策略运行异常")
 
 
 if __name__ == "__main__":
