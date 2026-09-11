@@ -62,6 +62,8 @@ class AdvancedCallback:
         # 事件通知
         self.order_event = Event()
         self.trade_event = Event()
+        self.async_order_event = Event()
+        self.async_order_responses = {}
         
     def set_callbacks(self, order_callback=None, trade_callback=None, error_callback=None):
         """设置用户回调函数"""
@@ -102,6 +104,11 @@ class AdvancedCallback:
                 self.trade_callback(trade)
             except Exception as e:
                 logger.info(f"用户成交回调异常: {e}")
+
+    def on_order_stock_async_response(self, response):
+        """Record the response associated with an async order request sequence."""
+        self.async_order_responses[response.seq] = response
+        self.async_order_event.set()
         
     def on_stock_position(self, position):
         """持仓回调"""
@@ -366,8 +373,8 @@ class AdvancedTradeAPI:
             xt_order_type = 23 if order_type == 'buy' else 24
         
         try:
-            # 发送下单请求后立即返回，不等待结果
-            order_id = self.trader.order_stock(
+            # 使用 XtQuantTrader 的真实异步接口，返回请求序号而非委托号。
+            request_seq = self.trader.order_stock_async(
                 account=account,
                 stock_code=code,
                 order_type=xt_order_type,
@@ -377,10 +384,18 @@ class AdvancedTradeAPI:
                 strategy_name=strategy_name,
                 order_remark=order_remark or f'{order_type}_{code}'
             )
-            
-            # 立即返回True表示请求已发送（不表示执行成功）
-            logger.info(f"异步下单请求已发送: {code}, 数量: {volume}, 序列号: {order_id}")
-            return True
+
+            # 大于 0 表示请求已被接受；最终委托结果仍以异步回调为准。
+            if isinstance(request_seq, int) and not isinstance(request_seq, bool) and request_seq > 0:
+                logger.info(
+                    f"异步下单请求已接受: {code}, 数量: {volume}, 请求序号: {request_seq}"
+                )
+                return True
+
+            ErrorHandler.log_error(
+                f"异步下单请求未被接受: {code}, 返回值: {request_seq}"
+            )
+            return False
             
         except Exception as e:
             ErrorHandler.log_error(f"异步下单请求失败: {str(e)}")
