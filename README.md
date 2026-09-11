@@ -688,10 +688,10 @@ python -c "from easy_xt import get_api; print('✓ 安装成功')"
 ```bash
 # 如果需要回测功能，将项目路径添加到 PYTHONPATH
 # PowerShell:
-$env:PYTHONPATH += ";C:\Users\Administrator\EasyXT"
+$env:PYTHONPATH += ";$PWD"
 
 # 或永久添加：
-[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "C:\Users\Administrator\EasyXT", "User")
+[System.Environment]::SetEnvironmentVariable("PYTHONPATH", "$PWD", "User")
 
 # 如果需要因子平台
 cd 101因子/101因子分析平台
@@ -712,10 +712,10 @@ pip install pywinauto pyautogui
 
 2. 编辑 `.env` 文件，填写QMT登录信息：
    ```env
-   QMT_EXE_PATH=D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe
+   QMT_EXE_PATH=D:/QMT交易端/bin.x64/XtMiniQmt.exe
    QMT_USER_ID=8888499999
    QMT_PASSWORD=your_password
-   QMT_DATA_DIR=D:\国金QMT交易端模拟\userdata_mini
+   QMT_DATA_DIR=D:/QMT交易端/userdata_mini
    ```
 
 3. 运行自动登录：

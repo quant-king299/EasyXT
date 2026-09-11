@@ -191,13 +191,13 @@ def my_function():
 
 ```env
 # QMT可执行文件路径
-QMT_EXE_PATH=D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe
+QMT_EXE_PATH=D:/QMT交易端/bin.x64/XtMiniQmt.exe
 
 # QMT登录密码
 QMT_PASSWORD=your_password
 
 # QMT数据目录（可选）
-QMT_DATA_DIR=D:\国金QMT交易端模拟\userdata_mini
+QMT_DATA_DIR=D:/QMT交易端/userdata_mini
 ```
 
 ## 🚀 已集成的位置

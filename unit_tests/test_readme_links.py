@@ -24,3 +24,18 @@ def test_documented_backtest_layout_uses_current_module_names():
     assert '├── data_manager.py' not in text
     assert 'enhanced_backtest_engine.py' in text
     assert 'core/data_manager/' in text
+
+
+def test_public_setup_docs_do_not_embed_developer_machine_paths():
+    files = [
+        ROOT / 'README.md',
+        ROOT / '.env.example',
+        ROOT / 'core' / 'auto_login' / 'README.md',
+        ROOT / 'core' / 'qmt_connection' / 'README.md',
+    ]
+
+    for path in files:
+        text = path.read_text(encoding='utf-8')
+        assert r'C:\Users\Administrator' not in text, path
+        assert '国金QMT' not in text, path
+        assert '国金证券QMT' not in text, path

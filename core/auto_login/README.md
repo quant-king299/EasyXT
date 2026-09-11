@@ -23,7 +23,7 @@ pip install pywinauto pyautogui
 
 ```env
 # QMT 可执行文件路径（必须填写）
-QMT_EXE_PATH=D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe
+QMT_EXE_PATH=D:/QMT交易端/bin.x64/XtMiniQmt.exe
 
 # QMT 用户ID/资金账号（必须填写）
 QMT_USER_ID=8888499999
@@ -32,14 +32,14 @@ QMT_USER_ID=8888499999
 QMT_PASSWORD=your_password_here
 
 # QMT 数据目录（可选，用于清理临时文件）
-QMT_DATA_DIR=D:\国金QMT交易端模拟\userdata_mini
+QMT_DATA_DIR=D:/QMT交易端/userdata_mini
 ```
 
 ### 2. 获取配置信息
 
 **QMT_EXE_PATH**: QMT可执行文件的完整路径
-- 通常在：`D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe`
-- 或者：`C:\国金证券QMT交易端\bin.x64\XtMiniQmt.exe`
+- 例如：`D:\QMT交易端\bin.x64\XtMiniQmt.exe`
+- 券商版本安装目录不同，请以快捷方式指向的实际位置为准
 - 可以通过右键点击QMT快捷方式 → 打开文件所在位置 找到
 
 **QMT_USER_ID**: 你的QMT资金账号
@@ -92,10 +92,10 @@ from core.auto_login import QMTAutoLogin
 
 # 使用自定义配置（不从.env读取）
 auto_login = QMTAutoLogin(
-    exe_path=r"D:\国金QMT交易端模拟\bin.x64\XtMiniQmt.exe",
+    exe_path=r"D:\QMT交易端\bin.x64\XtMiniQmt.exe",
     user_id="8888499999",
     password="your_password",
-    data_dir=r"D:\国金QMT交易端模拟\userdata_mini"
+    data_dir=r"D:\QMT交易端\userdata_mini"
 )
 
 auto_login.login()
