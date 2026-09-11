@@ -1,0 +1,1882 @@
+{
+  "schema_version": 1,
+  "source_url": "https://market.ft.tech/gateway/doc/p/pb8eizu3",
+  "source_updated_at": "2026-09-10T14:52:26Z",
+  "plan": "free",
+  "declared_count": 160,
+  "actual_count": 160,
+  "endpoints": [
+    {
+      "title": "股票复权因子",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/1eu6rgc8",
+      "sdk_method": "stock_adjust_factor",
+      "path": "api/v1/market/data/stock-adjust-factor",
+      "params": [
+        "symbol",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "大宗交易",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/h7eun4xp",
+      "sdk_method": "block_trades",
+      "path": "api/v1/market/data/block-trades",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "北交所映射",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/dk0d6dqi",
+      "sdk_method": "bse_mapping",
+      "path": "api/v1/market/data/bse-mapping",
+      "params": [
+        "o_code",
+        "n_code"
+      ]
+    },
+    {
+      "title": "股票K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/owq0364i",
+      "sdk_method": "stock_candlesticks",
+      "path": "api/v1/market/data/stock-candlesticks",
+      "params": [
+        "symbol",
+        "interval_unit",
+        "interval_value",
+        "adjust_kind",
+        "since_ts_millis",
+        "until_ts_millis",
+        "limit"
+      ]
+    },
+    {
+      "title": "融资融券明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/sx26v1nk",
+      "sdk_method": "margin_trading_details",
+      "path": "api/v1/market/data/margin-trading-details",
+      "params": [
+        "date",
+        "start_date",
+        "end_date",
+        "stock",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "交易所融资融券汇总日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/1gb9y7b9",
+      "sdk_method": "exchange_margin_summaries",
+      "path": "api/v1/market/data/exchange-margin-summaries",
+      "params": [
+        "start_date",
+        "end_date",
+        "exchange",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股票IPO",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/zrq7obzx",
+      "sdk_method": "stock_ipos",
+      "path": "api/v1/market/data/stock-ipos",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股权质押明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/atshpwbu",
+      "sdk_method": "stock_pledge_detail",
+      "path": "api/v1/market/data/pledge/pledge-detail",
+      "params": [
+        "stock_code",
+        "is_last",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股权质押汇总",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ovns66g1",
+      "sdk_method": "pledge_summary",
+      "path": "api/v1/market/data/pledge/pledge-summary",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "限售解禁",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/a3qlyxpp",
+      "sdk_method": "stock_unlock",
+      "path": "api/v1/market/data/unlock/stock_unlock",
+      "params": [
+        "stock_code",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股东人数",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/oecit8qn",
+      "sdk_method": "stock_holders_number",
+      "path": "api/v1/market/data/holder/stock-holder-nums",
+      "params": [
+        "stock_code",
+        "is_last",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股东增减持",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/8n24xrdq",
+      "sdk_method": "stock_share_chg",
+      "path": "api/v1/market/data/holder/stock-share-chg",
+      "params": [
+        "stock_code",
+        "is_last",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股票基础信息",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/sw2o1vsr",
+      "sdk_method": "stock_description",
+      "path": "api/v1/market/data/stock-description",
+      "params": [
+        "symbol_id",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "公司列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/92awt2dx",
+      "sdk_method": "company_list",
+      "path": "api/v1/market/data/company-list",
+      "params": [
+        "stock_name",
+        "stock_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "互联互通成份",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vu1fxtpg",
+      "sdk_method": "stock_connect_members",
+      "path": "api/v1/market/data/stock-connect-members",
+      "params": [
+        "direction",
+        "channel",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "风险警示股",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/3o4clccl",
+      "sdk_method": "risk_warning_stocks",
+      "path": "api/v1/market/data/risk-warning-stocks",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "停牌列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/e42u4fqk",
+      "sdk_method": "suspension_list",
+      "path": "api/v1/market/data/suspension-list",
+      "params": [
+        "trade_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "A股行情列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/mdsj0xyo",
+      "sdk_method": "stock_realtime_list",
+      "path": "api/v1/market/data/stock-list/{board}",
+      "params": [
+        "board",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "标的昨收价",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/0tati78l",
+      "sdk_method": "stock_prev_close",
+      "path": "api/v1/market/data/daec/history/prev-closes",
+      "params": [
+        "symbol",
+        "since",
+        "until"
+      ]
+    },
+    {
+      "title": "市场行情快照",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/6fn39pnw",
+      "sdk_method": "stock_market",
+      "path": "api/v1/market/data/daec/market/snapshot",
+      "params": [
+        "scope"
+      ]
+    },
+    {
+      "title": "十大流通股东",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/era9uwoi",
+      "sdk_method": "stock_float_holders",
+      "path": "api/v1/market/data/holder/stock-holder-ften",
+      "params": [
+        "stock_code",
+        "is_last",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "十大股东",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/t6m1ygo3",
+      "sdk_method": "stock_holders",
+      "path": "api/v1/market/data/holder/stock-holder-ten",
+      "params": [
+        "stock_code",
+        "is_last",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "龙虎榜明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/yxmc9f7y",
+      "sdk_method": "abnormal_trading_details",
+      "path": "api/v1/market/data/abnormal-trading-details",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "龙虎榜总览",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/9swt9vv8",
+      "sdk_method": "abnormal_trading_overview",
+      "path": "api/v1/market/data/abnormal-trading-overview",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "交易日历",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/uqsqvzyv",
+      "sdk_method": "trading_calendar",
+      "path": "api/v1/market/data/time/trading-calendar",
+      "params": [
+        "market",
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "百度财经日历",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vlqbh6t9",
+      "sdk_method": "baidu_financial_calendar",
+      "path": "api/v1/market/data/finance/financial-calendar/baidu",
+      "params": [
+        "start_date",
+        "end_date",
+        "category",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "华尔街见闻财经日历",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/jvg7kkmv",
+      "sdk_method": "wallstreetcn_financial_calendar",
+      "path": "api/v1/market/data/finance/financial-calendar/wallstreetcn",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "涨跌停池",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/qt0y1loe",
+      "sdk_method": "limit_list",
+      "path": "api/v1/market/data/limit-list",
+      "params": [
+        "limit_type",
+        "trade_date"
+      ]
+    },
+    {
+      "title": "股票资金流向",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/rt2hibwf",
+      "sdk_method": "stock_capital_flows",
+      "path": "api/v1/market/data/stock-capital-flows",
+      "params": [
+        "date",
+        "time",
+        "symbol",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "北向资金交易",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/q89f0uwz",
+      "sdk_method": "northbound",
+      "path": "api/v1/market/data/northbound",
+      "params": [
+        "date"
+      ]
+    },
+    {
+      "title": "南向资金交易",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ujoa8eup",
+      "sdk_method": "southbound",
+      "path": "api/v1/market/data/southbound",
+      "params": [
+        "date"
+      ]
+    },
+    {
+      "title": "涨跌停价",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vh0xsf7t",
+      "sdk_method": "stk_limit",
+      "path": "api/v1/market/data/stk-limit",
+      "params": [
+        "instrument_type",
+        "symbol",
+        "symbol_id",
+        "market_id",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "A股资产负债表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/qf2a0ocw",
+      "sdk_method": "balance",
+      "path": "api/v1/market/data/finance/balance",
+      "params": [
+        "stock_code",
+        "year",
+        "report_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "A股现金流量表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/6ch0qd83",
+      "sdk_method": "cashflow",
+      "path": "api/v1/market/data/finance/cashflow",
+      "params": [
+        "stock_code",
+        "year",
+        "report_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股票分红记录",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/0fxhla7v",
+      "sdk_method": "stock_dividends",
+      "path": "api/v1/market/data/stock-dividends",
+      "params": [
+        "symbol",
+        "since_date",
+        "until_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "一致行动人明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/zpyi79up",
+      "sdk_method": "yzxdr_detail",
+      "path": "api/v1/market/data/yzxdr-detail",
+      "params": [
+        "year",
+        "quarter",
+        "stock_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "业绩快报",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ny95bwo1",
+      "sdk_method": "earnings_reports_paginated",
+      "path": "api/v1/market/data/finance/stock-performance-express",
+      "params": [
+        "stock_code",
+        "year",
+        "report_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "业绩预告",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/zl1f9z4u",
+      "sdk_method": "performance_forecasts_paginated",
+      "path": "api/v1/market/data/finance/stock-performance-forecast",
+      "params": [
+        "stock_code",
+        "year",
+        "report_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "A股利润表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/dv3kxyb2",
+      "sdk_method": "income",
+      "path": "api/v1/market/data/finance/income",
+      "params": [
+        "stock_code",
+        "year",
+        "report_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "重大合同",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/2kakg1xc",
+      "sdk_method": "major_contract",
+      "path": "api/v1/market/data/corporate/contract",
+      "params": [
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "重大合同按标的",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/bv3yxxhz",
+      "sdk_method": "major_contract_by_symbol",
+      "path": "api/v1/market/data/corporate/contract/by-symbol",
+      "params": [
+        "symbol",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "重大合同汇总",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/5sahxrk6",
+      "sdk_method": "major_contract_summary",
+      "path": "api/v1/market/data/corporate/contract/summary",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股东大会",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/df11taap",
+      "sdk_method": "shareholders_meeting",
+      "path": "api/v1/market/data/corporate/meeting",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "商誉行业",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/v4l12equ",
+      "sdk_method": "goodwill_industry",
+      "path": "api/v1/market/data/goodwill/industry",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "商誉市场总览",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/20nmy527",
+      "sdk_method": "goodwill_market_overview",
+      "path": "api/v1/market/data/goodwill/market-overview",
+      "params": []
+    },
+    {
+      "title": "商誉预测",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/p5g2tkdk",
+      "sdk_method": "goodwill_predict",
+      "path": "api/v1/market/data/goodwill/predict",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "商誉个股明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/qtl1iak0",
+      "sdk_method": "goodwill_stock_detail",
+      "path": "api/v1/market/data/goodwill/stock-detail",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "商誉减值",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/p7iit8mt",
+      "sdk_method": "goodwill_stock_impairment",
+      "path": "api/v1/market/data/goodwill/stock-impairment",
+      "params": [
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "千股千评意愿度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/6olp75vh",
+      "sdk_method": "stock_comment_desire_em",
+      "path": "api/v1/market/data/stock-comment/desire",
+      "params": [
+        "symbol"
+      ]
+    },
+    {
+      "title": "千股千评",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/t6k24jo7",
+      "sdk_method": "stock_comment_em",
+      "path": "api/v1/market/data/stock-comment/index",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "千股千评关注度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/fu7619ln",
+      "sdk_method": "stock_comment_focus_em",
+      "path": "api/v1/market/data/stock-comment/focus",
+      "params": [
+        "symbol"
+      ]
+    },
+    {
+      "title": "机构参与度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/2p8ebvd0",
+      "sdk_method": "stock_comment_org_participate_em",
+      "path": "api/v1/market/data/stock-comment/org-participate",
+      "params": [
+        "symbol"
+      ]
+    },
+    {
+      "title": "千股千评评分",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/yrx27y0e",
+      "sdk_method": "stock_comment_score_em",
+      "path": "api/v1/market/data/stock-comment/score",
+      "params": [
+        "symbol"
+      ]
+    },
+    {
+      "title": "股票历史列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/jmcwf10j",
+      "sdk_method": "stock_history_list",
+      "path": "api/v1/market/data/stock-history-list",
+      "params": [
+        "trade_date",
+        "code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "股票曾用名",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/hcone123",
+      "sdk_method": "namechange",
+      "path": "api/v1/market/data/namechange",
+      "params": [
+        "trade_code",
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "上市公司管理层薪酬",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/szjpqfmh",
+      "sdk_method": "stk_manager_pay",
+      "path": "api/v1/market/data/stk-manager-pay",
+      "params": [
+        "trade_code",
+        "end_date"
+      ]
+    },
+    {
+      "title": "上市公司管理层持股",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vik756y6",
+      "sdk_method": "stk_manager_hold",
+      "path": "api/v1/market/data/stk-manager-hold",
+      "params": [
+        "trade_code",
+        "end_date"
+      ]
+    },
+    {
+      "title": "上市公司管理层",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/moz0yjm6",
+      "sdk_method": "stk_managers",
+      "path": "api/v1/market/data/stk-managers",
+      "params": [
+        "trade_code",
+        "candi_date",
+        "begin_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "股票列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/3ot2m3sk",
+      "sdk_method": "stock_list",
+      "path": "api/v1/market/data/stock-list",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "标的搜索",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/fb47jt9n",
+      "sdk_method": "search",
+      "path": "api/v1/market/security/search/",
+      "params": [
+        "query",
+        "limit"
+      ]
+    },
+    {
+      "title": "AH股对比",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/8fr77co1",
+      "sdk_method": "stk_ah_comparison",
+      "path": "api/v1/market/data/hk/stk-ah-comparison",
+      "params": [
+        "hk_code",
+        "ts_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "董监高持股变动",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/iuma9fkg",
+      "sdk_method": "stock_ggmx",
+      "path": "api/v1/market/data/holder/stock-ggmx",
+      "params": [
+        "stock_code",
+        "change_direction",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "报告公告列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/4qspcoqt",
+      "sdk_method": "report_announcement_list",
+      "path": "api/v1/market/data/report-announcements/list",
+      "params": [
+        "date",
+        "sec_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "单标的连续竞价成交量",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/bskofshl",
+      "sdk_method": "stock_intraday_auction_volume_symbol",
+      "path": "api/v1/market/data/intraday-auction-volume/symbol",
+      "params": [
+        "symbol",
+        "trade_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "ETF复权因子",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/wj8y3my9",
+      "sdk_method": "etf_adjust_factor",
+      "path": "api/v1/market/data/etf-adjust-factor",
+      "params": [
+        "symbol",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vct97ek2",
+      "sdk_method": "fund_list",
+      "path": "api/v1/market/data/fund/fund-list",
+      "params": [
+        "fund_code",
+        "fund_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金基础信息",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/givmend6",
+      "sdk_method": "fund_basicinfo",
+      "path": "api/v1/market/data/fund/fund-basicinfo",
+      "params": [
+        "fund_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金总览",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/gt3vpuzr",
+      "sdk_method": "fund_overview",
+      "path": "api/v1/market/data/fund/fund-overview",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金支持标的",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/87xbi3pr",
+      "sdk_method": "fund_support_symbols",
+      "path": "api/v1/market/data/fund/fund-support-symbols",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金分类",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/j00607zo",
+      "sdk_method": "fund_classification",
+      "path": "api/v1/market/data/fund/fund-classification",
+      "params": [
+        "fund_code",
+        "classify_std"
+      ]
+    },
+    {
+      "title": "基金新发",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/nfbnt3tz",
+      "sdk_method": "fund_new_found",
+      "path": "api/v1/market/data/fund/fund-new-found",
+      "params": [
+        "start_date",
+        "end_date",
+        "fund_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金公司",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/iuy3vkyw",
+      "sdk_method": "fund_company",
+      "path": "api/v1/market/data/fund/fund-company",
+      "params": [
+        "fund_company",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "ETFK线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/c3s30whl",
+      "sdk_method": "etf_candlesticks",
+      "path": "api/v1/market/data/etf-candlesticks",
+      "params": [
+        "symbol",
+        "interval_unit",
+        "interval_value",
+        "adjust_kind",
+        "since_ts_millis",
+        "until_ts_millis",
+        "limit"
+      ]
+    },
+    {
+      "title": "基金经理任职关系",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/xju0x2mx",
+      "sdk_method": "fund_manager",
+      "path": "api/v1/market/data/fund/fund-manager",
+      "params": [
+        "fund_code",
+        "fund_manager",
+        "is_inoffice",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金净值明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/6b5i2aid",
+      "sdk_method": "fund_net_value",
+      "path": "api/v1/market/data/fund/fund-net-value",
+      "params": [
+        "fund_code",
+        "nav_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金持仓明细",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/u3ixazhq",
+      "sdk_method": "fund_portfolio",
+      "path": "api/v1/market/data/fund/fund-portfolio",
+      "params": [
+        "fund_code",
+        "report_date",
+        "publish_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金份额",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/0vi7kat2",
+      "sdk_method": "fund_share",
+      "path": "api/v1/market/data/fund/fund-share",
+      "params": [
+        "fund_code",
+        "stati_perd",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金资产配置",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/b5wgtw9m",
+      "sdk_method": "fund_asset_allocation",
+      "path": "api/v1/market/data/fund/fund-asset-allocation",
+      "params": [
+        "fund_code",
+        "report_date",
+        "publish_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金收益",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/y8y3hv34",
+      "sdk_method": "fund_cal_return",
+      "path": "api/v1/market/data/fund/fund-cal-return",
+      "params": [
+        "fund_code",
+        "cal-type"
+      ]
+    },
+    {
+      "title": "基金费率",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/gnzc5tcq",
+      "sdk_method": "fund_fee",
+      "path": "api/v1/market/data/fund/fund-fee",
+      "params": [
+        "fund_code",
+        "charge_type",
+        "client_type",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金持有人结构",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/c8538o8n",
+      "sdk_method": "fund_holder_structure",
+      "path": "api/v1/market/data/fund/fund-holder-structure",
+      "params": [
+        "fund_code",
+        "report_type",
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "基金净值收益表现",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/u3nr8qes",
+      "sdk_method": "fund_net_value_performance",
+      "path": "api/v1/market/data/fund/fund-net-value-performance",
+      "params": [
+        "fund_code",
+        "stat_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "基金风险等级",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ws3whvws",
+      "sdk_method": "fund_risk_level",
+      "path": "api/v1/market/data/fund/fund-risk-level",
+      "params": [
+        "fund_code",
+        "history"
+      ]
+    },
+    {
+      "title": "指数基础信息",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ekyhuwqu",
+      "sdk_method": "index_description_all",
+      "path": "api/v1/market/data/index-description-all",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "中证指数描述列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/y648z1s3",
+      "sdk_method": "index_description_list",
+      "path": "api/v1/market/data/index/index_description",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "申万行业总览",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/x1q1shn7",
+      "sdk_method": "sw_industry_overview",
+      "path": "api/v1/market/data/sw-industry/overview",
+      "params": [
+        "date",
+        "level",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "指数K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/gr2q0bjx",
+      "sdk_method": "index_candlesticks",
+      "path": "api/v1/market/data/index-candlesticks",
+      "params": [
+        "symbol",
+        "interval_unit",
+        "interval_value",
+        "adjust_kind",
+        "since_ts_millis",
+        "until_ts_millis",
+        "limit"
+      ]
+    },
+    {
+      "title": "申万行业成份股历史",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/os0w8opk",
+      "sdk_method": "sw_industry_constituent_history",
+      "path": "api/v1/market/data/sw-industry/constituent-history",
+      "params": [
+        "industry_code"
+      ]
+    },
+    {
+      "title": "指数权重列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/xym4pwjo",
+      "sdk_method": "index_weight_list",
+      "path": "api/v1/market/data/index/index_weight",
+      "params": [
+        "index_code",
+        "date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "指数权重汇总",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vezscfb4",
+      "sdk_method": "index_weight_summary",
+      "path": "api/v1/market/data/index/index_weight_summary",
+      "params": [
+        "index_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "申万行业日度指标",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/9p19gdz0",
+      "sdk_method": "sw_industry_daily_metrics",
+      "path": "api/v1/market/data/sw-industry/daily-metrics",
+      "params": [
+        "level",
+        "start_date",
+        "end_date",
+        "industry_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "温州民间融资综合利率指数日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/e4w9tgm2",
+      "sdk_method": "wz_index_daily",
+      "path": "api/v1/market/data/wz-index-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "通达信板块指数最新快照",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/tuzgkfun",
+      "sdk_method": "tdx_board_index",
+      "path": "api/v1/market/data/tdx-board-index",
+      "params": [
+        "ts_code",
+        "idx_name",
+        "idx_type",
+        "idx_type_code",
+        "market",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "全球指数日K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/j0twmp6x",
+      "sdk_method": "global_index_daily_kline",
+      "path": "api/v1/market/data/global-index/daily-kline",
+      "params": [
+        "secid",
+        "start_date",
+        "end_date",
+        "limit"
+      ]
+    },
+    {
+      "title": "恒生指数每日权重",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/99ty9ak0",
+      "sdk_method": "hsi_daily_weight",
+      "path": "api/v1/market/data/hk/hsi-daily-weight",
+      "params": [
+        "trade_date",
+        "start_date",
+        "end_date",
+        "index_slug",
+        "stock_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "申万指数历史分钟K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vltgbxfw",
+      "sdk_method": "sw_index_history_minutes",
+      "path": "api/v1/market/data/sw-index/history-minutes",
+      "params": [
+        "index_code",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富个股估值",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/z885d6r1",
+      "sdk_method": "eastmoney_stock_valuation",
+      "path": "api/v1/market/data/eastmoney-stock-valuation",
+      "params": [
+        "symbol",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富市场估值",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/t4ewt2c8",
+      "sdk_method": "eastmoney_market_valuation",
+      "path": "api/v1/market/data/eastmoney-market-valuation",
+      "params": [
+        "market_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富个股资金流",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/x9fhxzl5",
+      "sdk_method": "eastmoney_stock_flow",
+      "path": "api/v1/market/data/eastmoney-stock-flow",
+      "params": [
+        "symbol",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富美股日OHLC",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/q4fuvuxi",
+      "sdk_method": "eastmoney_us_stock_daily_ohlc",
+      "path": "api/v1/market/data/eastmoney-us-stock-daily-ohlc",
+      "params": [
+        "stock_code",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "通达信板块日线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/otlferf5",
+      "sdk_method": "tdx_board_daily",
+      "path": "api/v1/market/data/tdx-board-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "ts_code",
+        "idx_name",
+        "idx_type",
+        "idx_type_code",
+        "market",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富概念板块",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/i21jsfx7",
+      "sdk_method": "eastmoney_concept_boards",
+      "path": "api/v1/market/data/eastmoney-concept-boards",
+      "params": []
+    },
+    {
+      "title": "东方财富板块成份股",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/xojk0kx8",
+      "sdk_method": "eastmoney_board_constituents",
+      "path": "api/v1/market/data/eastmoney-board-constituents",
+      "params": [
+        "board_code"
+      ]
+    },
+    {
+      "title": "东方财富板块日线OHLC",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/h203ey6u",
+      "sdk_method": "eastmoney_board_daily_kline",
+      "path": "api/v1/market/data/eastmoney-board-daily-ohlc",
+      "params": [
+        "board_code",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富板块资金流",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/upr04twl",
+      "sdk_method": "eastmoney_sector_flow",
+      "path": "api/v1/market/data/eastmoney-sector-flow",
+      "params": [
+        "board_code",
+        "board_type",
+        "board_level",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺板块K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ck1zehfw",
+      "sdk_method": "ths_board_kline",
+      "path": "api/v1/market/data/ths-board-kline",
+      "params": [
+        "board_code",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富大盘资金流",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/v32o6wwz",
+      "sdk_method": "eastmoney_dapan_flow",
+      "path": "api/v1/market/data/eastmoney-dapan-flow",
+      "params": [
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富股票排名",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/178klizp",
+      "sdk_method": "eastmoney_rank",
+      "path": "api/v1/market/data/eastmoney-rank",
+      "params": [
+        "rank_group",
+        "market",
+        "trade_date"
+      ]
+    },
+    {
+      "title": "同花顺概念板块资金流日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/hgcm2rnm",
+      "sdk_method": "ths_concept_daily_flow",
+      "path": "api/v1/market/data/ths-concept-daily-flow",
+      "params": [
+        "start_date",
+        "end_date",
+        "board_name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺行业板块资金流日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/n7u0assf",
+      "sdk_method": "ths_industry_daily_flow",
+      "path": "api/v1/market/data/ths-industry-daily-flow",
+      "params": [
+        "start_date",
+        "end_date",
+        "board_name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺热榜",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/fbvl8umv",
+      "sdk_method": "ths_hot_list",
+      "path": "api/v1/market/data/ths-hot-list",
+      "params": [
+        "list_type",
+        "trade_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺个股资金流日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/rxbypzx4",
+      "sdk_method": "ths_stock_daily_flow",
+      "path": "api/v1/market/data/ths-stock-daily-flow",
+      "params": [
+        "start_date",
+        "end_date",
+        "code",
+        "name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "雪球股票排名",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/kwt0flpu",
+      "sdk_method": "xueqiu_rank",
+      "path": "api/v1/market/data/xueqiu-rank",
+      "params": [
+        "rank_group",
+        "period",
+        "trade_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "通达信板块成分股最新快照",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ek1t8pco",
+      "sdk_method": "tdx_board_members",
+      "path": "api/v1/market/data/tdx-board-members",
+      "params": [
+        "ts_code",
+        "idx_name",
+        "idx_type",
+        "idx_type_code",
+        "market",
+        "con_code",
+        "con_name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺板块列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/o11ndmcf",
+      "sdk_method": "ths_board_list",
+      "path": "api/v1/market/data/ths-board-list",
+      "params": []
+    },
+    {
+      "title": "同花顺行业成分股列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/b54yn3wh",
+      "sdk_method": "ths_industry_constituents",
+      "path": "api/v1/market/data/ths-industry-constituents",
+      "params": [
+        "industry_code",
+        "industry_name",
+        "stock_code",
+        "stock_name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富全板块日线OHLC",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/7eeaj9ic",
+      "sdk_method": "eastmoney_all_board_daily_kline",
+      "path": "api/v1/market/data/eastmoney-all-board-daily-ohlc",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "同花顺全板块K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/6ujul8nk",
+      "sdk_method": "ths_all_board_kline",
+      "path": "api/v1/market/data/ths-all-board-kline",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "中国期货基础数据",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/qd32szq6",
+      "sdk_method": "china_futures_base_data",
+      "path": "api/v1/market/data/futures/futures-base-data",
+      "params": [
+        "trade_date",
+        "symbol"
+      ]
+    },
+    {
+      "title": "中国期货列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/rffbd7ih",
+      "sdk_method": "china_futures_lists",
+      "path": "api/v1/market/data/futures/futures-lists",
+      "params": [
+        "trade_date"
+      ]
+    },
+    {
+      "title": "东方财富期货持仓",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/7al9wvew",
+      "sdk_method": "eastmoney_futures_position",
+      "path": "api/v1/market/data/eastmoney-futures-position",
+      "params": [
+        "exchange",
+        "variety_code",
+        "contract_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "member_name_abbr",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "期货合约涨跌停价",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/5nbz5zdb",
+      "sdk_method": "ft_limit",
+      "path": "api/v1/market/data/futures/ft-limit",
+      "params": [
+        "ts_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "cont",
+        "exchange",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "南华期货指数日K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/45cmhmre",
+      "sdk_method": "futures_nanhua_index_kline",
+      "path": "api/v1/market/data/futures/nanhua-index-kline",
+      "params": [
+        "code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "期货每日结算参数",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/hvux2jh0",
+      "sdk_method": "fut_settle",
+      "path": "api/v1/market/data/futures/fut-settle",
+      "params": [
+        "ts_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "exchange",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "期货主要品种交易周报",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/wao8q91z",
+      "sdk_method": "fut_weekly_detail",
+      "path": "api/v1/market/data/futures/fut-weekly-detail",
+      "params": [
+        "week",
+        "prd",
+        "start_week",
+        "end_week",
+        "exchange",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "期货仓单日报",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/btn0gr4b",
+      "sdk_method": "fut_wsr",
+      "path": "api/v1/market/data/futures/fut-wsr",
+      "params": [
+        "trade_date",
+        "start_date",
+        "end_date",
+        "symbol",
+        "exchange",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富期货龙虎榜",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/h5s1a7oc",
+      "sdk_method": "eastmoney_futures_strange",
+      "path": "api/v1/market/data/eastmoney-futures-strange",
+      "params": [
+        "exchange",
+        "variety",
+        "contract",
+        "trade_date"
+      ]
+    },
+    {
+      "title": "CPI",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/0v982m8z",
+      "sdk_method": "consumer_price_index_monthly",
+      "path": "api/v1/market/data/economic/china-cpi",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "GDP",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/egodfcdg",
+      "sdk_method": "consumer_gdp_quarterly",
+      "path": "api/v1/market/data/economic/china-gdp",
+      "params": []
+    },
+    {
+      "title": "货币供应",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/twl6t7h1",
+      "sdk_method": "consumer_money_supply_monthly",
+      "path": "api/v1/market/data/economic/china-money-supply",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "PMI",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/s4xvqnu0",
+      "sdk_method": "consumer_pmi_monthly",
+      "path": "api/v1/market/data/economic/china-pmi",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "PPI",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/n6lijleg",
+      "sdk_method": "consumer_ppi_monthly",
+      "path": "api/v1/market/data/economic/china-ppi",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "社融信贷",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/89eo4u6b",
+      "sdk_method": "consumer_credit_monthly",
+      "path": "api/v1/market/data/economic/china-credit-loans",
+      "params": [
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "贵金属价格",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/sl79u72x",
+      "sdk_method": "bullion_price",
+      "path": "api/v1/market/data/bullion/price",
+      "params": [
+        "symbol",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "LPR",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/wg95club",
+      "sdk_method": "lpr_monthly",
+      "path": "api/v1/market/data/economic/china-lpr",
+      "params": []
+    },
+    {
+      "title": "进出口",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/n6bu5izh",
+      "sdk_method": "consumer_customs_trade_monthly",
+      "path": "api/v1/market/data/economic/china-customs-trade",
+      "params": []
+    },
+    {
+      "title": "财政收入",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/w515ivba",
+      "sdk_method": "consumer_fiscal_revenue_monthly",
+      "path": "api/v1/market/data/economic/china-fiscal-revenue",
+      "params": []
+    },
+    {
+      "title": "固定资产投资",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vp2bmxs5",
+      "sdk_method": "consumer_fixed_asset_monthly",
+      "path": "api/v1/market/data/economic/china-fixed-asset-investment",
+      "params": []
+    },
+    {
+      "title": "工业增加值",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/2tsc1z6m",
+      "sdk_method": "consumer_industrial_added_value_monthly",
+      "path": "api/v1/market/data/economic/china-industrial-added-value",
+      "params": []
+    },
+    {
+      "title": "社零",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/hped3tpp",
+      "sdk_method": "consumer_retail_sales_monthly",
+      "path": "api/v1/market/data/economic/china-retail-sales",
+      "params": []
+    },
+    {
+      "title": "存款准备金率",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/cl9tjf4p",
+      "sdk_method": "reserve_ratio_monthly",
+      "path": "api/v1/market/data/economic/china-reserve-ratio",
+      "params": []
+    },
+    {
+      "title": "税收",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ht6ox0mg",
+      "sdk_method": "tax_revenue_monthly",
+      "path": "api/v1/market/data/economic/china-tax-revenue",
+      "params": []
+    },
+    {
+      "title": "美国经济指标",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/vatd7paf",
+      "sdk_method": "us_economic",
+      "path": "api/v1/market/data/economic/us-economic",
+      "params": [
+        "type"
+      ]
+    },
+    {
+      "title": "中债收益率曲线日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/fubopatp",
+      "sdk_method": "chinabond_yield_daily",
+      "path": "api/v1/market/data/chinabond-yield-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "curve_name",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "HIBOR日度利率",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/wcjgmvoj",
+      "sdk_method": "hibor_daily",
+      "path": "api/v1/market/data/hibor-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "国际基准利率日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/pyj0csm9",
+      "sdk_method": "libor_daily",
+      "path": "api/v1/market/data/libor-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "currency",
+        "tenor",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "SHIBOR日度利率",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/3jnxyzmy",
+      "sdk_method": "shibor_daily",
+      "path": "api/v1/market/data/shibor-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "SHIBOR报价日度",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/optr82sd",
+      "sdk_method": "shibor_quote_daily",
+      "path": "api/v1/market/data/shibor-quote-daily",
+      "params": [
+        "start_date",
+        "end_date",
+        "bank",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "可转债K线",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/g1c884ww",
+      "sdk_method": "convertible_bond_candlesticks",
+      "path": "api/v1/market/data/convertible-bond-candlesticks",
+      "params": [
+        "symbol",
+        "interval_unit",
+        "interval_value",
+        "adjust_kind",
+        "since_ts_millis",
+        "until_ts_millis",
+        "limit"
+      ]
+    },
+    {
+      "title": "深交所可转债匹配成交",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/yww4hh2l",
+      "sdk_method": "szse_convertible_bond_matching_trades",
+      "path": "api/v1/market/data/convertible-bond/szse/matching-trades",
+      "params": [
+        "security_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "深交所可转债协议成交",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/s3qatfk2",
+      "sdk_method": "szse_convertible_bond_negotiated_trades",
+      "path": "api/v1/market/data/convertible-bond/szse/negotiated-trades",
+      "params": [
+        "security_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "深交所可转债定向成交",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/axi47i8h",
+      "sdk_method": "szse_convertible_bond_directed_trades",
+      "path": "api/v1/market/data/convertible-bond/szse/directed-trades",
+      "params": [
+        "security_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "深交所可转债申报快照",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/agnxivg8",
+      "sdk_method": "szse_convertible_bond_declaration_snapshots",
+      "path": "api/v1/market/data/convertible-bond/szse/declaration-snapshots",
+      "params": [
+        "security_code",
+        "trade_date",
+        "start_date",
+        "end_date",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "可转债列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/fpj2vwor",
+      "sdk_method": "cb_lists",
+      "path": "api/v1/market/data/cb/cb-lists",
+      "params": []
+    },
+    {
+      "title": "东方财富美股列表",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/h5azbbob",
+      "sdk_method": "eastmoney_us_stock_list",
+      "path": "api/v1/market/data/eastmoney-us-stock-list",
+      "params": [
+        "refresh",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "东方财富股东增减持",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/t9hrpidk",
+      "sdk_method": "stock_ggcg_em",
+      "path": "api/v1/market/data/holder/stock-ggcg-em",
+      "params": [
+        "symbol",
+        "page",
+        "page_size"
+      ]
+    },
+    {
+      "title": "A股代码变更",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/yuzopjw5",
+      "sdk_method": "stk_code_change",
+      "path": "api/v1/market/data/stk-code-change",
+      "params": [
+        "trade_code",
+        "start_date",
+        "end_date"
+      ]
+    },
+    {
+      "title": "A股状态变更",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/2zhtv2q3",
+      "sdk_method": "stk_status_change",
+      "path": "api/v1/market/data/stk-status-change",
+      "params": [
+        "trade_code",
+        "change_date",
+        "change_type"
+      ]
+    },
+    {
+      "title": "第N个交易日",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/ocqw0qc8",
+      "sdk_method": "nth_trade_date",
+      "path": "api/v1/market/data/time/get-nth-trade-date",
+      "params": [
+        "n"
+      ]
+    },
+    {
+      "title": "期货行情",
+      "doc_url": "https://market.ft.tech/gateway/doc/p/j3w50zz7",
+      "sdk_method": "futures_contract_kline",
+      "path": "api/v1/market/data/futures/kline",
+      "params": [
+        "symbol",
+        "interval",
+        "start",
+        "end",
+        "limit"
+      ]
+    }
+  ]
+}
