@@ -16,8 +16,8 @@ jobs:
         with:
           python-version: "3.9"
           cache: pip
-      - name: Install focused test dependencies
-        run: python -m pip install pytest pandas numpy backtrader
+      - name: Install dependencies from pyproject extras
+        run: python -m pip install -e ".[backtest,dev]"
       - name: Run trading and backtest safety suite
         run: |
           python -m pytest -q \
