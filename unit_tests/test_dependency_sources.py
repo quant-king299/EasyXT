@@ -28,10 +28,20 @@ def test_requirements_files_only_proxy_pyproject_extras():
         assert active_requirement_lines(path) == [expected_proxy], relative_path
 
 
-def test_core_safety_ci_installs_project_extras():
+def test_lockfile_exists_and_matches_supported_python_range():
+    lockfile = ROOT / 'uv.lock'
+    text = lockfile.read_text(encoding='utf-8')
+
+    assert text.startswith('version = 1\n')
+    assert 'requires-python = ">=3.9"' in text
+    assert 'name = "easyxt"' in text
+
+
+def test_core_safety_ci_uses_locked_project_extras():
     workflow = (ROOT / '.github/workflows/core-safety-tests.yml').read_text(
         encoding='utf-8'
     )
 
     assert 'pip install pytest pandas numpy backtrader' not in workflow
-    assert 'pip install -e ".[backtest,dev]"' in workflow
+    assert 'uv sync --locked --extra backtest --extra dev' in workflow
+    assert 'uv run --no-sync python -m pytest' in workflow

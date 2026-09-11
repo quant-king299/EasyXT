@@ -7,6 +7,7 @@
 ## 📋 目录
 
 - [🚀 快速安装（推荐）](#快速安装推荐)
+- [🔒 可复现的源码环境](#可复现的源码环境)
 - [📖 详细安装步骤](#详细安装步骤)
 - [⚠️ xtquant 配置（重要！）](#xtquant-配置重要)
 - [❓ 常见错误与解决方案](#常见错误与解决方案)
@@ -54,6 +55,19 @@ pip install -e .
 - 大多数用户只需**方式1**
 - 如果需要**实时数据推送**或**通达信数据源**（推荐），使用**方式2**
 - 完整安装：`pip install easyxt[realtime]`
+
+### 🔒 可复现的源码环境
+
+仓库提交了跨平台 `uv.lock`。开发、测试或 CI 如果需要与仓库锁定版本完全一致，使用：
+
+```powershell
+pip install uv
+uv sync --locked --extra backtest --extra dev
+```
+
+`--locked` 会在 `pyproject.toml` 与锁文件不同步时直接失败，不会静默改写锁文件。
+普通用户仍可使用上面的 `pip install`；兼容 requirements 文件也统一转发到
+`pyproject.toml` 的可选依赖组。
 
 ### 验证安装
 
