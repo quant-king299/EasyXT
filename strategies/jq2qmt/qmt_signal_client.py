@@ -9,6 +9,7 @@ QMT信号客户端
 """
 
 import argparse
+import os
 import requests
 import time
 import json
@@ -20,7 +21,7 @@ from typing import Dict, Any, List
 class QMTSignalClient:
     """QMT信号客户端"""
     
-    def __init__(self, proxy_url: str = "http://www.ptqmt.com:8080", qka_url: str = "http://127.0.0.1:8000", token: str = "test_token"):
+    def __init__(self, proxy_url: str = "http://www.ptqmt.com:8080", qka_url: str = "http://127.0.0.1:8000", token: str = None):
         """
         初始化QMT信号客户端
         
@@ -29,6 +30,9 @@ class QMTSignalClient:
             qka_url: 本地QKA服务地址
             token: 访问令牌
         """
+        if not token:
+            raise ValueError("必须通过 --token 或 QKA_TOKEN 提供访问令牌")
+
         self.proxy_url = proxy_url.rstrip('/')
         self.qka_url = qka_url.rstrip('/')
         self.token = token
@@ -41,7 +45,7 @@ class QMTSignalClient:
         logger.info(f"QMT信号客户端初始化完成:")
         logger.info(f"  中转服务地址: {self.proxy_url}")
         logger.info(f"  QKA服务地址: {self.qka_url}")
-        logger.info(f"  访问令牌: {self.token}")
+        logger.info("  访问令牌: 已配置（内容不写入日志）")
     
     def get_pending_signals(self) -> List[Dict]:
         """
@@ -220,10 +224,12 @@ def main():
     parser = argparse.ArgumentParser(description="QMT信号客户端")
     parser.add_argument("--proxy-url", default="http://www.ptqmt.com:8080", help="中转服务地址")
     parser.add_argument("--qka-url", default="http://127.0.0.1:8000", help="QKA服务地址")
-    parser.add_argument("--token", default="test_token", help="访问令牌")
+    parser.add_argument("--token", default=os.environ.get("QKA_TOKEN"), help="访问令牌（也可通过 QKA_TOKEN 设置）")
     parser.add_argument("--interval", type=int, default=5, help="轮询间隔（秒）")
     
     args = parser.parse_args()
+    if not args.token:
+        parser.error("必须通过 --token 或 QKA_TOKEN 提供访问令牌")
     
     # 创建并运行客户端
     client = QMTSignalClient(

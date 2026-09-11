@@ -10,7 +10,28 @@ QMT下单功能完整测试脚本
 """
 
 import requests
+import os
 from datetime import datetime
+
+
+LIVE_TEST_CONFIRMATION = "I_UNDERSTAND_THIS_PLACES_REAL_ORDERS"
+
+
+def load_live_test_config(environ=None):
+    """Fail closed unless the operator explicitly enables real-order testing."""
+    env = os.environ if environ is None else environ
+    if env.get("QKA_ALLOW_LIVE_TEST", "").strip() != LIVE_TEST_CONFIRMATION:
+        raise RuntimeError(
+            "该脚本会提交真实买卖委托。仅在确认风险后设置 "
+            f"QKA_ALLOW_LIVE_TEST={LIVE_TEST_CONFIRMATION}"
+        )
+
+    token = env.get("QKA_TOKEN", "").strip()
+    if not token:
+        raise RuntimeError("缺少 QKA_TOKEN；禁止使用源码内置或占位 token")
+
+    base_url = env.get("QKA_BASE_URL", "http://127.0.0.1:8000").strip()
+    return base_url, token
 
 class QMTClientTest:
     """QMT客户端测试类"""
@@ -44,22 +65,23 @@ class QMTClientTest:
             logger.info(f"❌ 异常: {e}")
             return None
 
-def test_qmt_trading():
+def run_qmt_trading_test():
     """完整的QMT交易测试"""
+
+    base_url, token = load_live_test_config()
     
     logger.info("🚀 开始QMT完整交易测试")
     logger.info("=" * 70)
     
     # 初始化客户端
     client = QMTClientTest(
-        base_url="http://127.0.0.1:8000",
-        token="2056dd149a0715886698f37f3d4caf031cb1569f581334e05d7bf4277514d33d"
+        base_url=base_url,
+        token=token,
     )
     
     logger.info(f"⏰ 测试时间: {datetime.now()}")
     logger.info(f"📡 服务器: {client.base_url}")
-    token_display = client.token[:20] if client.token else "N/A"
-    logger.info(f"🔑 Token: {token_display}...\n")
+    logger.info("🔑 Token: 已从环境变量安全加载\n")
     
     # 初始化订单ID变量
     order_id = None
@@ -367,4 +389,4 @@ def test_qmt_trading():
     logger.info("=" * 70)
 
 if __name__ == "__main__":
-    test_qmt_trading()
+    run_qmt_trading_test()
